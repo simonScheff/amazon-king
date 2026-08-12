@@ -1,5 +1,7 @@
 import { z } from "zod";
 import type { Logger } from "pino";
+import type { IsoDate } from "@amazon-king/contracts";
+import { addDays, formatIsoDate } from "@amazon-king/optimizer";
 import {
   AdapterValidationError,
   AmazonAuthError,
@@ -29,16 +31,36 @@ import type { ProfileRecord, ReportJobRecord } from "../store.js";
 
 /** Max times a single report job is re-driven before it is dead-lettered. */
 const MAX_REPORT_ATTEMPTS = 5;
+/** Compatibility range for manual jobs queued before date fields were added. */
+const LEGACY_MANUAL_SYNC_HISTORY_DAYS = 31;
+/** Reporting v3 rejects larger date ranges. Count is inclusive. */
+const MAX_REPORT_RANGE_DAYS = 31;
 
 const payloadSchema = z.looseObject({
   profileId: profilePkSchema,
-  startDate: isoDateString,
-  endDate: isoDateString,
+  startDate: isoDateString.optional(),
+  endDate: isoDateString.optional(),
 });
 
 export function createMetricsSyncHandler(deps: JobDeps): JobHandler {
   return async (payload, { logger }) => {
-    const { profileId, startDate, endDate } = payloadSchema.parse(payload);
+    const parsed = payloadSchema.parse(payload);
+    const { profileId } = parsed;
+    let { startDate, endDate } = parsed;
+    if ((startDate === undefined) !== (endDate === undefined)) {
+      throw new TerminalJobError(
+        "Metrics sync payload must include both startDate and endDate",
+      );
+    }
+    if (startDate === undefined || endDate === undefined) {
+      const today = formatIsoDate(deps.now().getTime()) as IsoDate;
+      endDate = addDays(today, -1);
+      startDate = addDays(endDate, -(LEGACY_MANUAL_SYNC_HISTORY_DAYS - 1));
+      logger.warn(
+        { profileId, startDate, endDate },
+        "Legacy metrics sync payload had no date range; using trailing 31 complete UTC days",
+      );
+    }
     if (endDate < startDate) {
       throw new TerminalJobError(`Invalid date range ${startDate}..${endDate}`);
     }
@@ -52,7 +74,17 @@ export function createMetricsSyncHandler(deps: JobDeps): JobHandler {
     }
 
     const syncRunId = await deps.store.createSyncRun(profileId, "metrics");
-    const familySpecs = buildAllFamilySpecs(profile.id, startDate, endDate);
+    // A manual import needs 60 days for the longest optimizer evidence window,
+    // while Amazon accepts at most 31 inclusive days per Reporting v3 request.
+    // Split inside one queue job so recommendations run only after every chunk
+    // and report family has imported successfully.
+    const dateChunks = splitReportDateRange(
+      startDate as IsoDate,
+      endDate as IsoDate,
+    );
+    const familySpecs = dateChunks.flatMap((chunk) =>
+      buildAllFamilySpecs(profile.id, chunk.startDate, chunk.endDate),
+    );
     let completed = false;
     try {
       for (const familySpec of familySpecs) {
@@ -71,7 +103,7 @@ export function createMetricsSyncHandler(deps: JobDeps): JobHandler {
       );
       if (!statuses.every((status) => status === "complete")) {
         throw new Error(
-          `Metrics sync incomplete: families ${REPORT_FAMILIES.join(",")} ended as ${statuses.join(",")}`,
+          `Metrics sync incomplete: ${familySpecs.length} report chunks for families ${REPORT_FAMILIES.join(",")} ended as ${statuses.join(",")}`,
         );
       }
       await deps.store.finishSyncRun(syncRunId, "complete");
@@ -93,6 +125,21 @@ export function createMetricsSyncHandler(deps: JobDeps): JobHandler {
       throw error;
     }
   };
+}
+
+export function splitReportDateRange(
+  startDate: IsoDate,
+  endDate: IsoDate,
+): Array<{ startDate: IsoDate; endDate: IsoDate }> {
+  const chunks: Array<{ startDate: IsoDate; endDate: IsoDate }> = [];
+  let cursor = startDate;
+  while (cursor <= endDate) {
+    const maximumEnd = addDays(cursor, MAX_REPORT_RANGE_DAYS - 1);
+    const chunkEnd = maximumEnd < endDate ? maximumEnd : endDate;
+    chunks.push({ startDate: cursor, endDate: chunkEnd });
+    cursor = addDays(chunkEnd, 1);
+  }
+  return chunks;
 }
 
 async function driveFamily(

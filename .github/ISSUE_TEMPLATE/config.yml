@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/simonScheff/amazon-king/security/advisories/new
+    about: Report vulnerabilities and sensitive issues privately
+  - name: Support questions
+    url: https://github.com/simonScheff/amazon-king/discussions
+    about: Ask setup and usage questions

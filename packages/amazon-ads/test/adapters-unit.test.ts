@@ -6,7 +6,14 @@ import {
   downloadReport,
   requestReport,
 } from "../src/adapters/reporting.js";
-import { listCampaigns } from "../src/adapters/sp-campaigns.js";
+import {
+  listAdGroups,
+  listCampaigns,
+  listKeywords,
+  listNegativeKeywords,
+  listProductAds,
+  listTargets,
+} from "../src/adapters/sp-campaigns.js";
 import {
   buildKeywordBidUpdateBody,
   buildNegativeKeywordCreateBody,
@@ -52,6 +59,52 @@ describe("SP list pagination", () => {
       "https://advertising-api.amazon.com/sp/campaigns/list",
     );
   });
+
+  it.each([
+    [
+      "campaigns",
+      listCampaigns,
+      "campaigns",
+      "application/vnd.spcampaign.v3+json",
+    ],
+    [
+      "ad groups",
+      listAdGroups,
+      "adGroups",
+      "application/vnd.spadGroup.v3+json",
+    ],
+    [
+      "product ads",
+      listProductAds,
+      "productAds",
+      "application/vnd.spproductAd.v3+json",
+    ],
+    ["keywords", listKeywords, "keywords", "application/vnd.spkeyword.v3+json"],
+    [
+      "targets",
+      listTargets,
+      "targetingClauses",
+      "application/vnd.sptargetingClause.v3+json",
+    ],
+    [
+      "negative keywords",
+      listNegativeKeywords,
+      "negativeKeywords",
+      "application/vnd.spnegativeKeyword.v3+json",
+    ],
+  ] as const)(
+    "sends the required SP v3 media type for %s",
+    async (_name, list, responseKey, mediaType) => {
+      const { http, calls } = makeHttp({
+        handler: () => jsonResponse({ [responseKey]: [] }),
+      });
+
+      await list(http, TEST_CONTEXT);
+
+      expect(calls[0].headers.accept).toBe(mediaType);
+      expect(calls[0].headers["content-type"]).toBe(mediaType);
+    },
+  );
 });
 
 describe("reporting v3 request bodies", () => {
@@ -70,8 +123,31 @@ describe("reporting v3 request bodies", () => {
       format: "GZIP_JSON",
     });
     const columns = body.configuration.columns as string[];
+    expect(columns).toContain("date");
     expect(columns).toContain("searchTerm");
+    expect(columns).toContain("keywordId");
     expect(columns).toContain("purchases7d");
+  });
+
+  it("uses the current advertised-product grouping and targeting columns", () => {
+    const advertised = buildReportRequestBody({
+      reportType: "spAdvertisedProduct",
+      startDate: "2024-05-01",
+      endDate: "2024-05-31",
+      metrics: ["clicks"],
+    }) as { configuration: { groupBy: string[]; columns: string[] } };
+    expect(advertised.configuration.groupBy).toEqual(["advertiser"]);
+    expect(advertised.configuration.columns).toContain("date");
+
+    const targeting = buildReportRequestBody({
+      reportType: "spTargeting",
+      startDate: "2024-05-01",
+      endDate: "2024-05-31",
+      metrics: ["clicks"],
+    }) as { configuration: { columns: string[] } };
+    expect(targeting.configuration.columns).toContain("keywordId");
+    expect(targeting.configuration.columns).not.toContain("targetingId");
+    expect(targeting.configuration.columns).not.toContain("targetingText");
   });
 
   it("rejects an invalid spec before any HTTP call", () => {

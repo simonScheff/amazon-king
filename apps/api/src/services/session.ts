@@ -7,6 +7,7 @@ import {
   SESSION_TTL_MS,
   type ApiConfig,
 } from "../config.js";
+import type { MagicLinkSender } from "../email.js";
 import type {
   AuthContext,
   RequestMeta,
@@ -34,6 +35,7 @@ export interface SessionServiceDeps {
   db: Db;
   config: ApiConfig;
   logger: Logger;
+  sendMagicLink?: MagicLinkSender;
   now?: () => Date;
 }
 
@@ -89,14 +91,20 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
       const apiBase =
         config.apiPublicUrl ?? new URL(config.amazonRedirectUri).origin;
       const link = `${apiBase}/api/session/verify?token=${token}`;
-      // No SMTP is configured in this deployment stage: the magic link is
-      // delivered through the log (dev only). This intentionally bypasses
-      // secret redaction so the link is usable; never enable in production.
-      if (!config.isDevelopment) {
-        throw new Error(
-          "Magic-link log delivery is dev-only; configure email delivery for production",
-        );
+      if (deps.sendMagicLink) {
+        await deps.sendMagicLink({
+          to: email,
+          url: link,
+          expiresInMinutes: LOGIN_TOKEN_TTL_MS / 60_000,
+        });
+        logger.info({ event: "magic_link_sent" }, "Magic login link sent");
+        return;
       }
+      if (!config.isDevelopment) {
+        throw new Error("Magic-link delivery is not configured");
+      }
+      // Development-only delivery. The raw link intentionally bypasses log
+      // redaction so a local operator can complete sign-in.
       logger.info(
         { email, magicLink: link },
         "Magic login link (dev delivery)",

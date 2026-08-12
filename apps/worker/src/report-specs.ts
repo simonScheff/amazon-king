@@ -31,15 +31,14 @@ const METRIC_COLUMNS = [
 
 /**
  * Extra grain columns requested on top of the reporting adapter's default
- * dimensions. `targetingId` links a search-term row to its target so it fits
- * the search_term_metrics_daily grain; `adId` links an advertised-product
- * row to its ad. (Both are tolerated as absent by the row schemas — the
- * importer falls back defensively when Amazon omits them.)
+ * dimensions. `keywordId` is already a default for targeting and search-term
+ * reports; Amazon uses it for both keyword and expression IDs. `adId` links an
+ * advertised-product row to its ad and falls back to ASIN if Amazon omits it.
  */
 const EXTRA_COLUMNS: Record<ReportFamily, string[]> = {
   spCampaigns: [],
   spTargeting: [],
-  spSearchTerm: ["targetingId"],
+  spSearchTerm: [],
   spAdvertisedProduct: ["adId"],
 };
 

@@ -123,6 +123,49 @@ describe("report status fixtures", () => {
       getReportStatus(http, TEST_CONTEXT, "rpt-1"),
     ).rejects.toBeInstanceOf(AdapterValidationError);
   });
+
+  it("accepts null URL and failure reason while a report is processing", async () => {
+    const { http } = makeHttp({
+      handler: () =>
+        jsonResponse({
+          reportId: "rpt-live-poll",
+          status: "PROCESSING",
+          url: null,
+          failureReason: null,
+        }),
+    });
+
+    await expect(
+      getReportStatus(http, TEST_CONTEXT, "rpt-live-poll"),
+    ).resolves.toEqual({
+      reportId: "rpt-live-poll",
+      state: "polling",
+      amazonStatus: "PROCESSING",
+      failureReason: undefined,
+    });
+  });
+
+  it("maps the current completed status to a downloadable report", async () => {
+    const { http } = makeHttp({
+      handler: () =>
+        jsonResponse({
+          reportId: "rpt-live-complete",
+          status: "COMPLETED",
+          url: "https://download.example/report",
+          failureReason: null,
+        }),
+    });
+
+    await expect(
+      getReportStatus(http, TEST_CONTEXT, "rpt-live-complete"),
+    ).resolves.toEqual({
+      reportId: "rpt-live-complete",
+      state: "downloading",
+      amazonStatus: "COMPLETED",
+      downloadUrl: "https://download.example/report",
+      failureReason: undefined,
+    });
+  });
 });
 
 describe("SP list fixtures", () => {

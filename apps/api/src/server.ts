@@ -1,5 +1,6 @@
 import fastifyCookie from "@fastify/cookie";
 import fastifyCors from "@fastify/cors";
+import fastifyHelmet from "@fastify/helmet";
 import fastifyRateLimit from "@fastify/rate-limit";
 import {
   bookEconomicsInputSchema,
@@ -68,10 +69,18 @@ export async function buildServer(
     // Propagate or generate a request id; echoed in logs and the response header.
     genReqId: (req) =>
       withRequestId(req.headers["x-request-id"] as string | undefined),
-    trustProxy: true,
+    trustProxy: config.trustProxy,
   });
 
   await app.register(fastifyCookie);
+  await app.register(fastifyHelmet, {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+  });
   await app.register(fastifyCors, {
     origin: config.webOrigin,
     credentials: true,

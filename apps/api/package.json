@@ -2,6 +2,7 @@
   "name": "@amazon-king/api",
   "version": "0.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -18,11 +19,14 @@
     "@amazon-king/optimizer": "workspace:*",
     "@fastify/cookie": "^11.1.2",
     "@fastify/cors": "^11.3.0",
+    "@fastify/helmet": "^13.1.0",
     "@fastify/rate-limit": "^11.2.0",
     "fastify": "^5.11.2",
+    "nodemailer": "^9.0.5",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/nodemailer": "^8.0.1",
     "@types/node": "^26.1.2",
     "tsx": "^4.23.9",
     "typescript": "^7.0.2",

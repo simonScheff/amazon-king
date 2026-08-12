@@ -40,6 +40,8 @@ export interface ReadServiceDeps {
 }
 
 const MAX_DAYS = 90;
+const MANUAL_SYNC_HISTORY_DAYS = 60;
+const DAY_MS = 86_400_000;
 
 function dateRange(now: Date, days: number): { start: string; end: string } {
   const clamped = Math.min(Math.max(Math.trunc(days) || 30, 1), MAX_DAYS);
@@ -143,9 +145,19 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         profile.id,
         "structure",
       );
-      const payload = { syncRunId, profileId: profile.id };
-      await enqueue(db, "structure_sync", payload);
-      await enqueue(db, "metrics_sync", payload);
+      const basePayload = { syncRunId, profileId: profile.id };
+      await enqueue(db, "structure_sync", basePayload);
+      // Amazon's current day is incomplete. A manual sync imports the trailing
+      // 60 complete UTC days so every optimizer evidence window is available.
+      const { start: startDate, end: endDate } = dateRange(
+        new Date(now().getTime() - DAY_MS),
+        MANUAL_SYNC_HISTORY_DAYS,
+      );
+      await enqueue(db, "metrics_sync", {
+        ...basePayload,
+        startDate,
+        endDate,
+      });
       await audit.insertAuditEvent(db, {
         workspaceId: auth.workspaceId,
         actorUserId: auth.userId,

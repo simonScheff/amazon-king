@@ -48,7 +48,7 @@ const ROWS_BY_FAMILY: Record<string, unknown[]> = {
       date: "2026-08-01",
       campaignId: "c1",
       adGroupId: "ag1",
-      targetingId: "t1",
+      keywordId: "t1",
       impressions: 50,
       clicks: 5,
       cost: 2.5,
@@ -61,7 +61,7 @@ const ROWS_BY_FAMILY: Record<string, unknown[]> = {
       date: "2026-08-01",
       campaignId: "c1",
       adGroupId: "ag1",
-      targetingId: "t1",
+      keywordId: "t1",
       searchTerm: "coloring book",
       impressions: 30,
       clicks: 3,
@@ -178,6 +178,54 @@ describe("metrics_sync", () => {
           (j.payload as { profileId: string }).profileId === "7",
       ),
     ).toBe(true);
+  });
+
+  it("recovers a previously queued manual job that has no date range", async () => {
+    const store = new FakeStore();
+    store.profiles.push(PROFILE);
+    const storage = new FakeStorage();
+    const { deps, calls } = makeMetricsDeps(store, storage, {
+      now: () => new Date("2026-08-12T12:00:00.000Z"),
+    });
+
+    await runHandler(createMetricsSyncHandler(deps), {
+      profileId: PROFILE.id,
+    });
+
+    for (const [, spec] of calls.requestReport.mock.calls) {
+      expect(spec.startDate).toBe("2026-07-12");
+      expect(spec.endDate).toBe("2026-08-11");
+    }
+  });
+
+  it("splits a 60-day import into Reporting v3-safe date chunks", async () => {
+    const store = new FakeStore();
+    store.profiles.push(PROFILE);
+    const storage = new FakeStorage();
+    const emptyRows = Object.fromEntries(
+      Object.keys(ROWS_BY_FAMILY).map((family) => [family, []]),
+    );
+    const { deps, calls } = makeMetricsDeps(store, storage, {
+      rowsByFamily: emptyRows,
+    });
+
+    await runHandler(createMetricsSyncHandler(deps), {
+      profileId: PROFILE.id,
+      startDate: "2026-06-13",
+      endDate: "2026-08-11",
+    });
+
+    expect(calls.requestReport).toHaveBeenCalledTimes(8);
+    const ranges = new Set(
+      calls.requestReport.mock.calls.map(
+        ([, spec]) => `${spec.startDate}..${spec.endDate}`,
+      ),
+    );
+    expect(ranges).toEqual(
+      new Set(["2026-06-13..2026-07-13", "2026-07-14..2026-08-11"]),
+    );
+    expect(store.reportJobs.size).toBe(8);
+    expect(store.importCalls).toHaveLength(8);
   });
 
   it("does not re-request a spec whose fingerprint is already complete", async () => {

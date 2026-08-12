@@ -54,7 +54,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
     databaseUrl,
     reportStorageDir: env.REPORT_STORAGE_DIR ?? "./.data/reports",
     logLevel: env.LOG_LEVEL ?? "info",
-    killSwitch: env.KILL_SWITCH === "true",
+    // Fail closed: writes stay disabled unless the operator explicitly sets false.
+    killSwitch:
+      env.KILL_SWITCH === undefined ? true : env.KILL_SWITCH !== "false",
     lwaClientId: env.LWA_CLIENT_ID || null,
     lwaClientSecret: env.LWA_CLIENT_SECRET || null,
     pollIntervalMs: intEnv("WORKER_POLL_INTERVAL_MS", 2_000),

@@ -1,0 +1,15 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+!.env.production.example
+.data
+coverage
+**/dist
+**/node_modules
+*.log
+*.dump
+*.pem
+*.key
+*.p12

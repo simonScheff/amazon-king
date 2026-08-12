@@ -1,5 +1,25 @@
-node_modules
-dist
+node_modules/
+dist/
+coverage/
+
+# Local configuration. Keep the documented example tracked.
 .env
-coverage
-docs/
+.env.*
+!.env.example
+!.env.production.example
+
+# Runtime data and exports may contain Amazon Ads data.
+.data/
+reports/
+exports/
+*.dump
+*.sql.gz
+
+# Logs, local certificates, keys, and editor/OS files.
+*.log
+*.pem
+*.key
+*.p12
+.DS_Store
+.idea/
+.vscode/

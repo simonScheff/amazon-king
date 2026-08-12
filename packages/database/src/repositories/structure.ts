@@ -79,7 +79,7 @@ export async function upsertCampaign(
          select 'state', o.state, $4::text
          from old o where o.state is distinct from $4::text
          union all
-         select 'daily_budget', o.daily_budget, $6::numeric::text
+         select 'daily_budget', o.daily_budget, ($6::numeric(19,4))::text
          from old o where o.daily_budget::numeric is distinct from $6::numeric
        ) f
        returning field
@@ -148,7 +148,7 @@ export async function upsertAdGroup(
          select 'state', o.state, $5::text
          from old o where o.state is distinct from $5::text
          union all
-         select 'default_bid', o.default_bid, $6::numeric::text
+         select 'default_bid', o.default_bid, ($6::numeric(19,4))::text
          from old o where o.default_bid::numeric is distinct from $6::numeric
        ) f
        returning field
@@ -270,7 +270,7 @@ export async function upsertTarget(
          select 'state' as field, o.state as old_value, $9::text as new_value
          from old o where o.state is distinct from $9::text
          union all
-         select 'bid', o.bid, $8::numeric::text
+         select 'bid', o.bid, ($8::numeric(19,4))::text
          from old o where o.bid::numeric is distinct from $8::numeric
        ) f
        returning field

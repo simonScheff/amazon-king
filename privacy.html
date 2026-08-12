@@ -2,31 +2,54 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Privacy Policy - Amazon Ads Performance Analyzer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy Notice - amazon-king</title>
   </head>
   <body>
-    <h1>Privacy Policy</h1>
+    <main>
+      <h1>amazon-king software privacy notice</h1>
 
-    <p>
-      Amazon Ads Performance Analyzer accesses Amazon Advertising data
-      authorized by the user to analyze campaign performance.
-    </p>
+      <p>
+        amazon-king is open-source, self-hosted software. The maintainers of the
+        source-code repository do not operate downstream deployments and do not
+        receive their Amazon Advertising data. Each deployment operator is an
+        independent data controller and must publish its own contact details,
+        retention periods, service providers, and legally required disclosures.
+      </p>
 
-    <p>
-      The application may access campaign information and metrics such as
-      impressions, clicks, spend, sales, and related advertising data.
-    </p>
+      <h2>Data processed by a deployment</h2>
+      <p>
+        An operator-authorized deployment may process the owner's email address,
+        Amazon Ads account and campaign structure, impressions, clicks, spend,
+        attributed orders and sales, user-entered KDP book economics,
+        application sessions, recommendations, changes, and security audit
+        events.
+      </p>
 
-    <p>
-      The data is used only to provide analytics functionality and is not sold
-      or shared with third parties.
-    </p>
+      <h2>Purpose and sharing</h2>
+      <p>
+        The software uses this data to synchronize advertising performance,
+        calculate deterministic recommendations, and apply changes explicitly
+        approved by the owner. Data is exchanged with Amazon to provide those
+        functions and may be processed by infrastructure, backup, monitoring, or
+        email providers selected by the deployment operator. It must not be sold
+        or published.
+      </p>
 
-    <p>
-      Amazon authentication credentials and tokens are used only to communicate
-      with the Amazon Advertising API.
-    </p>
+      <h2>Storage and control</h2>
+      <p>
+        Amazon refresh tokens are encrypted at rest. The operator controls the
+        database, encryption keys, report storage, backups, access controls,
+        retention, export, and deletion. Disconnecting Amazon removes the stored
+        refresh token but does not automatically delete previously imported
+        data. Contact the operator of the specific deployment for access or
+        deletion requests.
+      </p>
 
-    <p>Last updated: August 12, 2026</p>
+      <p>
+        This project is independent and is not affiliated with or endorsed by
+        Amazon. Last updated: August 12, 2026.
+      </p>
+    </main>
   </body>
 </html>

@@ -106,13 +106,13 @@ export function mapRowsToFacts(
           const r = row as ReportRow & {
             campaignId: string;
             adGroupId: string;
-            targetingId: string;
+            keywordId: string;
           };
           return {
             profileId: profilePk,
             campaignId: r.campaignId,
             adGroupId: r.adGroupId,
-            targetId: r.targetingId,
+            targetId: r.keywordId,
             metricDate: r.date,
             impressions: r.impressions,
             clicks: r.clicks,
@@ -128,17 +128,14 @@ export function mapRowsToFacts(
           const r = row as ReportRow & {
             campaignId: string;
             adGroupId: string;
+            keywordId: string;
             searchTerm: string;
           };
-          const targetingId = extra(r, "targetingId");
           return {
             profileId: profilePk,
             campaignId: r.campaignId,
             adGroupId: r.adGroupId,
-            targetId:
-              targetingId === undefined || targetingId === null
-                ? ""
-                : String(targetingId),
+            targetId: r.keywordId,
             searchTerm: r.searchTerm,
             metricDate: r.date,
             impressions: r.impressions,

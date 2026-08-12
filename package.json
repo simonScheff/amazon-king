@@ -1,7 +1,17 @@
 {
   "name": "amazon-king",
+  "description": "Self-hosted Amazon Ads optimizer for KDP authors",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/simonScheff/amazon-king.git"
+  },
+  "bugs": {
+    "url": "https://github.com/simonScheff/amazon-king/issues"
+  },
+  "homepage": "https://github.com/simonScheff/amazon-king#readme",
   "packageManager": "pnpm@10.12.4",
   "engines": {
     "node": ">=20"
@@ -11,7 +21,8 @@
     "build": "pnpm -r --if-present build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "lint": "prettier --check ."
+    "lint": "prettier --check .",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
     "@amazon-king/database": "workspace:*",

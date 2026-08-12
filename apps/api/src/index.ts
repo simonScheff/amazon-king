@@ -13,6 +13,7 @@ import {
 } from "@amazon-king/database";
 import { createLogger } from "@amazon-king/observability";
 import { loadConfig } from "./config.js";
+import { createSmtpMagicLinkSender } from "./email.js";
 import { buildServer } from "./server.js";
 import { createAmazonService } from "./services/amazon.js";
 import { createChangeService } from "./services/changes.js";
@@ -27,6 +28,9 @@ async function main(): Promise<void> {
   const config = loadConfig();
   const logger = createLogger("api");
   const pool = createPool(config.databaseUrl);
+  const sendMagicLink = config.smtpHost
+    ? createSmtpMagicLinkSender(config)
+    : undefined;
 
   const tokenManager = createTokenManager({
     loadRefreshToken: async (connectionId) => {
@@ -96,7 +100,12 @@ async function main(): Promise<void> {
     config,
     logger,
     services: {
-      session: createSessionService({ db: pool, config, logger }),
+      session: createSessionService({
+        db: pool,
+        config,
+        logger,
+        sendMagicLink,
+      }),
       amazon: createAmazonService({
         db: pool,
         config,

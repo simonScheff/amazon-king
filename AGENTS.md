@@ -13,15 +13,16 @@ guarded change service), `apps/worker` (job loop, sync pipeline, recommendation
 runs), and `apps/web` (all §12 screens). `docs/plan.md` remains the authoritative
 specification — read it before changing behavior.
 
-Not yet done: database integration tests need a live Postgres
-(`TEST_DATABASE_URL`), no end-to-end run against real Amazon credentials has
-happened (Phase 1 spike), and there is no CI. Follow the phases in `docs/plan.md`
-§16; do not jump ahead to automation before earlier phases are validated live.
+Not yet done: no end-to-end run against real Amazon credentials has happened
+(Phase 1 spike), and production hardening remains incomplete. CI runs the full
+suite with PostgreSQL, but local database integration tests still require a
+disposable `TEST_DATABASE_URL`. Follow the phases in `docs/plan.md` §16; do not
+jump ahead to automation before earlier phases are validated live.
 
 ## Project overview
 
-The product is **Amazon Ads Optimizer for KDP Authors** ("amazon-king"): a
-private, single-owner application that connects to the owner's own Amazon Ads
+The product is **Amazon Ads Optimizer for KDP Authors** ("amazon-king"): an
+open-source, self-hosted, single-owner application that connects to the owner's own Amazon Ads
 account, imports Sponsored Products campaign data, analyzes performance against
 real KDP book economics (royalty per sale, target ACoS), produces prioritized
 recommendations with evidence, and applies changes through the Amazon Ads API
@@ -39,10 +40,10 @@ Key product facts from `docs/plan.md`:
   changes and negative exact keywords. No SaaS features (no multi-client
   tenancy, billing, or team roles beyond owner).
 
-## Planned technology stack
+## Established technology stack
 
-Nothing is installed or scaffolded yet. The stack below is the recommendation in
-`docs/plan.md` §4 and should be followed when code is created:
+The stack below is implemented and follows `docs/plan.md` §4. New code should
+fit these boundaries unless an accepted design proposal changes them:
 
 | Layer       | Planned choice                                                                   |
 | ----------- | -------------------------------------------------------------------------------- |
@@ -264,17 +265,16 @@ at the appropriate layer:
 ## Implementation phases
 
 The plan defines Phases 0–9 with explicit "done when" acceptance criteria
-(`docs/plan.md` §16). Current position: **Phase 0 (Amazon API approval) / Phase 1
-(technical spike)** — nothing has been built. Follow the phases in order: do not
-jump ahead to the recommendation engine or write operations before the auth,
-connection, and ingestion foundations (Phases 2–4) are complete and accepted.
+(`docs/plan.md` §16). The code for Phases 2–7 exists, and open-source/CI work has
+started Phase 8, but Phase 0/1 live acceptance is still incomplete. Treat the
+project as alpha: do not enable real Amazon writes or begin Phase 9 automation
+until the earlier live validation gates are complete.
 
 ## Language and style
 
 - Documentation and plan material is written in English; write code, comments,
   and docs in English.
-- No code style conventions exist yet. When scaffolding, match the conventions of
-  the chosen tools (TypeScript strictness, formatter, linter) and record them
-  here.
+- Use strict TypeScript and the repository Prettier configuration. Run
+  `pnpm check` before submitting changes.
 - Keep this file current: whenever build commands, structure, or conventions are
   established, update the corresponding section instead of leaving stale text.

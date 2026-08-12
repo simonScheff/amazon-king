@@ -12,6 +12,7 @@ import { ApiError } from "../errors.js";
 import { createSessionService } from "../services/session.js";
 import { createAmazonService } from "../services/amazon.js";
 import { createChangeService } from "../services/changes.js";
+import { createReadService } from "../services/read.js";
 import type { AuthContext, RequestMeta } from "../services/types.js";
 import { FakeDb } from "./fake-db.js";
 
@@ -30,6 +31,9 @@ function testConfig(overrides: Partial<ApiConfig> = {}): ApiConfig {
     lwaClientSecret: "lwa-client-secret",
     amazonRedirectUri: "http://localhost:3000/api/integrations/amazon/callback",
     killSwitch: false,
+    trustProxy: false,
+    smtpPort: 587,
+    smtpSecure: false,
     isDevelopment: true,
     ...overrides,
   };
@@ -181,6 +185,37 @@ describe("session service", () => {
     });
     await service.startLogin("intruder@example.com", META);
     expect(db.tables.loginTokens).toHaveLength(0);
+  });
+
+  it("delivers production magic links without logging the token", async () => {
+    const db = new FakeDb();
+    const logger = fakeLogger();
+    const sendMagicLink = vi.fn(async () => undefined);
+    const service = createSessionService({
+      db: db as never,
+      config: testConfig({
+        nodeEnv: "production",
+        isDevelopment: false,
+        ownerEmail: "owner@example.com",
+        apiPublicUrl: "https://ads.example.com",
+      }),
+      logger,
+      sendMagicLink,
+    });
+
+    await service.startLogin("owner@example.com", META);
+
+    expect(sendMagicLink).toHaveBeenCalledOnce();
+    expect(sendMagicLink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "owner@example.com",
+        url: expect.stringMatching(
+          /^https:\/\/ads\.example\.com\/api\/session\/verify\?token=/,
+        ),
+        expiresInMinutes: 15,
+      }),
+    );
+    expect(JSON.stringify(logger.calls)).not.toContain("/api/session/verify");
   });
 
   it("accepts its own CSRF token and rejects anything else", async () => {
@@ -363,6 +398,40 @@ describe("amazon oauth service", () => {
     expect((updated.encrypted_refresh_token as Buffer).length).toBe(0);
     expect(tokenManager.invalidate).toHaveBeenCalledWith(connection.id);
     expect(db.tables.jobQueue[0]!.status).toBe("failed");
+  });
+});
+
+// -- read service / manual synchronization (plan §8) -------------------------
+
+describe("read service", () => {
+  it("enqueues manual metrics sync for the trailing 60 complete UTC days", async () => {
+    const db = new FakeDb();
+    db.seedWorkspace();
+    db.seedUser("owner@example.com");
+    const connection = db.seedConnection();
+    db.seedProfile({
+      id: "profile-pk-1",
+      connection_id: connection.id,
+      profile_id: "amazon-profile-1",
+      enabled: true,
+    });
+    const service = createReadService({
+      db: db as never,
+      config: testConfig(),
+      logger: fakeLogger(),
+      now: () => new Date("2026-08-12T12:00:00.000Z"),
+    });
+
+    await service.requestSync(authFixture(), "amazon-profile-1", META);
+
+    const metricsJob = db.tables.jobQueue.find(
+      (job) => job.type === "metrics_sync",
+    );
+    expect(metricsJob?.payload).toMatchObject({
+      profileId: "profile-pk-1",
+      startDate: "2026-06-13",
+      endDate: "2026-08-11",
+    });
   });
 });
 

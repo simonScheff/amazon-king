@@ -1,0 +1,43 @@
+name: Bug report
+description: Report a reproducible problem using synthetic or redacted data
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include credentials, tokens, report download URLs, advertiser IDs, or real campaign data. Report vulnerabilities through the Security page instead.
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Provide minimal steps using synthetic data.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Node.js, pnpm, PostgreSQL, browser, and deployment method.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety checks
+      options:
+        - label: I removed all credentials, tokens, report URLs, and advertiser data.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true

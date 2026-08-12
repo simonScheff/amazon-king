@@ -6,6 +6,7 @@ import type {
   AddNegativeExactAction,
   UpdateBidAction,
 } from "../types.js";
+import { SP_MEDIA_TYPES } from "./sp-media-types.js";
 
 /**
  * Sponsored Products v3 write adapter (plan §6, §10). Internal change actions
@@ -108,6 +109,7 @@ export async function updateKeywordBids(
     method: "PUT",
     path: "/sp/keywords",
     context,
+    mediaType: SP_MEDIA_TYPES.keywords,
     body: buildKeywordBidUpdateBody(actions),
   });
   const data = parseWith(
@@ -131,6 +133,7 @@ export async function createNegativeKeywords(
     method: "POST",
     path: "/sp/negativeKeywords",
     context,
+    mediaType: SP_MEDIA_TYPES.negativeKeywords,
     body: buildNegativeKeywordCreateBody(actions),
   });
   const data = parseWith(
@@ -154,6 +157,7 @@ export async function deleteNegativeKeywords(
     method: "POST",
     path: "/sp/negativeKeywords/delete",
     context,
+    mediaType: SP_MEDIA_TYPES.negativeKeywords,
     body: { negativeKeywordIds: negativeKeywordIds.map(asAmazonId) },
   });
   const data = parseWith(

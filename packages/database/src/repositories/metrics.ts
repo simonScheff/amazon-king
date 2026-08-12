@@ -96,18 +96,25 @@ const METRIC_SET = `
 const METRIC_COLS = `impressions int, clicks int, cost numeric, sales numeric, orders int,
   purchases7d int, sales7d numeric, purchases14d int, sales14d numeric, currency char(3)`;
 
-async function batchUpsert(
+async function batchUpsert<T extends object>(
   db: Db,
   table: string,
   grainCols: string,
   grainTypes: string,
   conflictTarget: string,
-  rows: readonly object[],
+  rows: readonly T[],
+  keyFor: (row: T) => string,
 ): Promise<number> {
   if (rows.length === 0) {
     return 0;
   }
-  const records = rows.map(toRecord);
+  // Amazon reports can contain the same fact grain more than once. PostgreSQL
+  // rejects an INSERT that tries to update one conflict target twice, so keep
+  // the final occurrence before sending the atomic batch. Retries and repeated
+  // rows then converge on the same stored value.
+  const records = [
+    ...new Map(rows.map((row) => [keyFor(row), row] as const)).values(),
+  ].map(toRecord);
   const result = await db.query(
     `insert into ${table} (${grainCols}, impressions, clicks, cost, sales, orders,
        purchases7d, sales7d, purchases14d, sales14d, currency)
@@ -131,6 +138,7 @@ export function upsertCampaignMetrics(
     "profile_id bigint, campaign_id text, metric_date date",
     "(profile_id, campaign_id, metric_date)",
     rows,
+    (row) => JSON.stringify([row.profileId, row.campaignId, row.metricDate]),
   );
 }
 
@@ -142,6 +150,7 @@ export function upsertTargetMetrics(db: Db, rows: readonly TargetMetricsRow[]) {
     "profile_id bigint, campaign_id text, ad_group_id text, target_id text, metric_date date",
     "(profile_id, target_id, metric_date)",
     rows,
+    (row) => JSON.stringify([row.profileId, row.targetId, row.metricDate]),
   );
 }
 
@@ -156,6 +165,13 @@ export function upsertSearchTermMetrics(
     "profile_id bigint, campaign_id text, ad_group_id text, target_id text, search_term text, metric_date date",
     "(profile_id, target_id, search_term, metric_date)",
     rows,
+    (row) =>
+      JSON.stringify([
+        row.profileId,
+        row.targetId,
+        row.searchTerm,
+        row.metricDate,
+      ]),
   );
 }
 
@@ -170,6 +186,7 @@ export function upsertAdvertisedProductMetrics(
     "profile_id bigint, campaign_id text, ad_group_id text, ad_id text, metric_date date",
     "(profile_id, ad_id, metric_date)",
     rows,
+    (row) => JSON.stringify([row.profileId, row.adId, row.metricDate]),
   );
 }
 
@@ -184,6 +201,13 @@ export function upsertPlacementMetrics(
     "profile_id bigint, campaign_id text, placement text, metric_date date",
     "(profile_id, campaign_id, placement, metric_date)",
     rows,
+    (row) =>
+      JSON.stringify([
+        row.profileId,
+        row.campaignId,
+        row.placement,
+        row.metricDate,
+      ]),
   );
 }
 

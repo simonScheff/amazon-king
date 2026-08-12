@@ -35,6 +35,8 @@ export interface AdsRequest {
   path: string;
   context: AdsRequestContext;
   flavor?: ApiFlavor;
+  /** Versioned vendor media type required by resource-specific Amazon APIs. */
+  mediaType?: string;
   body?: unknown;
   query?: Record<string, string | number | undefined>;
   timeoutMs?: number;
@@ -114,6 +116,7 @@ function buildHeaders(
   context: AdsRequestContext,
   flavor: ApiFlavor,
   hasBody: boolean,
+  mediaType?: string,
 ): Record<string, string> {
   const headers: Record<string, string> = {
     authorization: `Bearer ${context.accessToken}`,
@@ -133,8 +136,11 @@ function buildHeaders(
       headers["Amazon-Advertising-API-Scope"] = context.profileId;
     }
   }
+  if (mediaType) {
+    headers.accept = mediaType;
+  }
   if (hasBody) {
-    headers["content-type"] = "application/json";
+    headers["content-type"] = mediaType ?? "application/json";
   }
   return headers;
 }
@@ -172,6 +178,7 @@ export function createAdsHttpClient(
       req.context,
       flavor,
       req.body !== undefined,
+      req.mediaType,
     );
     const timeoutMs = req.timeoutMs ?? defaultTimeoutMs;
     const logContext = {

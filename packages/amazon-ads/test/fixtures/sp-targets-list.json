@@ -1,6 +1,6 @@
 {
   "totalResults": 1,
-  "targets": [
+  "targetingClauses": [
     {
       "targetId": 880123456,
       "campaignId": 901234568,

@@ -225,7 +225,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     expect(history).toHaveLength(2);
     const budget = history.find((h) => h.field === "daily_budget")!;
     expect(budget.oldValue).toBe("10.0000");
-    expect(budget.newValue).toBe("12.5");
+    expect(budget.newValue).toBe("12.5000");
   });
 
   it("recommendations store immutable evidence and expire stale rows", async () => {

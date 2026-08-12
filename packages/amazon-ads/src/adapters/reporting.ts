@@ -26,14 +26,26 @@ const DEFAULT_GROUP_BY: Record<SpReportTypeId, string[]> = {
   spCampaigns: ["campaign"],
   spSearchTerm: ["searchTerm"],
   spTargeting: ["targeting"],
-  spAdvertisedProduct: ["asin"],
+  spAdvertisedProduct: ["advertiser"],
 };
 
 const DEFAULT_DIMENSIONS: Record<SpReportTypeId, string[]> = {
-  spCampaigns: ["campaignId", "campaignName"],
-  spSearchTerm: ["campaignId", "adGroupId", "searchTerm"],
-  spTargeting: ["campaignId", "adGroupId", "targetingId", "targetingText"],
+  // Reporting v3 only emits a dimension when it is explicitly requested;
+  // DAILY timeUnit alone does not add `date` to downloaded rows.
+  spCampaigns: ["date", "campaignId", "campaignName"],
+  spSearchTerm: ["date", "campaignId", "adGroupId", "searchTerm", "keywordId"],
+  // Amazon calls the identifier `keywordId` for both keywords and targeting
+  // expressions. `targetingId` / `targetingText` are not Reporting v3 columns.
+  spTargeting: [
+    "date",
+    "campaignId",
+    "adGroupId",
+    "keywordId",
+    "keyword",
+    "targeting",
+  ],
   spAdvertisedProduct: [
+    "date",
     "campaignId",
     "adGroupId",
     "advertisedSku",
@@ -81,18 +93,36 @@ const createReportResponseSchema = z.looseObject({
 
 const reportStatusResponseSchema = z.looseObject({
   reportId: z.string().min(1),
-  status: z.enum(["PENDING", "IN_PROGRESS", "SUCCESS", "FAILURE"]),
-  url: z.string().optional(),
-  failureReason: z.string().optional(),
+  // Current Reporting v3 returns PROCESSING / COMPLETED. Keep the older
+  // IN_PROGRESS / SUCCESS aliases so persisted reports and fixtures remain
+  // resumable across Amazon's status vocabulary change.
+  status: z.enum([
+    "PENDING",
+    "PROCESSING",
+    "COMPLETED",
+    "FAILURE",
+    "IN_PROGRESS",
+    "SUCCESS",
+  ]),
+  // Amazon explicitly returns null while a report is still being generated.
+  url: z.string().nullish(),
+  failureReason: z.string().nullish(),
 });
 
 const AMAZON_STATE_MAP: Record<
-  "PENDING" | "IN_PROGRESS" | "SUCCESS" | "FAILURE",
+  | "PENDING"
+  | "PROCESSING"
+  | "COMPLETED"
+  | "FAILURE"
+  | "IN_PROGRESS"
+  | "SUCCESS",
   ReportState
 > = {
   PENDING: "queued",
+  PROCESSING: "polling",
   IN_PROGRESS: "polling",
   // Data is ready; the download/decompress/validate phase starts next.
+  COMPLETED: "downloading",
   SUCCESS: "downloading",
   FAILURE: "failed",
 };
@@ -144,12 +174,12 @@ export async function getReportStatus(
     reportId: data.reportId,
     state: AMAZON_STATE_MAP[data.status],
     amazonStatus: data.status,
-    failureReason: data.failureReason,
+    failureReason: data.failureReason ?? undefined,
   };
-  if (data.status === "SUCCESS") {
+  if (data.status === "COMPLETED" || data.status === "SUCCESS") {
     if (!data.url) {
       throw new AmazonApiError(
-        "Report is SUCCESS but Amazon returned no download URL",
+        `Report is ${data.status} but Amazon returned no download URL`,
         { status: response.status, requestId: response.requestId },
       );
     }

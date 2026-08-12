@@ -124,7 +124,8 @@ export interface ReportJob {
 
 /**
  * Internal report lifecycle (plan §8 state machine), mapped from Amazon's
- * PENDING / IN_PROGRESS / SUCCESS / FAILURE.
+ * PENDING / PROCESSING / COMPLETED / FAILURE. The two legacy aliases remain
+ * accepted so an in-flight report survives Amazon vocabulary changes.
  */
 export type ReportState = "queued" | "polling" | "downloading" | "failed";
 
@@ -132,7 +133,13 @@ export interface ReportStatus {
   reportId: string;
   state: ReportState;
   /** Amazon's raw status, kept for diagnosis. */
-  amazonStatus: "PENDING" | "IN_PROGRESS" | "SUCCESS" | "FAILURE";
+  amazonStatus:
+    | "PENDING"
+    | "PROCESSING"
+    | "COMPLETED"
+    | "FAILURE"
+    | "IN_PROGRESS"
+    | "SUCCESS";
   /** Pre-signed URL, present only when state === "downloading". Sensitive: never log. */
   downloadUrl?: string;
   failureReason?: string;

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { parseWith } from "../validate.js";
 import type { AdsHttpClient, AdsRequestContext } from "../http.js";
+import { SP_MEDIA_TYPES } from "./sp-media-types.js";
 import type {
   AdGroup,
   Campaign,
@@ -95,6 +96,7 @@ interface PageSpec<S extends z.ZodType> {
   path: string;
   /** Response key holding the item array (e.g. "campaigns"). */
   key: string;
+  mediaType: string;
   itemSchema: S;
   /** Extra fields for the POST body (e.g. state filters). */
   body?: Record<string, unknown>;
@@ -114,6 +116,7 @@ async function listAllPages<S extends z.ZodType>(
       method: "POST",
       path: spec.path,
       context,
+      mediaType: spec.mediaType,
       body: {
         maxResults: 1000,
         ...spec.body,
@@ -138,6 +141,7 @@ export async function listCampaigns(
   const rows = await listAllPages(http, context, {
     path: "/sp/campaigns/list",
     key: "campaigns",
+    mediaType: SP_MEDIA_TYPES.campaigns,
     itemSchema: spCampaignSchema,
   });
   return rows.map((raw) => ({
@@ -159,6 +163,7 @@ export async function listAdGroups(
   const rows = await listAllPages(http, context, {
     path: "/sp/adGroups/list",
     key: "adGroups",
+    mediaType: SP_MEDIA_TYPES.adGroups,
     itemSchema: spAdGroupSchema,
   });
   return rows.map((raw) => ({
@@ -178,6 +183,7 @@ export async function listProductAds(
   const rows = await listAllPages(http, context, {
     path: "/sp/productAds/list",
     key: "productAds",
+    mediaType: SP_MEDIA_TYPES.productAds,
     itemSchema: spProductAdSchema,
   });
   return rows.map((raw) => ({
@@ -198,6 +204,7 @@ export async function listKeywords(
   const rows = await listAllPages(http, context, {
     path: "/sp/keywords/list",
     key: "keywords",
+    mediaType: SP_MEDIA_TYPES.keywords,
     itemSchema: spKeywordSchema,
   });
   return rows.map((raw) => ({
@@ -218,7 +225,10 @@ export async function listTargets(
 ): Promise<Target[]> {
   const rows = await listAllPages(http, context, {
     path: "/sp/targets/list",
-    key: "targets",
+    // The SP v3 targeting-clause endpoint uses this envelope name even
+    // though the resource path and our internal model call them targets.
+    key: "targetingClauses",
+    mediaType: SP_MEDIA_TYPES.targets,
     itemSchema: spTargetSchema,
   });
   return rows.map((raw) => ({
@@ -240,6 +250,7 @@ export async function listNegativeKeywords(
   const rows = await listAllPages(http, context, {
     path: "/sp/negativeKeywords/list",
     key: "negativeKeywords",
+    mediaType: SP_MEDIA_TYPES.negativeKeywords,
     itemSchema: spNegativeKeywordSchema,
   });
   return rows.map((raw) => ({
