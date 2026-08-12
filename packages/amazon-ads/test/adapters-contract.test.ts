@@ -199,6 +199,7 @@ describe("SP list fixtures", () => {
     });
     const negatives = await listNegativeKeywords(negHttp, TEST_CONTEXT);
     expect(negatives[0].matchType).toBe("NEGATIVE_EXACT");
+    expect(negatives[0].negativeKeywordId).toBe("990123456");
   });
 
   it("tolerates additive fields on list items", async () => {

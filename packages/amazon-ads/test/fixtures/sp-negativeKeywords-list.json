@@ -2,7 +2,7 @@
   "totalResults": 1,
   "negativeKeywords": [
     {
-      "negativeKeywordId": 990123456,
+      "keywordId": 990123456,
       "campaignId": 901234567,
       "adGroupId": 705432109,
       "keywordText": "free books",

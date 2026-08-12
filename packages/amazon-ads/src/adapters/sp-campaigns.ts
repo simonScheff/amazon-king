@@ -69,14 +69,22 @@ const spTargetSchema = z.looseObject({
   expressionType: z.string().optional(),
 });
 
-const spNegativeKeywordSchema = z.looseObject({
-  negativeKeywordId: idField,
-  campaignId: idField,
-  adGroupId: optionalIdField,
-  keywordText: z.string(),
-  matchType: z.string(),
-  state: z.string(),
-});
+const spNegativeKeywordSchema = z
+  .looseObject({
+    // SP v3 currently calls this `keywordId`. Accept the older descriptive
+    // alias as well so already-captured fixtures remain readable.
+    keywordId: idField.optional(),
+    negativeKeywordId: idField.optional(),
+    campaignId: idField,
+    adGroupId: optionalIdField,
+    keywordText: z.string(),
+    matchType: z.string(),
+    state: z.string(),
+  })
+  .refine(
+    (row) => row.keywordId !== undefined || row.negativeKeywordId !== undefined,
+    { path: ["keywordId"], message: "Expected Amazon negative keyword id" },
+  );
 
 type RawOf<S extends z.ZodType> = z.infer<S>;
 
@@ -254,7 +262,7 @@ export async function listNegativeKeywords(
     itemSchema: spNegativeKeywordSchema,
   });
   return rows.map((raw) => ({
-    negativeKeywordId: raw.negativeKeywordId,
+    negativeKeywordId: raw.keywordId ?? (raw.negativeKeywordId as string),
     campaignId: raw.campaignId,
     adGroupId: raw.adGroupId ?? null,
     keywordText: raw.keywordText,
