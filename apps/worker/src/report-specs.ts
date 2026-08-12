@@ -16,6 +16,14 @@ export const REPORT_FAMILIES = [
 export type ReportFamily = (typeof REPORT_FAMILIES)[number];
 
 /**
+ * Bump whenever adapter-owned dimensions/grouping change. The value is used
+ * only in the dedupe fingerprint, not sent as an Amazon report column. This
+ * prevents a queued sync from adopting an older report artifact whose shape
+ * no longer matches the current row schemas.
+ */
+const REPORT_CONFIGURATION_VERSION = "reporting-v3-config-2";
+
+/**
  * Metric columns requested for every family (Reporting v3, DAILY time unit).
  * Attribution windows stay explicit: 7d and 14d are never merged (plan §7).
  */
@@ -67,7 +75,7 @@ export function buildFamilySpec(
     reportType: family,
     dateStart: startDate,
     dateEnd: endDate,
-    columns,
+    columns: [REPORT_CONFIGURATION_VERSION, ...columns],
   });
   return { family, spec, specFingerprint };
 }
