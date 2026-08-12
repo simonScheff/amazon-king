@@ -344,8 +344,9 @@ describe("metrics_sync", () => {
           campaignId: "c1",
           campaignName: "Campaign 1",
           impressions: 100,
-          clicks: -3, // negative count fails reconciliation
+          clicks: 3,
           cost: 5.5,
+          purchases7d: -2, // attribution extras fail reconciliation
         },
       ],
     };

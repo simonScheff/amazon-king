@@ -22,12 +22,21 @@ const metricNumber = z.coerce
     message: "Expected a numeric metric value",
   });
 
+/**
+ * Amazon has emitted -1 for an unavailable traffic count on an otherwise
+ * zero-valued row. Normalize only that observed sentinel; all other negative
+ * or fractional counts remain invalid instead of entering fact tables.
+ */
+const countMetric = metricNumber
+  .transform((value) => (value === -1 ? 0 : value))
+  .pipe(z.number().int().nonnegative());
+
 export const spCampaignsRowSchema = z.looseObject({
   date: isoDateSchema,
   campaignId: idColumn,
   campaignName: z.string(),
-  impressions: metricNumber,
-  clicks: metricNumber,
+  impressions: countMetric,
+  clicks: countMetric,
   cost: metricNumber,
 });
 export type SpCampaignsRow = z.infer<typeof spCampaignsRowSchema>;
@@ -38,8 +47,8 @@ export const spSearchTermRowSchema = z.looseObject({
   adGroupId: idColumn,
   keywordId: idColumn,
   searchTerm: z.string(),
-  impressions: metricNumber,
-  clicks: metricNumber,
+  impressions: countMetric,
+  clicks: countMetric,
   cost: metricNumber,
 });
 export type SpSearchTermRow = z.infer<typeof spSearchTermRowSchema>;
@@ -49,8 +58,8 @@ export const spTargetingRowSchema = z.looseObject({
   campaignId: idColumn,
   adGroupId: idColumn,
   keywordId: idColumn,
-  impressions: metricNumber,
-  clicks: metricNumber,
+  impressions: countMetric,
+  clicks: countMetric,
   cost: metricNumber,
 });
 export type SpTargetingRow = z.infer<typeof spTargetingRowSchema>;
@@ -60,8 +69,8 @@ export const spAdvertisedProductRowSchema = z.looseObject({
   campaignId: idColumn,
   adGroupId: idColumn,
   advertisedAsin: z.string(),
-  impressions: metricNumber,
-  clicks: metricNumber,
+  impressions: countMetric,
+  clicks: countMetric,
   cost: metricNumber,
 });
 export type SpAdvertisedProductRow = z.infer<

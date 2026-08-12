@@ -33,6 +33,20 @@ describe("report row schemas (plan §8 import validation)", () => {
     });
   });
 
+  it("normalizes Amazon's -1 unavailable count sentinel but rejects other negatives", () => {
+    const rows = fixture("report-rows-spTargeting.json") as Record<
+      string,
+      unknown
+    >[];
+    rows[0].impressions = -1;
+    expect(parseReportRows("spTargeting", rows)[0].impressions).toBe(0);
+
+    rows[0].impressions = -2;
+    expect(() => parseReportRows("spTargeting", rows)).toThrow(
+      AdapterValidationError,
+    );
+  });
+
   it("tolerates unknown extra columns", () => {
     const rows = fixture("report-rows-spTargeting.json") as Record<
       string,
