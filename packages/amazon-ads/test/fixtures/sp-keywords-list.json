@@ -1,0 +1,22 @@
+{
+  "totalResults": 2,
+  "keywords": [
+    {
+      "keywordId": 601122334,
+      "campaignId": 901234567,
+      "adGroupId": 705432109,
+      "keywordText": "fantasy adventure",
+      "matchType": "EXACT",
+      "state": "ENABLED",
+      "bid": 0.55
+    },
+    {
+      "keywordId": 601122335,
+      "campaignId": 901234567,
+      "adGroupId": 705432109,
+      "keywordText": "dragon books",
+      "matchType": "BROAD",
+      "state": "ENABLED"
+    }
+  ]
+}

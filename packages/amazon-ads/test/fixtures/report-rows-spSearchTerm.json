@@ -1,0 +1,24 @@
+[
+  {
+    "date": "2024-05-01",
+    "campaignId": 901234567,
+    "adGroupId": 705432109,
+    "searchTerm": "dragon fantasy books",
+    "impressions": 120,
+    "clicks": 5,
+    "cost": 1.75,
+    "purchases7d": 1,
+    "sales7d": 12.99
+  },
+  {
+    "date": "2024-05-01",
+    "campaignId": 901234567,
+    "adGroupId": 705432109,
+    "searchTerm": "epic fantasy kindle",
+    "impressions": 80,
+    "clicks": 2,
+    "cost": 0.9,
+    "purchases7d": 0,
+    "sales7d": 0
+  }
+]

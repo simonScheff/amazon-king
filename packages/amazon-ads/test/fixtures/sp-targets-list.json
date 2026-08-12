@@ -1,0 +1,15 @@
+{
+  "totalResults": 1,
+  "targets": [
+    {
+      "targetId": 880123456,
+      "campaignId": 901234568,
+      "adGroupId": 705432110,
+      "state": "ENABLED",
+      "bid": 0.4,
+      "expressionType": "MANUAL",
+      "expression": [{ "type": "ASIN_SAME_AS", "value": "B0ASIN0001" }],
+      "resolvedExpression": [{ "type": "ASIN_SAME_AS", "value": "B0ASIN0001" }]
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+[
+  {
+    "profileId": 3333333333,
+    "countryCode": "GB",
+    "currencyCode": "GBP",
+    "dailyBudget": 25.0,
+    "timezone": "Europe/London",
+    "accountInfo": {
+      "marketplaceStringId": "A1F83G8C2ARO7P",
+      "id": "AMZNACCTUK01",
+      "type": "seller",
+      "name": "Author UK Account"
+    }
+  }
+]

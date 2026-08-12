@@ -1,0 +1,13 @@
+{
+  "totalResults": 1,
+  "productAds": [
+    {
+      "adId": 550123456,
+      "campaignId": 901234567,
+      "adGroupId": 705432109,
+      "state": "ENABLED",
+      "asin": "B0CXYZ1234",
+      "sku": "BK-DRAGON-01"
+    }
+  ]
+}

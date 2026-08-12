@@ -1,0 +1,14 @@
+{
+  "keywords": [
+    {
+      "keywordId": 601122334,
+      "code": "SUCCESS",
+      "index": 0
+    },
+    {
+      "code": "INVALID_VALUE",
+      "index": 1,
+      "message": "Bid is below the minimum allowed for this marketplace"
+    }
+  ]
+}

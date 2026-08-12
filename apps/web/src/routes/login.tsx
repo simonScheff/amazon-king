@@ -1,0 +1,65 @@
+import { useState, type FormEvent } from "react";
+import { useLogin } from "../api/endpoints";
+import { ApiError } from "../api/client";
+import { Button } from "../components/ui/button";
+import { Card, CardBody } from "../components/ui/card";
+import { Input } from "../components/ui/input";
+
+export function LoginPage() {
+  const [email, setEmail] = useState("");
+  const [sent, setSent] = useState(false);
+  const login = useLogin();
+
+  function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    login.mutate({ email }, { onSuccess: () => setSent(true) });
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4">
+      <Card className="w-full max-w-sm">
+        <CardBody className="p-6">
+          <h1 className="text-lg font-semibold text-zinc-100">Amazon King</h1>
+          <p className="mt-1 text-sm text-zinc-500">
+            Ads optimizer for KDP authors
+          </p>
+          {sent ? (
+            <p role="status" className="mt-4 text-sm text-emerald-300">
+              Check your inbox — we sent a sign-in link to{" "}
+              <span className="font-medium">{email}</span>.
+            </p>
+          ) : (
+            <form onSubmit={onSubmit} className="mt-4 flex flex-col gap-3">
+              <label htmlFor="email" className="text-sm text-zinc-300">
+                Email
+              </label>
+              <Input
+                id="email"
+                type="email"
+                required
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
+              {login.error && (
+                <p role="alert" className="text-sm text-red-300">
+                  {login.error instanceof ApiError
+                    ? login.error.message
+                    : "Sign-in failed. Try again."}
+                </p>
+              )}
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={login.isPending}
+              >
+                {login.isPending ? "Sending…" : "Email me a sign-in link"}
+              </Button>
+            </form>
+          )}
+        </CardBody>
+      </Card>
+    </div>
+  );
+}

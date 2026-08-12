@@ -1,0 +1,24 @@
+{
+  "name": "amazon-king",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.12.4",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel --if-present dev",
+    "build": "pnpm -r --if-present build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "prettier --check ."
+  },
+  "devDependencies": {
+    "@amazon-king/database": "workspace:*",
+    "@types/node": "^26.1.2",
+    "prettier": "^3.9.6",
+    "tsx": "^4.23.9",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}

@@ -1,0 +1,28 @@
+[
+  {
+    "profileId": 1111111111,
+    "countryCode": "US",
+    "currencyCode": "USD",
+    "dailyBudget": 50.0,
+    "timezone": "America/Los_Angeles",
+    "accountInfo": {
+      "marketplaceStringId": "ATVPDKIKX0DER",
+      "id": "AMZNACCTUS01",
+      "type": "vendor",
+      "name": "Author US Account"
+    }
+  },
+  {
+    "profileId": 2222222222,
+    "countryCode": "CA",
+    "currencyCode": "CAD",
+    "dailyBudget": 0,
+    "timezone": "America/Toronto",
+    "accountInfo": {
+      "marketplaceStringId": "A2EUQ1WTGCTBG2",
+      "id": "AMZNACCTCA01",
+      "type": "seller",
+      "name": "Author CA Account"
+    }
+  }
+]

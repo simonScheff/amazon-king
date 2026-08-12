@@ -1,0 +1,210 @@
+import { defaultLogger, type LoggerLike } from "./logger.js";
+import {
+  createAdsHttpClient,
+  type AdsHttpClient,
+  type AdsRequestContext,
+} from "./http.js";
+import type { TokenManager } from "./token-manager.js";
+import { listAllProfiles } from "./adapters/profiles.js";
+import { getReportStatus, requestReport } from "./adapters/reporting.js";
+import {
+  listAdGroups,
+  listCampaigns,
+  listKeywords,
+  listNegativeKeywords,
+  listProductAds,
+  listTargets,
+} from "./adapters/sp-campaigns.js";
+import {
+  createNegativeKeywords,
+  updateKeywordBids,
+} from "./adapters/sp-writes.js";
+import type {
+  ActionResult,
+  AmazonRegion,
+  Capabilities,
+  ChangeSet,
+  Profile,
+  ReportJob,
+  ReportSpec,
+  ReportStatus,
+  SpReportTypeId,
+  StructureSnapshot,
+} from "./types.js";
+
+/**
+ * Internal Amazon gateway (plan §6). The optimizer and API layers only see
+ * this interface and the internal domain models; raw Amazon payloads are
+ * validated and translated inside the adapters.
+ */
+export interface AmazonAdsGateway {
+  listProfiles(connectionId: string): Promise<Profile[]>;
+  syncCampaignStructure(profileId: string): Promise<StructureSnapshot>;
+  requestReport(profileId: string, spec: ReportSpec): Promise<ReportJob>;
+  getReport(reportId: string): Promise<ReportStatus>;
+  previewCapabilities(profileId: string): Promise<Capabilities>;
+  applyActions(changeSet: ChangeSet): Promise<ActionResult[]>;
+}
+
+/** Stored profile/account metadata owned by the DB layer; the gateway reads it to derive headers. */
+export interface ProfileDirectoryEntry {
+  profileId: string;
+  connectionId: string;
+  region: AmazonRegion;
+  accountId: string | null;
+}
+
+export interface GatewayOptions {
+  /** LWA client id — goes into Amazon-Advertising-API-ClientId headers. */
+  clientId: string;
+  tokenManager: Pick<TokenManager, "getAccessToken">;
+  /** Look up stored profile metadata by internal profileId. */
+  profileDirectory: {
+    get(profileId: string): Promise<ProfileDirectoryEntry>;
+  };
+  /** Optional resolver mapping an Amazon reportId back to its profile (e.g. after worker restart). */
+  reportOwner?: (reportId: string) => Promise<string | null>;
+  http?: AdsHttpClient;
+  logger?: LoggerLike;
+  now?: () => string;
+}
+
+const SUPPORTED_REPORT_TYPES: SpReportTypeId[] = [
+  "spCampaigns",
+  "spSearchTerm",
+  "spTargeting",
+  "spAdvertisedProduct",
+];
+
+export function createAmazonAdsGateway(
+  options: GatewayOptions,
+): AmazonAdsGateway {
+  const http =
+    options.http ?? createAdsHttpClient({ clientId: options.clientId });
+  const logger = options.logger ?? defaultLogger();
+  const now = options.now ?? (() => new Date().toISOString());
+  /** In-memory reportId → profileId map for reports requested through this instance. */
+  const reportOwners = new Map<string, string>();
+
+  async function contextFor(
+    profileId: string,
+  ): Promise<AdsRequestContext & { profileId: string }> {
+    const entry = await options.profileDirectory.get(profileId);
+    const accessToken = await options.tokenManager.getAccessToken(
+      entry.connectionId,
+    );
+    return {
+      region: entry.region,
+      accessToken,
+      profileId: entry.profileId,
+      accountId: entry.accountId,
+    };
+  }
+
+  return {
+    async listProfiles(connectionId: string): Promise<Profile[]> {
+      const accessToken =
+        await options.tokenManager.getAccessToken(connectionId);
+      // Profiles can exist in any region; discover across all hosts (plan §5 step 5).
+      return listAllProfiles(http, accessToken);
+    },
+
+    async syncCampaignStructure(profileId: string): Promise<StructureSnapshot> {
+      const context = await contextFor(profileId);
+      const [campaigns, adGroups, ads, keywords, targets, negativeKeywords] =
+        await Promise.all([
+          listCampaigns(http, context),
+          listAdGroups(http, context),
+          listProductAds(http, context),
+          listKeywords(http, context),
+          listTargets(http, context),
+          listNegativeKeywords(http, context),
+        ]);
+      logger.info(
+        {
+          profileId,
+          campaigns: campaigns.length,
+          adGroups: adGroups.length,
+          ads: ads.length,
+          keywords: keywords.length,
+          targets: targets.length,
+          negativeKeywords: negativeKeywords.length,
+        },
+        "Campaign structure snapshot retrieved",
+      );
+      return {
+        profileId,
+        retrievedAt: now(),
+        campaigns,
+        adGroups,
+        ads,
+        keywords,
+        targets,
+        negativeKeywords,
+      };
+    },
+
+    async requestReport(
+      profileId: string,
+      spec: ReportSpec,
+    ): Promise<ReportJob> {
+      const context = await contextFor(profileId);
+      const job = await requestReport(http, context, spec, now);
+      reportOwners.set(job.reportId, profileId);
+      return job;
+    },
+
+    async getReport(reportId: string): Promise<ReportStatus> {
+      const profileId =
+        reportOwners.get(reportId) ??
+        (options.reportOwner ? await options.reportOwner(reportId) : null);
+      if (!profileId) {
+        throw new Error(
+          `Unknown reportId ${reportId}: no owning profile on record`,
+        );
+      }
+      const context = await contextFor(profileId);
+      return getReportStatus(http, context, reportId);
+    },
+
+    async previewCapabilities(profileId: string): Promise<Capabilities> {
+      const entry = await options.profileDirectory.get(profileId);
+      return {
+        profileId: entry.profileId,
+        region: entry.region,
+        adProducts: ["SPONSORED_PRODUCTS"],
+        reportTypes: SUPPORTED_REPORT_TYPES,
+        writeOperations: ["update_bid", "add_negative_exact"],
+      };
+    },
+
+    async applyActions(changeSet: ChangeSet): Promise<ActionResult[]> {
+      const context = await contextFor(changeSet.profileId);
+      const bidActions = changeSet.actions.filter(
+        (action) => action.kind === "update_bid",
+      );
+      const negativeActions = changeSet.actions.filter(
+        (action) => action.kind === "add_negative_exact",
+      );
+      const results: ActionResult[] = [];
+      if (bidActions.length > 0) {
+        results.push(...(await updateKeywordBids(http, context, bidActions)));
+      }
+      if (negativeActions.length > 0) {
+        results.push(
+          ...(await createNegativeKeywords(http, context, negativeActions)),
+        );
+      }
+      logger.info(
+        {
+          changeSetId: changeSet.changeSetId,
+          profileId: changeSet.profileId,
+          applied: results.filter((r) => r.status === "applied").length,
+          failed: results.filter((r) => r.status === "failed").length,
+        },
+        "Change set applied",
+      );
+      return results;
+    },
+  };
+}

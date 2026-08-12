@@ -1,0 +1,22 @@
+[
+  {
+    "date": "2024-05-01",
+    "campaignId": 901234567,
+    "campaignName": "Book One - Auto",
+    "impressions": 1250,
+    "clicks": 34,
+    "cost": 12.34,
+    "purchases7d": 2,
+    "sales7d": 25.98
+  },
+  {
+    "date": "2024-05-02",
+    "campaignId": "901234567",
+    "campaignName": "Book One - Auto",
+    "impressions": "980",
+    "clicks": "21",
+    "cost": "8.50",
+    "purchases7d": "1",
+    "sales7d": "12.99"
+  }
+]

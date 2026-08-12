@@ -1,0 +1,31 @@
+{
+  "name": "@amazon-king/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@amazon-king/amazon-ads": "workspace:*",
+    "@amazon-king/contracts": "workspace:*",
+    "@amazon-king/crypto": "workspace:*",
+    "@amazon-king/database": "workspace:*",
+    "@amazon-king/observability": "workspace:*",
+    "@amazon-king/optimizer": "workspace:*",
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/cors": "^11.3.0",
+    "@fastify/rate-limit": "^11.2.0",
+    "fastify": "^5.11.2",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "tsx": "^4.23.9",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}

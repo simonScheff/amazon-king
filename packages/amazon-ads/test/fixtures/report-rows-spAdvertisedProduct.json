@@ -1,0 +1,14 @@
+[
+  {
+    "date": "2024-05-01",
+    "campaignId": 901234567,
+    "adGroupId": 705432109,
+    "advertisedSku": "BK-DRAGON-01",
+    "advertisedAsin": "B0CXYZ1234",
+    "impressions": 640,
+    "clicks": 18,
+    "cost": 6.3,
+    "purchases7d": 2,
+    "sales7d": 25.98
+  }
+]

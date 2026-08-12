@@ -1,0 +1,516 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { FastifyBaseLogger as Logger } from "fastify";
+import type {
+  ActionResult,
+  AmazonAdsGateway,
+  Profile,
+  StructureSnapshot,
+  TokenManager,
+} from "@amazon-king/amazon-ads";
+import type { ApiConfig } from "../config.js";
+import { ApiError } from "../errors.js";
+import { createSessionService } from "../services/session.js";
+import { createAmazonService } from "../services/amazon.js";
+import { createChangeService } from "../services/changes.js";
+import type { AuthContext, RequestMeta } from "../services/types.js";
+import { FakeDb } from "./fake-db.js";
+
+// -- shared fixtures ---------------------------------------------------------
+
+const KEY = "a".repeat(64);
+
+function testConfig(overrides: Partial<ApiConfig> = {}): ApiConfig {
+  return {
+    nodeEnv: "development",
+    port: 3000,
+    databaseUrl: "postgres://localhost/test",
+    sessionSecret: "test-session-secret-0123456789",
+    webOrigin: "http://localhost:5173",
+    lwaClientId: "lwa-client-id",
+    lwaClientSecret: "lwa-client-secret",
+    amazonRedirectUri: "http://localhost:3000/api/integrations/amazon/callback",
+    killSwitch: false,
+    isDevelopment: true,
+    ...overrides,
+  };
+}
+
+interface LogCall {
+  fields: Record<string, unknown>;
+  message: string;
+}
+
+function fakeLogger() {
+  const calls: LogCall[] = [];
+  const logger = {
+    calls,
+    info(fields: Record<string, unknown>, message: string) {
+      calls.push({ fields, message });
+    },
+    warn(fields: Record<string, unknown>, message: string) {
+      calls.push({ fields, message });
+    },
+    error(fields: Record<string, unknown>, message: string) {
+      calls.push({ fields, message });
+    },
+    debug() {},
+    trace() {},
+    fatal() {},
+    child() {
+      return this;
+    },
+    level: "info",
+  };
+  return logger as unknown as Logger & { calls: LogCall[] };
+}
+
+const META: RequestMeta = { ip: "127.0.0.1", userAgent: "vitest" };
+
+function authFixture(overrides: Partial<AuthContext> = {}): AuthContext {
+  return {
+    sessionId: "session-1",
+    userId: "1",
+    workspaceId: "1",
+    email: "owner@example.com",
+    sessionTokenHash: "hash-1",
+    sessionCreatedAt: new Date(),
+    expiresAt: new Date(Date.now() + 86_400_000),
+    ...overrides,
+  };
+}
+
+const PROFILE: Profile = {
+  profileId: "amz-profile-1",
+  region: "NA",
+  countryCode: "US",
+  currencyCode: "USD",
+  timezone: "America/Los_Angeles",
+  accountId: "acct-1",
+  accountType: "vendor",
+  accountName: "Test",
+};
+
+function snapshotWithKeywordBid(bid: number | null): StructureSnapshot {
+  return {
+    campaigns: [],
+    adGroups: [],
+    ads: [],
+    keywords: [{ keywordId: "kw-1", bid }],
+    targets: [],
+    negativeKeywords: [],
+  } as unknown as StructureSnapshot;
+}
+
+// -- session service (Login A, plan §5) --------------------------------------
+
+describe("session service", () => {
+  beforeEach(() => {
+    process.env.TOKEN_ENCRYPTION_KEY = KEY;
+  });
+  afterEach(() => {
+    delete process.env.TOKEN_ENCRYPTION_KEY;
+  });
+
+  async function fullLogin(db: FakeDb, logger: Logger & { calls: LogCall[] }) {
+    const service = createSessionService({
+      db: db as never,
+      config: testConfig(),
+      logger,
+    });
+    await service.startLogin("owner@example.com", META);
+    const linkCall = logger.calls.find(
+      (c) => typeof c.fields.magicLink === "string",
+    );
+    const token = new URL(
+      linkCall!.fields.magicLink as string,
+    ).searchParams.get("token")!;
+    return { service, token };
+  }
+
+  it("runs the full passwordless flow: token → session → authenticate", async () => {
+    const db = new FakeDb();
+    const logger = fakeLogger();
+    const { service, token } = await fullLogin(db, logger);
+
+    const verified = await service.verifyLogin(token, META);
+    expect(verified).not.toBeNull();
+    expect(verified!.auth.email).toBe("owner@example.com");
+    // First login auto-provisions the owner workspace.
+    expect(db.tables.users).toHaveLength(1);
+    expect(db.tables.workspaces).toHaveLength(1);
+
+    const authed = await service.authenticate(verified!.sessionToken);
+    expect(authed?.userId).toBe(verified!.auth.userId);
+  });
+
+  it("stores only token hashes, never the raw login or session token", async () => {
+    const db = new FakeDb();
+    const logger = fakeLogger();
+    const { service, token } = await fullLogin(db, logger);
+    expect(db.tables.loginTokens[0]!.token_hash).not.toBe(token);
+
+    const verified = await service.verifyLogin(token, META);
+    expect(db.tables.sessions[0]!.token_hash).not.toBe(verified!.sessionToken);
+  });
+
+  it("consumes login tokens exactly once", async () => {
+    const db = new FakeDb();
+    const logger = fakeLogger();
+    const { service, token } = await fullLogin(db, logger);
+
+    expect(await service.verifyLogin(token, META)).not.toBeNull();
+    expect(await service.verifyLogin(token, META)).toBeNull();
+  });
+
+  it("rejects unknown login tokens", async () => {
+    const db = new FakeDb();
+    const service = createSessionService({
+      db: db as never,
+      config: testConfig(),
+      logger: fakeLogger(),
+    });
+    expect(await service.verifyLogin("nope", META)).toBeNull();
+  });
+
+  it("silently refuses logins for other emails when OWNER_EMAIL is set", async () => {
+    const db = new FakeDb();
+    const service = createSessionService({
+      db: db as never,
+      config: testConfig({ ownerEmail: "owner@example.com" }),
+      logger: fakeLogger(),
+    });
+    await service.startLogin("intruder@example.com", META);
+    expect(db.tables.loginTokens).toHaveLength(0);
+  });
+
+  it("accepts its own CSRF token and rejects anything else", async () => {
+    const service = createSessionService({
+      db: new FakeDb() as never,
+      config: testConfig(),
+      logger: fakeLogger(),
+    });
+    const auth = authFixture();
+    const token = service.csrfTokenFor(auth);
+    expect(service.verifyCsrf(auth, token)).toBe(true);
+    expect(service.verifyCsrf(auth, `${token}x`)).toBe(false);
+    expect(service.verifyCsrf(auth, "garbage")).toBe(false);
+    expect(service.verifyCsrf(auth, undefined)).toBe(false);
+    // A token derived for a different session must not validate.
+    expect(
+      service.verifyCsrf(authFixture({ sessionTokenHash: "other" }), token),
+    ).toBe(false);
+  });
+
+  it("enforces the recent-auth window for spend-changing actions", () => {
+    const service = createSessionService({
+      db: new FakeDb() as never,
+      config: testConfig(),
+      logger: fakeLogger(),
+    });
+    const fresh = authFixture();
+    expect(service.isRecentAuth(fresh)).toBe(true);
+    const stale = authFixture({
+      sessionCreatedAt: new Date(Date.now() - 20 * 60 * 1000),
+    });
+    expect(service.isRecentAuth(stale)).toBe(false);
+  });
+});
+
+// -- amazon service (Login B, plan §5) ---------------------------------------
+
+describe("amazon oauth service", () => {
+  beforeEach(() => {
+    process.env.TOKEN_ENCRYPTION_KEY = KEY;
+  });
+  afterEach(() => {
+    delete process.env.TOKEN_ENCRYPTION_KEY;
+  });
+
+  function setup(
+    overrides: {
+      exchange?: (args: unknown) => Promise<unknown>;
+      profiles?: Profile[];
+    } = {},
+  ) {
+    const db = new FakeDb();
+    db.seedWorkspace();
+    db.seedUser("owner@example.com");
+    const exchange = vi.fn(
+      overrides.exchange ??
+        (async () => ({
+          accessToken: "at-1",
+          refreshToken: "rt-secret-1",
+          expiresIn: 3600,
+        })),
+    );
+    const gateway = {
+      listProfiles: vi.fn(async () => overrides.profiles ?? [PROFILE]),
+    };
+    const tokenManager = { invalidate: vi.fn() };
+    const service = createAmazonService({
+      db: db as never,
+      config: testConfig(),
+      logger: fakeLogger(),
+      gateway: gateway as unknown as Pick<AmazonAdsGateway, "listProfiles">,
+      tokenManager: tokenManager as unknown as Pick<TokenManager, "invalidate">,
+      exchangeCodeImpl: exchange as never,
+    });
+    return { db, service, exchange, gateway, tokenManager };
+  }
+
+  async function startState(
+    service: ReturnType<typeof setup>["service"],
+  ): Promise<string> {
+    const { url } = await service.start(authFixture(), META);
+    const parsed = new URL(url);
+    expect(parsed.searchParams.get("client_id")).toBe("lwa-client-id");
+    expect(parsed.searchParams.get("scope")).toBe(
+      "advertising::campaign_management",
+    );
+    expect(url).not.toContain("lwa-client-secret");
+    return parsed.searchParams.get("state")!;
+  }
+
+  it("start builds the consent URL and stores only the state hash", async () => {
+    const { db, service } = setup();
+    const state = await startState(service);
+    expect(db.tables.oauthStates).toHaveLength(1);
+    expect(db.tables.oauthStates[0]!.state_hash).not.toBe(state);
+    expect(db.tables.oauthStates[0]!.used_at).toBeNull();
+  });
+
+  it("rejects an unknown state without exchanging the code", async () => {
+    const { service, exchange } = setup();
+    const result = await service.handleCallback(
+      { state: "unknown", code: "c" },
+      authFixture(),
+      META,
+    );
+    expect(result.redirectTo).toContain("error=invalid_state");
+    expect(exchange).not.toHaveBeenCalled();
+  });
+
+  it("happy path: exchanges, encrypts the refresh token, discovers profiles", async () => {
+    const { db, service, gateway } = setup();
+    const state = await startState(service);
+    const result = await service.handleCallback(
+      { state, code: "auth-code" },
+      authFixture(),
+      META,
+    );
+    expect(result.redirectTo).toBe("http://localhost:5173/connect?connected=1");
+
+    const connection = db.tables.amazonConnections[0]!;
+    const ciphertext = connection.encrypted_refresh_token as Buffer;
+    expect(ciphertext.includes(Buffer.from("rt-secret-1"))).toBe(false);
+    expect(connection.encryption_key_version).toBe(1);
+    expect(gateway.listProfiles).toHaveBeenCalledOnce();
+    expect(db.tables.amazonProfiles).toHaveLength(1);
+  });
+
+  it("marks state used BEFORE exchange so a replay can never exchange twice", async () => {
+    const { service, exchange } = setup({
+      exchange: async () => {
+        throw new Error("simulated exchange failure");
+      },
+    });
+    const state = await startState(service);
+    const first = await service.handleCallback(
+      { state, code: "c" },
+      authFixture(),
+      META,
+    );
+    expect(first.redirectTo).toContain("error=exchange_failed");
+    // Replay after a failed exchange: state is already consumed.
+    const replay = await service.handleCallback(
+      { state, code: "c" },
+      authFixture(),
+      META,
+    );
+    expect(replay.redirectTo).toContain("error=invalid_state");
+    expect(exchange).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a state issued to a different user", async () => {
+    const { service, exchange } = setup();
+    const state = await startState(service);
+    const result = await service.handleCallback(
+      { state, code: "c" },
+      authFixture({ userId: "2" }),
+      META,
+    );
+    expect(result.redirectTo).toContain("error=foreign_state");
+    expect(exchange).not.toHaveBeenCalled();
+  });
+
+  it("disconnect wipes the token and fails pending jobs for its profiles", async () => {
+    const { db, service, tokenManager } = setup();
+    const connection = db.seedConnection();
+    db.seedProfile({ connection_id: connection.id });
+    db.tables.jobQueue.push({
+      id: "job-1",
+      type: "metrics_sync",
+      payload: { profileId: db.tables.amazonProfiles[0]!.id },
+      status: "pending",
+      last_error: null,
+    });
+
+    await service.disconnect(authFixture(), META);
+
+    const updated = db.tables.amazonConnections[0]!;
+    expect(updated.status).toBe("disconnected");
+    // Token is crypto-shredded to an empty bytea — no usable material remains.
+    expect((updated.encrypted_refresh_token as Buffer).length).toBe(0);
+    expect(tokenManager.invalidate).toHaveBeenCalledWith(connection.id);
+    expect(db.tables.jobQueue[0]!.status).toBe("failed");
+  });
+});
+
+// -- change service (guarded writes, plan §10) --------------------------------
+
+describe("change service", () => {
+  const gatewayBase = () => ({
+    syncCampaignStructure: vi.fn(async () => snapshotWithKeywordBid(0.5)),
+    applyActions: vi.fn(
+      async (set: {
+        actions: { actionId: string }[];
+      }): Promise<ActionResult[]> =>
+        set.actions.map((a) => ({
+          actionId: a.actionId,
+          status: "applied",
+          code: "SUCCESS",
+        })),
+    ),
+  });
+
+  function setup(
+    overrides: { killSwitch?: boolean; writeEnabled?: boolean } = {},
+  ) {
+    const db = new FakeDb();
+    db.seedWorkspace();
+    db.seedUser("owner@example.com");
+    const connection = db.seedConnection();
+    const profile = db.seedProfile({
+      connection_id: connection.id,
+      write_enabled: overrides.writeEnabled ?? true,
+    });
+    db.seedCampaign();
+    db.seedTarget({ profile_id: profile.id });
+    const changeSet = db.seedChangeSet({
+      status: "previewed",
+      profile_id: profile.id,
+    });
+    db.seedChangeAction({ change_set_id: changeSet.id });
+    const gateway = gatewayBase();
+    const service = createChangeService({
+      db: db as never,
+      pool: db.asPool() as never,
+      config: testConfig({ killSwitch: overrides.killSwitch ?? false }),
+      logger: fakeLogger(),
+      gateway: gateway as unknown as Pick<
+        AmazonAdsGateway,
+        "syncCampaignStructure" | "applyActions"
+      >,
+    });
+    const changeSetId = changeSet.id as string;
+    return { db, service, gateway, changeSetId };
+  }
+
+  function expectApiError(error: unknown, code: string): void {
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).code).toBe(code);
+  }
+
+  it("kill switch blocks apply before any Amazon call", async () => {
+    const { service, gateway, changeSetId } = setup({ killSwitch: true });
+    await service
+      .applyChangeSet(authFixture(), changeSetId, META)
+      .catch((e) => expectApiError(e, "WRITES_DISABLED"));
+    expect(gateway.syncCampaignStructure).not.toHaveBeenCalled();
+    expect(gateway.applyActions).not.toHaveBeenCalled();
+  });
+
+  it("read-only profile blocks apply before any Amazon call", async () => {
+    const { service, gateway, changeSetId } = setup({ writeEnabled: false });
+    await service
+      .applyChangeSet(authFixture(), changeSetId, META)
+      .catch((e) => expectApiError(e, "WRITES_DISABLED"));
+    expect(gateway.applyActions).not.toHaveBeenCalled();
+  });
+
+  it("a stale before-state blocks the write and marks the set blocked", async () => {
+    const { db, service, gateway, changeSetId } = setup();
+    // Amazon now shows a different bid than the approved before snapshot.
+    gateway.syncCampaignStructure.mockResolvedValue(
+      snapshotWithKeywordBid(0.75),
+    );
+    await service
+      .applyChangeSet(authFixture(), changeSetId, META)
+      .catch((e) => expectApiError(e, "STALE_BEFORE_STATE"));
+    expect(gateway.applyActions).not.toHaveBeenCalled();
+    expect(db.tables.changeSets[0]!.status).toBe("blocked");
+  });
+
+  it("applies, verifies, and a duplicate apply returns the stored result", async () => {
+    const { db, service, gateway, changeSetId } = setup();
+    // First re-read shows the before bid; post-write re-read shows the after bid.
+    gateway.syncCampaignStructure
+      .mockResolvedValueOnce(snapshotWithKeywordBid(0.5))
+      .mockResolvedValueOnce(snapshotWithKeywordBid(0.55));
+
+    const applied = await service.applyChangeSet(
+      authFixture(),
+      changeSetId,
+      META,
+    );
+    expect(applied.changeSet.status).toBe("applied");
+    expect(applied.actions[0]!.status).toBe("applied");
+    expect(gateway.applyActions).toHaveBeenCalledTimes(1);
+
+    // Double-click / retry: no second Amazon write.
+    const again = await service.applyChangeSet(
+      authFixture(),
+      changeSetId,
+      META,
+    );
+    expect(again.changeSet.status).toBe("applied");
+    expect(gateway.applyActions).toHaveBeenCalledTimes(1);
+    expect(
+      db.tables.auditEvents.some((r) => r.event === "change_set.apply"),
+    ).toBe(true);
+  });
+
+  it("maps per-item failures instead of trusting batch success", async () => {
+    const { db, service, gateway, changeSetId } = setup();
+    gateway.applyActions.mockResolvedValue([
+      {
+        actionId: db.tables.changeActions[0]!.id as string,
+        status: "failed",
+        code: "INVALID_STATE",
+        message: "nope",
+      },
+    ]);
+    const result = await service.applyChangeSet(
+      authFixture(),
+      changeSetId,
+      META,
+    );
+    expect(result.changeSet.status).toBe("failed");
+    expect(result.actions[0]!.status).toBe("failed");
+  });
+
+  it("marks verification_failed when the post-write re-read disagrees", async () => {
+    const { service, gateway, changeSetId } = setup();
+    // Both re-reads show the old bid: the write "succeeded" but did not take.
+    gateway.syncCampaignStructure.mockResolvedValue(
+      snapshotWithKeywordBid(0.5),
+    );
+    const result = await service.applyChangeSet(
+      authFixture(),
+      changeSetId,
+      META,
+    );
+    expect(result.actions[0]!.status).toBe("verification_failed");
+    expect(result.changeSet.status).toBe("failed");
+  });
+});

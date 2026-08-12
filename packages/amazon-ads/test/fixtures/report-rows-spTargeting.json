@@ -1,0 +1,14 @@
+[
+  {
+    "date": "2024-05-01",
+    "campaignId": 901234567,
+    "adGroupId": 705432109,
+    "targetingId": 601122334,
+    "targetingText": "fantasy adventure",
+    "impressions": 400,
+    "clicks": 12,
+    "cost": 4.2,
+    "purchases7d": 1,
+    "sales7d": 12.99
+  }
+]

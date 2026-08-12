@@ -1,0 +1,24 @@
+{
+  "totalResults": 2,
+  "nextToken": "page-2-token",
+  "campaigns": [
+    {
+      "campaignId": 901234567,
+      "name": "Book One - Auto",
+      "state": "ENABLED",
+      "dailyBudget": 10.0,
+      "startDate": "2024-01-15",
+      "targetingType": "AUTO",
+      "servingStatus": "CAMPAIGN_STATUS_ENABLED"
+    },
+    {
+      "campaignId": 901234568,
+      "name": "Book Two - Manual",
+      "state": "PAUSED",
+      "dailyBudget": 5.0,
+      "startDate": "2024-02-01",
+      "endDate": "2024-12-31",
+      "targetingType": "MANUAL"
+    }
+  ]
+}

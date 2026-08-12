@@ -1,0 +1,7 @@
+{
+  "reportId": "rpt-0f3e1a2b-0001",
+  "status": "SUCCESS",
+  "startDate": "2024-05-01",
+  "endDate": "2024-05-31",
+  "url": "https://offline-report-storage-prod.s3.amazonaws.com/REDACTED/report.gz?X-Amz-Signature=REDACTED"
+}

@@ -1,0 +1,12 @@
+{
+  "totalResults": 1,
+  "adGroups": [
+    {
+      "adGroupId": 705432109,
+      "campaignId": 901234567,
+      "name": "Ad Group 1",
+      "state": "ENABLED",
+      "defaultBid": 0.45
+    }
+  ]
+}

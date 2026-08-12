@@ -1,0 +1,14 @@
+{
+  "negativeKeywords": [
+    {
+      "negativeKeywordId": 990123457,
+      "code": "SUCCESS",
+      "index": 0
+    },
+    {
+      "code": "DUPLICATE_VALUE",
+      "index": 1,
+      "message": "Negative keyword already exists for this campaign"
+    }
+  ]
+}
