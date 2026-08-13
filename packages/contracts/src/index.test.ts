@@ -2,11 +2,20 @@ import { describe, expect, it } from "vitest";
 import {
   bookSchema,
   bookMappingInputSchema,
+  recommendationChangeActionType,
   recommendationSchema,
   sessionInfoSchema,
 } from "./index.js";
 
 describe("contracts smoke test", () => {
+  it("identifies executable and review-only recommendation types", () => {
+    expect(recommendationChangeActionType.expensive_target).toBe("update_bid");
+    expect(recommendationChangeActionType.wasteful_search_term).toBe(
+      "add_negative_exact",
+    );
+    expect(recommendationChangeActionType.cannibalization_conflict).toBeNull();
+  });
+
   it("round-trips a SessionInfo payload", () => {
     const payload = {
       userId: "usr_1",

@@ -4,7 +4,7 @@ import type {
   ChangeAction as GatewayAction,
   StructureSnapshot,
 } from "@amazon-king/amazon-ads";
-import type { ChangeActionType } from "@amazon-king/contracts";
+import { recommendationChangeActionType } from "@amazon-king/contracts";
 import {
   checkGuardrails,
   DEFAULT_GUARDRAIL_CONFIG,
@@ -40,13 +40,6 @@ import type {
  * it to the immutable before snapshot, re-runs guardrails, maps per-item
  * results, and verifies the intended state after writing.
  */
-
-/** Recommendation types that map to an MVP write action. */
-const WRITABLE_TYPES: Record<string, ChangeActionType> = {
-  wasteful_search_term: "add_negative_exact",
-  expensive_target: "update_bid",
-  profitable_target: "update_bid",
-};
 
 export interface ChangeServiceDeps {
   db: Db;
@@ -584,7 +577,7 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
             `Recommendation ${id} has expired`,
           );
         }
-        const actionType = WRITABLE_TYPES[rec.type];
+        const actionType = recommendationChangeActionType[rec.type];
         if (!actionType) {
           throw conflict(
             "RECOMMENDATION_NOT_WRITABLE",
@@ -623,14 +616,16 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
 
       const specs = recs.map((rec) => ({
         recommendationId: rec.id,
-        actionType: WRITABLE_TYPES[rec.type]!,
+        actionType: recommendationChangeActionType[rec.type]!,
         campaignId: rec.campaignId,
         adGroupId: rec.adGroupId,
         targetId: rec.type === "wasteful_search_term" ? null : rec.targetId,
         searchTerm: rec.searchTerm,
         beforeValue: rec.currentValue,
         afterValue:
-          WRITABLE_TYPES[rec.type] === "update_bid" ? rec.proposedValue : null,
+          recommendationChangeActionType[rec.type] === "update_bid"
+            ? rec.proposedValue
+            : null,
       }));
       const setFingerprint = buildChangeSetFingerprint({
         profileId: profilePk,

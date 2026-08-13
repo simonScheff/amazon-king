@@ -88,6 +88,24 @@ export const changeActionTypeSchema = z.enum([
 ]);
 export type ChangeActionType = z.infer<typeof changeActionTypeSchema>;
 
+/**
+ * The concrete Amazon write supported for each recommendation in the MVP.
+ * `null` means the recommendation is advisory-only and cannot enter a change
+ * set. Shared by the API and web app so the approval UI cannot drift from the
+ * guarded-write service.
+ */
+export const recommendationChangeActionType = {
+  wasteful_search_term: "add_negative_exact",
+  expensive_target: "update_bid",
+  profitable_target: "update_bid",
+  search_term_harvest: null,
+  budget_constrained_winner: null,
+  high_ctr_poor_conversion: null,
+  low_impressions: null,
+  placement_opportunity: null,
+  cannibalization_conflict: null,
+} as const satisfies Record<RecommendationType, ChangeActionType | null>;
+
 export const changeActionStatusSchema = z.enum([
   "pending",
   "applied",

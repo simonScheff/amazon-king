@@ -19,6 +19,7 @@ import { Button } from "../components/ui/button";
 import { Card, CardBody, CardHeader } from "../components/ui/card";
 import { ErrorState, Loading } from "../components/states";
 import { formatDate, formatDateTime, labelize } from "../lib/format";
+import { getRecommendationActionDetails } from "../lib/recommendation-action";
 
 export function RecommendationDetailPage() {
   const { id } = useParams({ strict: false }) as { id: string };
@@ -33,6 +34,7 @@ export function RecommendationDetailPage() {
 
   const r = rec.data;
   const pending = r.state === "pending";
+  const action = getRecommendationActionDetails(r);
 
   const valueChart =
     r.currentValue != null && r.proposedValue != null
@@ -89,41 +91,92 @@ export function RecommendationDetailPage() {
       </Card>
 
       <Card>
-        <CardHeader title="Current vs proposed" />
-        <CardBody className="flex flex-col gap-3">
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div className="rounded-md border border-zinc-800 px-3 py-2">
-              <p className="text-xs text-zinc-500">Current value</p>
-              <p className="text-base font-semibold text-zinc-100">
-                {r.currentValue ?? "—"}
-              </p>
-            </div>
-            <div className="rounded-md border border-sky-900 bg-sky-950/40 px-3 py-2">
-              <p className="text-xs text-zinc-500">Proposed value</p>
-              <p className="text-base font-semibold text-sky-300">
-                {r.proposedValue ?? "—"}
-              </p>
-            </div>
+        <CardHeader
+          title="Action & approval"
+          action={
+            <Badge tone={action.actionable ? "info" : "warning"}>
+              {action.label}
+            </Badge>
+          }
+        />
+        <CardBody className="flex flex-col gap-4">
+          <div>
+            <h3 className="text-sm font-semibold text-zinc-100">
+              {action.title}
+            </h3>
+            <p className="mt-1 text-sm text-zinc-300">{action.summary}</p>
           </div>
-          {valueChart && (
-            <div className="h-40">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={valueChart}>
-                  <CartesianGrid stroke="#27272a" strokeDasharray="3 3" />
-                  <XAxis dataKey="name" stroke="#71717a" fontSize={12} />
-                  <YAxis stroke="#71717a" fontSize={12} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#18181b",
-                      border: "1px solid #3f3f46",
-                      fontSize: 12,
-                    }}
-                  />
-                  <Bar dataKey="value" fill="#38bdf8" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
+
+          {r.currentValue != null && r.proposedValue != null ? (
+            <>
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                <div className="rounded-md border border-zinc-800 px-3 py-2">
+                  <p className="text-xs text-zinc-500">
+                    {action.currentLabel ?? "Current value"}
+                  </p>
+                  <p className="text-base font-semibold text-zinc-100">
+                    {r.currentValue}
+                  </p>
+                </div>
+                <div className="rounded-md border border-sky-900 bg-sky-950/40 px-3 py-2">
+                  <p className="text-xs text-zinc-500">
+                    {action.proposedLabel ?? "Suggested value"}
+                  </p>
+                  <p className="text-base font-semibold text-sky-300">
+                    {r.proposedValue}
+                  </p>
+                </div>
+              </div>
+              {valueChart ? (
+                <div className="h-40">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={valueChart}>
+                      <CartesianGrid stroke="#27272a" strokeDasharray="3 3" />
+                      <XAxis dataKey="name" stroke="#71717a" fontSize={12} />
+                      <YAxis stroke="#71717a" fontSize={12} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "#18181b",
+                          border: "1px solid #3f3f46",
+                          fontSize: 12,
+                        }}
+                      />
+                      <Bar dataKey="value" fill="#38bdf8" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+
+          <div
+            className={`rounded-md border px-3 py-3 text-sm ${
+              action.actionable
+                ? "border-sky-900 bg-sky-950/30"
+                : "border-amber-900 bg-amber-950/20"
+            }`}
+          >
+            <p className="font-medium text-zinc-100">What happens now</p>
+            <p className="mt-1 text-zinc-300">{action.approvalEffect}</p>
+            <p className="mt-3 font-medium text-zinc-100">Next step</p>
+            <p className="mt-1 text-zinc-300">{action.nextStep}</p>
+          </div>
+
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+              This will not
+            </p>
+            <ul className="mt-1.5 grid gap-1 text-sm text-zinc-300 sm:grid-cols-2">
+              {action.exclusions.map((exclusion) => (
+                <li key={exclusion} className="flex gap-2">
+                  <span aria-hidden="true" className="text-zinc-500">
+                    —
+                  </span>
+                  <span>{exclusion}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </CardBody>
       </Card>
 
@@ -151,15 +204,22 @@ export function RecommendationDetailPage() {
               <dd>{formatDateTime(r.createdAt)}</dd>
             </div>
           </dl>
-          <p className="mt-3 text-xs text-zinc-500">
-            Guardrails: bid changes are clamped per cooldown period, writes
-            require a fresh before-state re-check, and this recommendation
-            expires when its data goes stale.
-          </p>
+          {action.actionable ? (
+            <p className="mt-3 text-xs text-zinc-500">
+              Guardrails: bid changes are clamped per cooldown period, writes
+              require a fresh before-state re-check, and this recommendation
+              expires when its data goes stale.
+            </p>
+          ) : (
+            <p className="mt-3 text-xs text-zinc-500">
+              Safety: this review-only finding has no Amazon write action and
+              expires when its source data goes stale.
+            </p>
+          )}
         </CardBody>
       </Card>
 
-      {pending && (
+      {pending && action.actionable && (
         <div className="flex flex-wrap gap-2">
           <Button
             variant="primary"
@@ -201,6 +261,27 @@ export function RecommendationDetailPage() {
             title="Protecting entities is not supported by the API yet"
           >
             Protect entity
+          </Button>
+        </div>
+      )}
+
+      {pending && !action.actionable && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3">
+          <p className="text-sm text-zinc-400">
+            Review-only finding — no change set can be created.
+          </p>
+          <Button
+            variant="secondary"
+            disabled={reject.isPending}
+            onClick={() =>
+              reject.mutate(undefined, {
+                onSuccess: () => toast("Finding dismissed"),
+                onError: (err) =>
+                  toast(`Dismiss failed: ${err.message}`, "error"),
+              })
+            }
+          >
+            {reject.isPending ? "Dismissing…" : "Dismiss finding"}
           </Button>
         </div>
       )}
