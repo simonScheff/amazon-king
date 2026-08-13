@@ -173,11 +173,16 @@ describe("SettingsPage book mapping", () => {
       screen.getByLabelText("United States net royalty per sale"),
       { target: { value: "4.25" } },
     );
+    fireEvent.change(
+      screen.getByLabelText("United States economics effective from"),
+      { target: { value: "2026-08-07" } },
+    );
     fireEvent.click(screen.getByRole("button", { name: "Save United States" }));
 
     expect(mocks.saveEconomics).toHaveBeenCalledWith(
       expect.objectContaining({
         profileId: "profile-us",
+        effectiveFrom: "2026-08-07",
         currency: "USD",
         listPrice: "12.99",
         estimatedRoyaltyPerSale: "4.25",

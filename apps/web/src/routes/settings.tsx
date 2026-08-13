@@ -158,6 +158,9 @@ function BookEconomicsProfileForm({
   const [royalty, setRoyalty] = useState(() =>
     inputDecimal(economics?.estimatedRoyaltyPerSale),
   );
+  const [effectiveFrom, setEffectiveFrom] = useState(() =>
+    new Date().toISOString().slice(0, 10),
+  );
   const [targetAcosPct, setTargetAcosPct] = useState(() =>
     economics?.targetAcos == null
       ? ""
@@ -176,7 +179,7 @@ function BookEconomicsProfileForm({
     save.mutate(
       {
         profileId: profile.profileId,
-        effectiveFrom: new Date().toISOString().slice(0, 10),
+        effectiveFrom,
         currency: profile.currencyCode,
         listPrice,
         estimatedRoyaltyPerSale: royalty,
@@ -240,6 +243,17 @@ function BookEconomicsProfileForm({
           />
         </label>
         <label className="flex flex-col gap-1 text-xs text-zinc-500">
+          Effective from
+          <Input
+            aria-label={`${countryName} economics effective from`}
+            type="date"
+            required
+            max={new Date().toISOString().slice(0, 10)}
+            value={effectiveFrom}
+            onChange={(e) => setEffectiveFrom(e.target.value)}
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-zinc-500">
           Target ACoS (%)
           <Input
             aria-label={`${countryName} target ACoS`}
@@ -273,10 +287,9 @@ function BookEconomicsProfileForm({
         </label>
       </div>
       <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-xs text-zinc-600">
-          {saved
-            ? "Edit and save to update this country."
-            : "Not configured yet."}
+        <p className="max-w-xl text-xs text-zinc-600">
+          Use the first date these economics were valid. Historical profit is
+          available only for data on or after that date.
         </p>
         <Button type="submit" variant="primary" disabled={save.isPending}>
           {save.isPending

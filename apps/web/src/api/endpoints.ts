@@ -343,7 +343,13 @@ export function useSaveBookEconomics(bookId: string) {
   return useMutation({
     mutationFn: (body: BookEconomicsInput) =>
       apiFetch(`/api/books/${bookId}/economics`, { method: "POST", body }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["books"] }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["books"] }),
+        qc.invalidateQueries({ queryKey: ["campaign"] }),
+        qc.invalidateQueries({ queryKey: ["dashboard-summary"] }),
+      ]);
+    },
   });
 }
 

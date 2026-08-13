@@ -210,8 +210,9 @@ export function CampaignDetailPage() {
       {campaign.data.economicsMissing ? (
         <p className="text-xs text-amber-300">
           Profit is hidden because one or more advertised books do not have KDP
-          royalty economics for this period. Enter them under Settings → Book
-          economics.
+          royalty economics for this period. Under Settings → Book economics,
+          set Effective from to {formatDate(campaign.data.dateRange.start)} or
+          earlier if those economics applied then.
         </p>
       ) : null}
 
