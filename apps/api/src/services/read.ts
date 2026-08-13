@@ -382,42 +382,107 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       );
       if (!campaign) return null;
       const { start, end } = dateRange(now(), days);
-      const rows = await dashboard.listCampaignRows(
-        db,
-        workspaceId,
-        start,
-        end,
-      );
+      const [profile, rows, adGroups, targets, searchTerms, dailyRows] =
+        await Promise.all([
+          profiles.getProfile(db, campaign.profileId),
+          dashboard.listCampaignRows(db, workspaceId, start, end),
+          dashboard.listAdGroupRows(db, campaign.id, start, end),
+          dashboard.listTargetRows(db, campaign.id, start, end),
+          dashboard.listSearchTermRows(
+            db,
+            campaign.profileId,
+            amazonCampaignId,
+            start,
+            end,
+          ),
+          dashboard.campaignDailySeries(
+            db,
+            campaign.profileId,
+            amazonCampaignId,
+            start,
+            end,
+          ),
+        ]);
+      if (!profile) return null;
       const row = rows.find(
         (r) =>
           r.amazonCampaignId === amazonCampaignId &&
           r.profilePk === campaign.profileId,
       );
-      const [adGroups, targets, searchTerms] = await Promise.all([
-        dashboard.listAdGroupRows(db, campaign.id, start, end),
-        dashboard.listTargetRows(db, campaign.id, start, end),
-        dashboard.listSearchTermRows(
-          db,
-          campaign.profileId,
-          amazonCampaignId,
-          start,
-          end,
-        ),
-      ]);
+      const totals = row?.totals ?? {
+        impressions: 0,
+        clicks: 0,
+        cost: "0",
+        sales: "0",
+        orders: 0,
+      };
+      const currencies = new Set(dailyRows.map((point) => point.currency));
+      if (currencies.size > 1) {
+        throw conflict(
+          "MIXED_CURRENCY",
+          "Campaign metrics mix currencies; refusing to aggregate (plan §9)",
+        );
+      }
+      const economicsMissing = dailyRows.some(
+        (point) => point.estimatedRoyalty === null,
+      );
+      let estimatedRoyaltyMicros: number | null = economicsMissing ? null : 0;
+      if (estimatedRoyaltyMicros !== null) {
+        for (const point of dailyRows) {
+          estimatedRoyaltyMicros += microsFromDecimalString(
+            point.estimatedRoyalty ?? "0",
+          );
+        }
+      }
+      const costMicros = microsFromDecimalString(totals.cost);
+      const salesMicros = microsFromDecimalString(totals.sales);
+      const dataCurrentThrough = dailyRows.at(-1)?.date ?? start;
+
       return {
+        dateRange: { start, end },
+        currency: (currencies.values().next().value ??
+          profile.currencyCode) as DashboardSummary["currency"],
         campaign: {
           profileId: campaign.amazonProfileId,
           campaignId: campaign.amazonCampaignId,
           name: campaign.name,
           state: campaign.state,
-          totals: row?.totals ?? {
-            impressions: 0,
-            clicks: 0,
-            cost: "0",
-            sales: "0",
-            orders: 0,
+          totals: {
+            ...totals,
+            acos: salesMicros > 0 ? costMicros / salesMicros : null,
+            estimatedRoyalty:
+              estimatedRoyaltyMicros === null
+                ? null
+                : microsToDecimalString(estimatedRoyaltyMicros),
+            estimatedAdProfit:
+              estimatedRoyaltyMicros === null
+                ? null
+                : microsToDecimalString(estimatedRoyaltyMicros - costMicros),
           },
         },
+        economicsMissing,
+        dataCurrentThrough: `${dataCurrentThrough}T00:00:00.000Z`,
+        daily: dailyRows.map((point) => {
+          const royaltyMicros =
+            point.estimatedRoyalty === null
+              ? null
+              : microsFromDecimalString(point.estimatedRoyalty);
+          return {
+            date: point.date,
+            cost: point.cost,
+            sales: point.sales,
+            estimatedRoyalty:
+              royaltyMicros === null
+                ? null
+                : microsToDecimalString(royaltyMicros),
+            estimatedAdProfit:
+              royaltyMicros === null
+                ? null
+                : microsToDecimalString(
+                    royaltyMicros - microsFromDecimalString(point.cost),
+                  ),
+          };
+        }),
         adGroups,
         targets,
         searchTerms,

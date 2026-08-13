@@ -4,9 +4,11 @@ import { createPool } from "./pool.js";
 import { migrate } from "./migrate.js";
 import {
   upsertCampaignMetrics,
+  upsertAdvertisedProductMetrics,
   dashboardTotals,
   MixedCurrencyError,
 } from "./repositories/metrics.js";
+import { campaignDailySeries } from "./repositories/dashboard.js";
 import { enqueue, claim, reapExpiredLeases, complete } from "./queue.js";
 import {
   upsertAd,
@@ -300,6 +302,54 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       targetAcos: "0.25",
       goalMode: "balanced",
     });
+    const metricValues = {
+      impressions: 100,
+      clicks: 10,
+      cost: "5.00",
+      sales: "20.00",
+      orders: 2,
+      purchases7d: 2,
+      sales7d: "20.00",
+      purchases14d: 2,
+      sales14d: "20.00",
+      currency: "USD",
+    };
+    await upsertCampaignMetrics(pool, [
+      {
+        ...metricValues,
+        profileId,
+        campaignId: "amzn-campaign-book-map",
+        metricDate: "2026-08-13",
+      },
+    ]);
+    await upsertAdvertisedProductMetrics(pool, [
+      {
+        ...metricValues,
+        profileId,
+        campaignId: "amzn-campaign-book-map",
+        adGroupId: "amzn-ad-group-book-map",
+        adId: "amzn-ad-book-map",
+        metricDate: "2026-08-13",
+      },
+    ]);
+    await expect(
+      campaignDailySeries(
+        pool,
+        profileId,
+        "amzn-campaign-book-map",
+        "2026-08-13",
+        "2026-08-13",
+      ),
+    ).resolves.toEqual([
+      {
+        date: "2026-08-13",
+        cost: "5.0000",
+        sales: "20.0000",
+        orders: 2,
+        currency: "USD",
+        estimatedRoyalty: "8.5000",
+      },
+    ]);
     await expect(
       listLatestBookEconomicsByWorkspace(pool, workspaceId),
     ).resolves.toMatchObject([

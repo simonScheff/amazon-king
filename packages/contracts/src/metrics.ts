@@ -66,7 +66,29 @@ export type NamedMetricRow = z.infer<typeof namedMetricRowSchema>;
 
 /** GET /api/campaigns/:id — a campaign with its hierarchy and metric totals. */
 export const campaignDetailSchema = z.object({
-  campaign: campaignRowSchema,
+  dateRange: z.object({
+    start: isoDateSchema,
+    end: isoDateSchema,
+  }),
+  currency: currencyCodeSchema,
+  campaign: campaignRowSchema.extend({
+    totals: metricTotalsSchema.extend({
+      acos: z.number().nullable(),
+      estimatedRoyalty: nonNegativeDecimalStringSchema.nullable(),
+      estimatedAdProfit: decimalStringSchema.nullable(),
+    }),
+  }),
+  economicsMissing: z.boolean(),
+  dataCurrentThrough: isoDateTimeSchema,
+  daily: z.array(
+    z.object({
+      date: isoDateSchema,
+      cost: nonNegativeDecimalStringSchema,
+      sales: nonNegativeDecimalStringSchema,
+      estimatedRoyalty: nonNegativeDecimalStringSchema.nullable(),
+      estimatedAdProfit: decimalStringSchema.nullable(),
+    }),
+  ),
   adGroups: z.array(namedMetricRowSchema).default([]),
   targets: z.array(namedMetricRowSchema).default([]),
   searchTerms: z.array(namedMetricRowSchema).default([]),

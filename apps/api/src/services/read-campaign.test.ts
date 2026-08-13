@@ -1,0 +1,172 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@amazon-king/database", () => ({
+  audit: {},
+  books: {},
+  changes: {},
+  connections: {},
+  enqueue: {},
+  recommendations: {},
+  reports: {},
+  metrics: {
+    MixedCurrencyError: class MixedCurrencyError extends Error {},
+  },
+  profiles: {
+    getProfile: vi.fn(),
+  },
+  structure: {
+    findCampaignByAmazonId: vi.fn(),
+  },
+  dashboard: {
+    listCampaignRows: vi.fn(),
+    listAdGroupRows: vi.fn(),
+    listTargetRows: vi.fn(),
+    listSearchTermRows: vi.fn(),
+    campaignDailySeries: vi.fn(),
+  },
+}));
+
+import { dashboard, profiles, structure } from "@amazon-king/database";
+import type { ApiConfig } from "../config.js";
+import { createReadService } from "./read.js";
+
+const CAMPAIGN = {
+  id: "campaign-pk",
+  profileId: "profile-pk",
+  amazonProfileId: "amazon-profile",
+  amazonCampaignId: "amazon-campaign",
+  name: "General",
+  state: "enabled",
+};
+
+describe("campaign profitability", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(structure.findCampaignByAmazonId).mockResolvedValue(CAMPAIGN);
+    vi.mocked(profiles.getProfile).mockResolvedValue({
+      id: "profile-pk",
+      connectionId: "connection-pk",
+      profileId: "amazon-profile",
+      accountId: null,
+      region: "NA",
+      countryCode: "US",
+      currencyCode: "USD",
+      timezone: null,
+      accountType: null,
+      enabled: true,
+      writeEnabled: false,
+    });
+    vi.mocked(dashboard.listCampaignRows).mockResolvedValue([
+      {
+        campaignPk: "campaign-pk",
+        profilePk: "profile-pk",
+        amazonProfileId: "amazon-profile",
+        amazonCampaignId: "amazon-campaign",
+        name: "General",
+        state: "enabled",
+        totals: {
+          impressions: 100,
+          clicks: 10,
+          cost: "8.0000",
+          sales: "20.0000",
+          orders: 2,
+        },
+      },
+    ]);
+    vi.mocked(dashboard.listAdGroupRows).mockResolvedValue([]);
+    vi.mocked(dashboard.listTargetRows).mockResolvedValue([]);
+    vi.mocked(dashboard.listSearchTermRows).mockResolvedValue([]);
+    vi.mocked(dashboard.campaignDailySeries).mockResolvedValue([
+      {
+        date: "2026-08-12",
+        cost: "5.0000",
+        sales: "12.0000",
+        orders: 1,
+        currency: "USD",
+        estimatedRoyalty: "8.0000",
+      },
+      {
+        date: "2026-08-13",
+        cost: "3.0000",
+        sales: "8.0000",
+        orders: 1,
+        currency: "USD",
+        estimatedRoyalty: "2.0000",
+      },
+    ]);
+  });
+
+  function service() {
+    return createReadService({
+      db: {} as never,
+      config: { killSwitch: false } as ApiConfig,
+      logger: {} as never,
+      now: () => new Date("2026-08-13T12:00:00.000Z"),
+    });
+  }
+
+  it("returns profit totals and daily results for the requested window", async () => {
+    const result = await service().getCampaignDetail(
+      "workspace-pk",
+      "amazon-campaign",
+      7,
+    );
+
+    expect(dashboard.campaignDailySeries).toHaveBeenCalledWith(
+      expect.anything(),
+      "profile-pk",
+      "amazon-campaign",
+      "2026-08-07",
+      "2026-08-13",
+    );
+    expect(result).toMatchObject({
+      dateRange: { start: "2026-08-07", end: "2026-08-13" },
+      currency: "USD",
+      economicsMissing: false,
+      dataCurrentThrough: "2026-08-13T00:00:00.000Z",
+      campaign: {
+        totals: {
+          acos: 0.4,
+          estimatedRoyalty: "10.0000",
+          estimatedAdProfit: "2.0000",
+        },
+      },
+      daily: [
+        { date: "2026-08-12", estimatedAdProfit: "3.0000" },
+        { date: "2026-08-13", estimatedAdProfit: "-1.0000" },
+      ],
+    });
+  });
+
+  it("never reports partial profit when any advertised book lacks economics", async () => {
+    vi.mocked(dashboard.campaignDailySeries).mockResolvedValue([
+      {
+        date: "2026-08-12",
+        cost: "5.0000",
+        sales: "12.0000",
+        orders: 1,
+        currency: "USD",
+        estimatedRoyalty: "8.0000",
+      },
+      {
+        date: "2026-08-13",
+        cost: "3.0000",
+        sales: "8.0000",
+        orders: 1,
+        currency: "USD",
+        estimatedRoyalty: null,
+      },
+    ]);
+
+    const result = await service().getCampaignDetail(
+      "workspace-pk",
+      "amazon-campaign",
+      7,
+    );
+
+    expect(result?.economicsMissing).toBe(true);
+    expect(result?.campaign.totals.estimatedRoyalty).toBeNull();
+    expect(result?.campaign.totals.estimatedAdProfit).toBeNull();
+    expect(result?.daily[1]?.estimatedAdProfit).toBeNull();
+  });
+});

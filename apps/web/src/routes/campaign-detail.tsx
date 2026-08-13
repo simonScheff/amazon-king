@@ -1,14 +1,30 @@
 import { useState } from "react";
-import { Link, useParams } from "@tanstack/react-router";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearch,
+} from "@tanstack/react-router";
 import type { MetricTotals } from "@amazon-king/contracts";
 import { useCampaign, useProfiles } from "../api/endpoints";
+import { KpiCard } from "../components/kpi-card";
+import { PerformanceTrendChart } from "../components/performance-trend-chart";
 import { Badge } from "../components/ui/badge";
-import { Card, CardBody } from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { Card, CardBody, CardHeader } from "../components/ui/card";
 import { Table, Td, Th } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
-import { formatAcos, formatCount, formatMoney } from "../lib/format";
+import {
+  formatAcos,
+  formatCount,
+  formatDate,
+  formatDateTime,
+  formatMoney,
+} from "../lib/format";
 
 type Tab = "adGroups" | "targets" | "searchTerms";
+
+const DAY_OPTIONS = [7, 14, 30, 60] as const;
 
 const tabs: Array<{ key: Tab; label: string }> = [
   { key: "adGroups", label: "Ad groups" },
@@ -77,7 +93,12 @@ function MetricsTable({ rows, currency }: { rows: Row[]; currency: string }) {
 
 export function CampaignDetailPage() {
   const { id } = useParams({ strict: false }) as { id: string };
-  const campaign = useCampaign(id);
+  const search = useSearch({ strict: false }) as { days?: number };
+  const days = DAY_OPTIONS.includes(search.days as 7)
+    ? Number(search.days)
+    : 30;
+  const navigate = useNavigate();
+  const campaign = useCampaign(id, days);
   const profiles = useProfiles();
   const [tab, setTab] = useState<Tab>("adGroups");
 
@@ -86,9 +107,29 @@ export function CampaignDetailPage() {
   if (!campaign.data) return null;
 
   const c = campaign.data.campaign;
-  const currency =
-    (profiles.data ?? []).find((p) => p.profileId === c.profileId)
-      ?.currencyCode ?? "USD";
+  const currency = campaign.data.currency;
+  const country = (profiles.data ?? []).find(
+    (profile) => profile.profileId === c.profileId,
+  )?.countryCode;
+  const hasActivity =
+    c.totals.impressions > 0 ||
+    c.totals.clicks > 0 ||
+    c.totals.orders > 0 ||
+    Number(c.totals.cost) > 0 ||
+    Number(c.totals.sales) > 0;
+  const estimatedProfit =
+    c.totals.estimatedAdProfit === null
+      ? null
+      : Number(c.totals.estimatedAdProfit);
+  const profitStatus = !hasActivity
+    ? { label: "No activity", tone: "neutral" as const }
+    : campaign.data.economicsMissing || estimatedProfit === null
+      ? { label: "Profit unavailable", tone: "warning" as const }
+      : estimatedProfit > 0
+        ? { label: "Profitable", tone: "success" as const }
+        : estimatedProfit < 0
+          ? { label: "Not profitable", tone: "danger" as const }
+          : { label: "Break-even", tone: "neutral" as const };
 
   return (
     <div className="flex max-w-6xl flex-col gap-4">
@@ -104,8 +145,86 @@ export function CampaignDetailPage() {
         </Badge>
         <span className="text-xs text-zinc-500">
           Profile <span className="font-mono">{c.profileId}</span> · {currency}
+          {country ? ` · ${country}` : ""}
+        </span>
+        <div className="ml-auto flex items-center gap-3">
+          <span className="text-sm text-zinc-400">Date range</span>
+          <div role="group" aria-label="Date range" className="flex gap-1">
+            {DAY_OPTIONS.map((option) => (
+              <Button
+                key={option}
+                size="sm"
+                variant={option === days ? "primary" : "secondary"}
+                onClick={() =>
+                  navigate({
+                    to: "/campaigns/$id",
+                    params: { id },
+                    search: { days: option },
+                    replace: true,
+                  })
+                }
+              >
+                {option}d
+              </Button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 text-sm text-zinc-400">
+        <Badge tone={profitStatus.tone}>{profitStatus.label}</Badge>
+        <span>
+          {hasActivity && estimatedProfit !== null
+            ? `${formatMoney(c.totals.estimatedAdProfit, currency)} estimated ad profit`
+            : `Selected ${days}-day window`}
+        </span>
+        <span aria-hidden="true">·</span>
+        <span>
+          {formatDate(campaign.data.dateRange.start)} –{" "}
+          {formatDate(campaign.data.dateRange.end)}
+        </span>
+        <span aria-hidden="true">·</span>
+        <span>
+          Data current through{" "}
+          {formatDateTime(campaign.data.dataCurrentThrough)}
         </span>
       </div>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <KpiCard label="Spend" value={formatMoney(c.totals.cost, currency)} />
+        <KpiCard label="Sales" value={formatMoney(c.totals.sales, currency)} />
+        <KpiCard label="Orders" value={formatCount(c.totals.orders)} />
+        <KpiCard label="ACoS" value={formatAcos(c.totals.acos)} />
+        <KpiCard
+          label="Est. royalty"
+          value={formatMoney(c.totals.estimatedRoyalty, currency)}
+          missing={campaign.data.economicsMissing}
+        />
+        <KpiCard
+          label="Est. ad profit"
+          value={formatMoney(c.totals.estimatedAdProfit, currency)}
+          missing={campaign.data.economicsMissing}
+        />
+      </div>
+
+      {campaign.data.economicsMissing ? (
+        <p className="text-xs text-amber-300">
+          Profit is hidden because one or more advertised books do not have KDP
+          royalty economics for this period. Enter them under Settings → Book
+          economics.
+        </p>
+      ) : null}
+
+      <Card>
+        <CardHeader title="Campaign performance & estimated profit" />
+        <CardBody>
+          <PerformanceTrendChart
+            daily={campaign.data.daily}
+            currency={currency}
+            showProfit
+          />
+        </CardBody>
+      </Card>
 
       <Card>
         <div

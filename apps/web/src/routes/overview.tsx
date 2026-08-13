@@ -1,15 +1,5 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import {
   useAmazonStatus,
   useDashboardSummary,
   useDataFreshness,
@@ -17,6 +7,7 @@ import {
   useRecommendations,
 } from "../api/endpoints";
 import { KpiCard } from "../components/kpi-card";
+import { PerformanceTrendChart } from "../components/performance-trend-chart";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardBody, CardHeader } from "../components/ui/card";
@@ -72,14 +63,6 @@ export function OverviewPage() {
 
   const currency = summary.data?.currency ?? "USD";
   const totals = summary.data?.totals;
-
-  const chartData = (summary.data?.daily ?? []).map((d) => ({
-    date: d.date,
-    spend: Number(d.cost),
-    sales: Number(d.sales),
-    royalty: d.estimatedRoyalty === null ? null : Number(d.estimatedRoyalty),
-  }));
-  const hasRoyaltyData = chartData.some((point) => point.royalty !== null);
 
   return (
     <div className="flex max-w-6xl flex-col gap-4">
@@ -192,56 +175,10 @@ export function OverviewPage() {
           <Card>
             <CardHeader title="Spend, attributed sales & estimated royalties" />
             <CardBody>
-              {chartData.length === 0 ? (
-                <EmptyState>No daily trend data available yet.</EmptyState>
-              ) : (
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartData}>
-                      <CartesianGrid stroke="#27272a" strokeDasharray="3 3" />
-                      <XAxis dataKey="date" stroke="#71717a" fontSize={12} />
-                      <YAxis stroke="#71717a" fontSize={12} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "#18181b",
-                          border: "1px solid #3f3f46",
-                          fontSize: 12,
-                        }}
-                        formatter={(value) => [
-                          typeof value === "number"
-                            ? formatMoney(value.toFixed(2), currency)
-                            : String(value),
-                        ]}
-                      />
-                      <Legend />
-                      <Line
-                        type="monotone"
-                        dataKey="spend"
-                        name="Spend"
-                        stroke="#f59e0b"
-                        dot={false}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="sales"
-                        name="Attributed sales"
-                        stroke="#38bdf8"
-                        dot={false}
-                      />
-                      {hasRoyaltyData ? (
-                        <Line
-                          type="monotone"
-                          dataKey="royalty"
-                          name="Estimated royalties"
-                          stroke="#34d399"
-                          strokeDasharray="5 4"
-                          dot={false}
-                        />
-                      ) : null}
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
+              <PerformanceTrendChart
+                daily={summary.data.daily ?? []}
+                currency={currency}
+              />
             </CardBody>
           </Card>
 

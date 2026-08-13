@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   bookSchema,
   bookMappingInputSchema,
+  campaignDetailSchema,
   recommendationChangeActionType,
   recommendationSchema,
   sessionInfoSchema,
@@ -107,5 +108,44 @@ describe("contracts smoke test", () => {
       ],
     });
     expect(book.economics[0]?.currency).toBe("CAD");
+  });
+
+  it("accepts campaign profitability over a selected daily window", () => {
+    const detail = campaignDetailSchema.parse({
+      dateRange: { start: "2026-08-07", end: "2026-08-13" },
+      currency: "USD",
+      campaign: {
+        profileId: "profile-us",
+        campaignId: "campaign-1",
+        name: "General",
+        state: "enabled",
+        totals: {
+          impressions: 100,
+          clicks: 10,
+          cost: "8.0000",
+          sales: "20.0000",
+          orders: 2,
+          acos: 0.4,
+          estimatedRoyalty: "10.0000",
+          estimatedAdProfit: "2.0000",
+        },
+      },
+      economicsMissing: false,
+      dataCurrentThrough: "2026-08-13T00:00:00.000Z",
+      daily: [
+        {
+          date: "2026-08-13",
+          cost: "8.0000",
+          sales: "20.0000",
+          estimatedRoyalty: "10.0000",
+          estimatedAdProfit: "2.0000",
+        },
+      ],
+      adGroups: [],
+      targets: [],
+      searchTerms: [],
+    });
+
+    expect(detail.campaign.totals.estimatedAdProfit).toBe("2.0000");
   });
 });

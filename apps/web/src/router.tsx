@@ -82,6 +82,12 @@ const campaignsRoute = createRoute({
 const campaignDetailRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/campaigns/$id",
+  validateSearch: (search: Record<string, unknown>): { days?: number } => {
+    const days = Number(search.days);
+    return {
+      ...(Number.isFinite(days) && days > 0 ? { days } : {}),
+    };
+  },
   component: CampaignDetailPage,
 });
 

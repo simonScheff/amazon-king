@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { z } from "zod";
 import {
   amazonConnectionStatusSchema,
@@ -6,14 +11,12 @@ import {
   advertisedBookCandidateSchema,
   auditEventSchema,
   bookSchema,
+  campaignDetailSchema,
   campaignRowSchema,
   changeActionSchema,
   changeSetSchema,
   dashboardSummarySchema,
   dataFreshnessSchema,
-  isoDateSchema,
-  metricTotalsSchema,
-  nonNegativeDecimalStringSchema,
   recommendationSchema,
   sessionInfoSchema,
   syncRunSchema,
@@ -38,40 +41,12 @@ const sessionResponseSchema = sessionInfoSchema.extend({
   csrfToken: z.string(),
 });
 
-// API-GAP: DashboardSummary has no daily trend series and no writesDisabled
-// kill-switch flag; both are tolerated as optional additive fields.
-export const dashboardSummaryResponseSchema = dashboardSummarySchema.extend({
-  writesDisabled: z.boolean().optional(),
-  daily: z
-    .array(
-      z.object({
-        date: isoDateSchema,
-        cost: nonNegativeDecimalStringSchema,
-        sales: nonNegativeDecimalStringSchema,
-        estimatedRoyalty: nonNegativeDecimalStringSchema.nullable(),
-      }),
-    )
-    .optional(),
-});
+export const dashboardSummaryResponseSchema = dashboardSummarySchema;
 export type DashboardSummaryResponse = z.infer<
   typeof dashboardSummaryResponseSchema
 >;
 
 const amazonStartResponseSchema = z.object({ url: z.string() });
-
-// API-GAP: no contract for GET /api/campaigns/:id (detail with hierarchy).
-const namedMetricRowSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  state: z.string(),
-  totals: metricTotalsSchema,
-});
-export const campaignDetailSchema = z.object({
-  campaign: campaignRowSchema,
-  adGroups: z.array(namedMetricRowSchema).default([]),
-  targets: z.array(namedMetricRowSchema).default([]),
-  searchTerms: z.array(namedMetricRowSchema).default([]),
-});
 export type CampaignDetail = z.infer<typeof campaignDetailSchema>;
 
 // API-GAP: no contract for GET /api/change-sets/:id/preview.
@@ -216,11 +191,13 @@ export function useCampaigns() {
   });
 }
 
-export function useCampaign(campaignId: string) {
+export function useCampaign(campaignId: string, days: number) {
   return useQuery({
-    queryKey: ["campaign", campaignId],
+    queryKey: ["campaign", campaignId, days],
+    placeholderData: keepPreviousData,
     queryFn: () =>
       apiFetch(`/api/campaigns/${campaignId}`, {
+        query: { days },
         schema: campaignDetailSchema,
       }),
   });

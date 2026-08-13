@@ -206,6 +206,92 @@ export async function listSearchTermRows(
   }));
 }
 
+export interface CampaignDailyPoint {
+  date: string;
+  cost: string;
+  sales: string;
+  orders: number;
+  currency: string;
+  /** Null when an advertised book has no in-effect KDP economics. */
+  estimatedRoyalty: string | null;
+}
+
+/**
+ * Daily performance and estimated KDP royalty for one campaign. Campaign
+ * spend/sales remain sourced from the canonical campaign report. Royalty is
+ * attributed at advertised-product grain so campaigns containing multiple
+ * books use each book's own effective-dated economics.
+ */
+export async function campaignDailySeries(
+  db: Db,
+  profilePk: string,
+  amazonCampaignId: string,
+  dateStart: string,
+  dateEnd: string,
+): Promise<CampaignDailyPoint[]> {
+  const result = await db.query<{
+    metric_date: string;
+    cost: string;
+    sales: string;
+    orders: string;
+    currency: string;
+    estimated_royalty: string | null;
+  }>(
+    `with campaign_daily as (
+       select metric_date, sum(cost)::text as cost, sum(sales)::text as sales,
+              sum(orders)::text as orders, currency
+       from campaign_metrics_daily
+       where profile_id = $1 and campaign_id = $2
+         and metric_date between $3 and $4
+       group by metric_date, currency
+     ),
+     royalty_daily as (
+       select m.metric_date,
+              sum(m.orders * economics.estimated_royalty_per_sale)::text
+                as estimated_royalty,
+              bool_or(economics.estimated_royalty_per_sale is null)
+                as economics_missing
+       from advertised_product_metrics_daily m
+       left join ads a
+         on a.profile_id = m.profile_id and a.amazon_ad_id = m.ad_id
+       left join lateral (
+         select be.estimated_royalty_per_sale
+         from book_profile_links bpl
+         join book_economics be
+           on be.book_id = bpl.book_id and be.profile_id = bpl.profile_id
+         where bpl.profile_id = m.profile_id
+           and bpl.marketplace_asin = a.asin
+           and bpl.enabled = true
+           and be.currency = m.currency
+           and be.effective_from <= m.metric_date
+         order by be.effective_from desc, be.id desc
+         limit 1
+       ) economics on true
+       where m.profile_id = $1 and m.campaign_id = $2
+         and m.metric_date between $3 and $4
+       group by m.metric_date
+     )
+     select c.metric_date::text as metric_date, c.cost, c.sales, c.orders,
+            c.currency,
+            case
+              when r.metric_date is null or r.economics_missing then null
+              else coalesce(r.estimated_royalty, '0')
+            end as estimated_royalty
+     from campaign_daily c
+     left join royalty_daily r on r.metric_date = c.metric_date
+     order by c.metric_date`,
+    [profilePk, amazonCampaignId, dateStart, dateEnd],
+  );
+  return result.rows.map((row) => ({
+    date: row.metric_date,
+    cost: row.cost,
+    sales: row.sales,
+    orders: Number(row.orders),
+    currency: row.currency,
+    estimatedRoyalty: row.estimated_royalty,
+  }));
+}
+
 export interface DailyPoint {
   date: string;
   profilePk: string;
