@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  currencyCodeSchema,
   decimalStringSchema,
   isoDateSchema,
   isoDateTimeSchema,
@@ -58,6 +59,49 @@ export const recommendationSchema = z.object({
 });
 export type Recommendation = z.infer<typeof recommendationSchema>;
 
+/**
+ * Evidence and current campaign identity needed for a human to resolve one
+ * cannibalization finding. Campaign ids are Amazon ids; the browser never
+ * receives internal database primary keys.
+ */
+export const cannibalizationCampaignSchema = z.object({
+  campaignId: z.string(),
+  name: z.string(),
+  state: z.string(),
+  targetingType: z.string().nullable(),
+  spend: decimalStringSchema,
+  orders: z.number().int().nonnegative(),
+});
+export type CannibalizationCampaign = z.infer<
+  typeof cannibalizationCampaignSchema
+>;
+
+export const cannibalizationResolutionContextSchema = z.object({
+  recommendationId: z.string(),
+  profileId: z.string(),
+  searchTerm: z.string(),
+  currency: currencyCodeSchema,
+  confidence: z.number().min(0).max(1),
+  evidenceWindow: z.object({
+    start: isoDateSchema,
+    end: isoDateSchema,
+  }),
+  dataFreshness: isoDateTimeSchema,
+  expiresAt: isoDateTimeSchema,
+  totalSpend: decimalStringSchema,
+  campaigns: z.array(cannibalizationCampaignSchema).min(2),
+});
+export type CannibalizationResolutionContext = z.infer<
+  typeof cannibalizationResolutionContextSchema
+>;
+
+export const cannibalizationResolutionCreateSchema = z.object({
+  destinationCampaignId: z.string().min(1),
+});
+export type CannibalizationResolutionCreate = z.infer<
+  typeof cannibalizationResolutionCreateSchema
+>;
+
 export const changeSetCreateSchema = z.object({
   recommendationIds: z.array(z.string()).min(1),
 });
@@ -79,12 +123,17 @@ export const changeSetSchema = z.object({
   profileId: z.string(),
   status: changeSetStatusSchema,
   createdAt: isoDateTimeSchema,
+  kind: z.enum(["recommendation", "max_cpc", "rollback"]).optional(),
 });
 export type ChangeSet = z.infer<typeof changeSetSchema>;
 
 export const changeActionTypeSchema = z.enum([
   "update_bid",
+  "update_ad_group_default_bid",
+  "update_campaign_bidding",
+  "update_optimization_rule",
   "add_negative_exact",
+  "remove_negative_exact",
 ]);
 export type ChangeActionType = z.infer<typeof changeActionTypeSchema>;
 
@@ -122,8 +171,13 @@ export const changeActionSchema = z.object({
   actionType: changeActionTypeSchema,
   beforeValue: decimalStringSchema.nullable(),
   afterValue: decimalStringSchema.nullable(),
+  entityName: z.string().nullable().optional(),
+  beforeDetail: z.string().nullable().optional(),
+  afterDetail: z.string().nullable().optional(),
+  rollbackAvailable: z.boolean().optional(),
   status: changeActionStatusSchema,
   amazonRequestId: z.string().nullable(),
+  errorMessage: z.string().nullable().optional(),
 });
 export type ChangeAction = z.infer<typeof changeActionSchema>;
 

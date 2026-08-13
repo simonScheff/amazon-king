@@ -85,20 +85,67 @@ export function toContractChangeSet(
     profileId: row.amazonProfileId,
     status: row.status,
     createdAt: isoDateTime(row.createdAt),
+    kind: row.kind,
   };
 }
 
 export function toContractChangeAction(
   row: changes.ChangeAction,
 ): ChangeAction {
+  const amazonResponse =
+    row.amazonResponse !== null &&
+    typeof row.amazonResponse === "object" &&
+    !Array.isArray(row.amazonResponse)
+      ? (row.amazonResponse as Record<string, unknown>)
+      : null;
+  const amazonDetails =
+    amazonResponse?.details !== null &&
+    typeof amazonResponse?.details === "object" &&
+    !Array.isArray(amazonResponse.details)
+      ? (amazonResponse.details as Record<string, unknown>)
+      : null;
+  const baseError =
+    typeof amazonResponse?.message === "string" ? amazonResponse.message : null;
+  const detailError =
+    typeof amazonDetails?.Message === "string"
+      ? amazonDetails.Message
+      : typeof amazonDetails?.message === "string"
+        ? amazonDetails.message
+        : null;
   return {
     id: row.id,
     changeSetId: row.changeSetId,
     actionType: row.actionType,
     beforeValue: row.beforeValue,
     afterValue: row.afterValue,
+    entityName: row.entityName,
+    beforeDetail:
+      row.actionType === "add_negative_exact"
+        ? "No matching campaign negative exact"
+        : row.actionType === "remove_negative_exact"
+          ? "Negative exact enabled"
+          : row.actionType === "update_campaign_bidding"
+            ? "Current strategy and bid adjustments"
+            : row.actionType === "update_optimization_rule"
+              ? "Rule enabled"
+              : null,
+    afterDetail:
+      row.actionType === "add_negative_exact"
+        ? "Campaign-level negative exact enabled"
+        : row.actionType === "remove_negative_exact"
+          ? "Negative exact removed"
+          : row.actionType === "update_campaign_bidding"
+            ? "Down only; placement and audience adjustments removed"
+            : row.actionType === "update_optimization_rule"
+              ? "Rule disabled"
+              : null,
+    rollbackAvailable:
+      (row.actionType === "update_bid" && row.beforeValue !== null) ||
+      (row.actionType === "add_negative_exact" && row.amazonEntityId !== null),
     status: row.status,
     amazonRequestId: row.amazonRequestId,
+    errorMessage:
+      baseError && detailError ? `${baseError}: ${detailError}` : baseError,
   };
 }
 

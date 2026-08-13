@@ -31,6 +31,33 @@ const spCampaignSchema = z.looseObject({
   startDate: z.string().optional(),
   endDate: z.string().optional(),
   targetingType: z.string().optional(),
+  dynamicBidding: z
+    .looseObject({
+      strategy: z.enum([
+        "LEGACY_FOR_SALES",
+        "AUTO_FOR_SALES",
+        "MANUAL",
+        "RULE_BASED",
+      ]),
+      placementBidding: z
+        .array(
+          z.looseObject({
+            placement: z.string(),
+            percentage: z.number().int().nonnegative(),
+          }),
+        )
+        .optional(),
+      shopperCohortBidding: z
+        .array(
+          z.looseObject({
+            shopperCohortType: z.string().optional(),
+            percentage: z.number().int().nonnegative(),
+            audienceSegments: z.array(z.string()).optional(),
+          }),
+        )
+        .optional(),
+    })
+    .optional(),
 });
 
 const spAdGroupSchema = z.looseObject({
@@ -160,6 +187,26 @@ export async function listCampaigns(
     startDate: raw.startDate ?? null,
     endDate: raw.endDate ?? null,
     targetingType: raw.targetingType ?? null,
+    dynamicBidding: raw.dynamicBidding
+      ? {
+          strategy: raw.dynamicBidding.strategy,
+          placements: (raw.dynamicBidding.placementBidding ?? []).map(
+            (adjustment) => ({
+              name: adjustment.placement,
+              percentage: adjustment.percentage,
+            }),
+          ),
+          audiences: (raw.dynamicBidding.shopperCohortBidding ?? []).map(
+            (adjustment) => ({
+              name:
+                adjustment.audienceSegments?.join(", ") ||
+                adjustment.shopperCohortType ||
+                "Audience",
+              percentage: adjustment.percentage,
+            }),
+          ),
+        }
+      : null,
     raw,
   }));
 }
@@ -250,18 +297,26 @@ export async function listTargets(
   }));
 }
 
-/** POST /sp/negativeKeywords/list — both campaign- and ad-group-level negatives. */
+/** List both campaign- and ad-group-level negative keywords. */
 export async function listNegativeKeywords(
   http: AdsHttpClient,
   context: AdsRequestContext,
 ): Promise<NegativeKeyword[]> {
-  const rows = await listAllPages(http, context, {
-    path: "/sp/negativeKeywords/list",
-    key: "negativeKeywords",
-    mediaType: SP_MEDIA_TYPES.negativeKeywords,
-    itemSchema: spNegativeKeywordSchema,
-  });
-  return rows.map((raw) => ({
+  const [adGroupRows, campaignRows] = await Promise.all([
+    listAllPages(http, context, {
+      path: "/sp/negativeKeywords/list",
+      key: "negativeKeywords",
+      mediaType: SP_MEDIA_TYPES.negativeKeywords,
+      itemSchema: spNegativeKeywordSchema,
+    }),
+    listAllPages(http, context, {
+      path: "/sp/campaignNegativeKeywords/list",
+      key: "campaignNegativeKeywords",
+      mediaType: SP_MEDIA_TYPES.campaignNegativeKeywords,
+      itemSchema: spNegativeKeywordSchema,
+    }),
+  ]);
+  return [...adGroupRows, ...campaignRows].map((raw) => ({
     negativeKeywordId: raw.keywordId ?? (raw.negativeKeywordId as string),
     campaignId: raw.campaignId,
     adGroupId: raw.adGroupId ?? null,

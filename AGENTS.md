@@ -126,14 +126,16 @@ or real DB).
 
 `apps/api` (`@amazon-king/api`) is implemented: Fastify 5 + @fastify/cookie,
 cors, rate-limit. All §11 routes plus the frontend's contract extensions
-(`GET /api/change-sets`, `csrfToken` on the session response, dashboard `daily`
-series + `writesDisabled`). Passwordless email login (magic link is **logged in
+(`GET /api/change-sets`, cannibalization comparison + campaign-level
+negative-exact draft creation, `csrfToken` on the session response, dashboard
+`daily` series + `writesDisabled`). Passwordless email login (magic link is **logged in
 dev only**), stateless HMAC CSRF per session, single-use OAuth state marked used
 before code exchange, refresh tokens envelope-encrypted via
 `@amazon-king/crypto`, recent-auth (15 min) required for apply/rollback, and the
 guarded write flow in `src/services/changes.ts` (fingerprint-idempotent create,
 preview → re-read Amazon + before-state compare → guardrails → per-item apply →
-verify; rollback is a compensating action). Route handlers are thin wrappers
+verify; rollback is a compensating action, including verified app-created
+negative exact keywords). Route handlers are thin wrappers
 over injectable services (`src/services/types.js`); tests use the SQL-matching
 in-memory `FakeDb` (`src/test/fake-db.ts`). Commands: `dev` (`tsx watch
 src/index.ts`), `start`, `typecheck`, `test`.

@@ -21,6 +21,8 @@ export interface ChangeSet {
   fingerprint: string;
   createdAt: string;
   appliedAt: string | null;
+  kind: "recommendation" | "max_cpc" | "rollback";
+  metadata: Record<string, unknown>;
 }
 
 interface ChangeSetRow {
@@ -32,6 +34,8 @@ interface ChangeSetRow {
   fingerprint: string;
   created_at: string;
   applied_at: string | null;
+  kind: "recommendation" | "max_cpc" | "rollback";
+  metadata: Record<string, unknown>;
 }
 
 function toChangeSet(row: ChangeSetRow): ChangeSet {
@@ -44,6 +48,8 @@ function toChangeSet(row: ChangeSetRow): ChangeSet {
     fingerprint: row.fingerprint,
     createdAt: row.created_at,
     appliedAt: row.applied_at,
+    kind: row.kind,
+    metadata: row.metadata,
   };
 }
 
@@ -66,6 +72,10 @@ export interface ChangeAction {
   verifiedAt: string | null;
   rollbackOfId: string | null;
   createdAt: string;
+  amazonEntityId: string | null;
+  entityName: string | null;
+  beforeState: unknown | null;
+  afterState: unknown | null;
 }
 
 interface ChangeActionRow {
@@ -87,6 +97,10 @@ interface ChangeActionRow {
   verified_at: string | null;
   rollback_of_id: string | null;
   created_at: string;
+  amazon_entity_id: string | null;
+  entity_name: string | null;
+  before_state: unknown | null;
+  after_state: unknown | null;
 }
 
 function toChangeAction(row: ChangeActionRow): ChangeAction {
@@ -109,6 +123,10 @@ function toChangeAction(row: ChangeActionRow): ChangeAction {
     verifiedAt: row.verified_at,
     rollbackOfId: row.rollback_of_id,
     createdAt: row.created_at,
+    amazonEntityId: row.amazon_entity_id,
+    entityName: row.entity_name,
+    beforeState: row.before_state,
+    afterState: row.after_state,
   };
 }
 
@@ -123,6 +141,10 @@ export interface ChangeActionInsert {
   afterValue?: string | null;
   fingerprint: string;
   rollbackOfId?: string | null;
+  amazonEntityId?: string | null;
+  entityName?: string | null;
+  beforeState?: unknown;
+  afterState?: unknown;
 }
 
 export interface CreatedChangeSet {
@@ -179,6 +201,8 @@ export async function createChangeSet(
     fingerprint: string;
     guardrailResult?: unknown;
     actions: readonly ChangeActionInsert[];
+    kind?: "recommendation" | "max_cpc" | "rollback";
+    metadata?: Record<string, unknown>;
   },
 ): Promise<CreatedChangeSet> {
   return withTransaction(pool, async (client) => {
@@ -201,8 +225,9 @@ export async function createChangeSet(
     }
 
     const setResult = await client.query<ChangeSetRow>(
-      `insert into change_sets (profile_id, creator_user_id, fingerprint, guardrail_result)
-       values ($1, $2, $3, $4::jsonb)
+      `insert into change_sets
+         (profile_id, creator_user_id, fingerprint, guardrail_result, kind, metadata)
+       values ($1, $2, $3, $4::jsonb, $5, $6::jsonb)
        returning *`,
       [
         input.profileId,
@@ -211,6 +236,8 @@ export async function createChangeSet(
         input.guardrailResult == null
           ? null
           : JSON.stringify(input.guardrailResult),
+        input.kind ?? "recommendation",
+        JSON.stringify(input.metadata ?? {}),
       ],
     );
     const changeSet = toChangeSet(setResult.rows[0]!);
@@ -220,8 +247,9 @@ export async function createChangeSet(
       const actionResult = await client.query<ChangeActionRow>(
         `insert into change_actions
            (change_set_id, recommendation_id, action_type, campaign_id, ad_group_id,
-            target_id, search_term, before_value, after_value, fingerprint, rollback_of_id)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            target_id, search_term, before_value, after_value, fingerprint, rollback_of_id,
+            amazon_entity_id, entity_name, before_state, after_state)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15::jsonb)
          returning *`,
         [
           changeSet.id,
@@ -235,6 +263,12 @@ export async function createChangeSet(
           action.afterValue ?? null,
           action.fingerprint,
           action.rollbackOfId ?? null,
+          action.amazonEntityId ?? null,
+          action.entityName ?? null,
+          action.beforeState == null
+            ? null
+            : JSON.stringify(action.beforeState),
+          action.afterState == null ? null : JSON.stringify(action.afterState),
         ],
       );
       actions.push(toChangeAction(actionResult.rows[0]!));
@@ -274,6 +308,7 @@ export interface ActionResultRecord {
   amazonRequest?: unknown;
   amazonResponse?: unknown;
   amazonRequestId?: string | null;
+  amazonEntityId?: string | null;
   verifiedAt?: string | null;
 }
 
@@ -289,7 +324,8 @@ export async function recordChangeActionResult(
        amazon_request = coalesce($3::jsonb, amazon_request),
        amazon_response = coalesce($4::jsonb, amazon_response),
        amazon_request_id = coalesce($5, amazon_request_id),
-       verified_at = coalesce($6::timestamptz, verified_at)
+       verified_at = coalesce($6::timestamptz, verified_at),
+       amazon_entity_id = coalesce($7, amazon_entity_id)
      where id = $1
      returning *`,
     [
@@ -303,6 +339,7 @@ export async function recordChangeActionResult(
         : JSON.stringify(record.amazonResponse),
       record.amazonRequestId ?? null,
       record.verifiedAt ?? null,
+      record.amazonEntityId ?? null,
     ],
   );
   return result.rows[0] ? toChangeAction(result.rows[0]) : null;

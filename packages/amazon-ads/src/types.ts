@@ -33,7 +33,42 @@ export interface Campaign {
   startDate: string | null;
   endDate: string | null;
   targetingType: string | null;
+  dynamicBidding: CampaignDynamicBidding | null;
   raw: unknown;
+}
+
+export type CampaignBiddingStrategy =
+  "LEGACY_FOR_SALES" | "AUTO_FOR_SALES" | "MANUAL" | "RULE_BASED";
+
+export interface BidAdjustment {
+  name: string;
+  percentage: number;
+}
+
+export interface CampaignDynamicBidding {
+  strategy: CampaignBiddingStrategy;
+  placements: BidAdjustment[];
+  audiences: BidAdjustment[];
+}
+
+export interface OptimizationRule {
+  optimizationRuleId: string;
+  name: string;
+  ruleCategory: string;
+  ruleSubCategory: string;
+  status: string;
+  raw: Record<string, unknown>;
+}
+
+/** Complete Amazon-side input surface that can increase CPC for one campaign. */
+export interface CampaignBidControls {
+  profileId: string;
+  retrievedAt: string;
+  campaign: Campaign;
+  adGroups: AdGroup[];
+  keywords: Keyword[];
+  targets: Target[];
+  optimizationRules: OptimizationRule[];
 }
 
 export interface AdGroup {
@@ -159,7 +194,36 @@ export interface UpdateBidAction {
   actionId: string;
   kind: "update_bid";
   keywordId: string;
+  entityType?: "keyword" | "target";
   bid: string;
+  /** Current Amazon state, carried through so a bid-only update cannot change it. */
+  state?: string;
+}
+
+export interface UpdateAdGroupDefaultBidAction {
+  actionId: string;
+  kind: "update_ad_group_default_bid";
+  adGroupId: string;
+  bid: string;
+  /** Current Amazon state, carried through so a bid-only update cannot change it. */
+  state?: string;
+}
+
+export interface UpdateCampaignBiddingAction {
+  actionId: string;
+  kind: "update_campaign_bidding";
+  campaignId: string;
+  dynamicBidding: CampaignDynamicBidding;
+  /** Current Amazon state, carried through while bidding controls change. */
+  state?: string;
+}
+
+export interface UpdateOptimizationRuleAction {
+  actionId: string;
+  kind: "update_optimization_rule";
+  optimizationRuleId: string;
+  /** Full Amazon rule payload with status changed to DISABLED. */
+  rule: Record<string, unknown>;
 }
 
 /** Add a negative exact keyword at campaign or ad-group level. */
@@ -172,7 +236,21 @@ export interface AddNegativeExactAction {
   keywordText: string;
 }
 
-export type ChangeAction = UpdateBidAction | AddNegativeExactAction;
+/** Delete the exact negative created by a previously verified action. */
+export interface RemoveNegativeExactAction {
+  actionId: string;
+  kind: "remove_negative_exact";
+  negativeKeywordId: string;
+  scope: "campaign" | "ad_group";
+}
+
+export type ChangeAction =
+  | UpdateBidAction
+  | UpdateAdGroupDefaultBidAction
+  | UpdateCampaignBiddingAction
+  | UpdateOptimizationRuleAction
+  | AddNegativeExactAction
+  | RemoveNegativeExactAction;
 
 /** Immutable, human-approved set of changes to apply. */
 export interface ChangeSet {

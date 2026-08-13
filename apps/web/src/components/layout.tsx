@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { ApiError } from "../api/client";
 import { useDashboardSummary, useLogout, useSession } from "../api/endpoints";
-import { ToastProvider } from "./toast";
-import { Button } from "./ui/button";
+import { ToastProvider, useToast } from "./toast";
 import { Loading } from "./states";
 
 const navItems = [
@@ -32,6 +31,7 @@ function KillSwitchBanner() {
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const logout = useLogout();
   const navigate = useNavigate();
+  const toast = useToast();
   return (
     <nav aria-label="Main" className="flex h-full flex-col gap-1 p-3">
       <p className="px-2 pb-3 text-sm font-bold text-zinc-100">Amazon King</p>
@@ -47,19 +47,26 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           {item.label}
         </Link>
       ))}
-      <div className="mt-auto">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() =>
-            logout.mutate(undefined, {
-              onSuccess: () => navigate({ to: "/login" }),
-            })
-          }
-        >
-          Sign out
-        </Button>
-      </div>
+      <div aria-hidden="true" className="my-1 border-t border-zinc-800" />
+      <button
+        type="button"
+        className="w-full rounded-md px-2 py-1.5 text-left text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-400 disabled:cursor-not-allowed disabled:text-zinc-600"
+        onClick={() =>
+          logout.mutate(undefined, {
+            onSuccess: () => navigate({ to: "/login" }),
+            onError: (error) => {
+              if (error instanceof ApiError && error.status === 401) {
+                void navigate({ to: "/login" });
+                return;
+              }
+              toast(`Sign out failed: ${error.message}`, "error");
+            },
+          })
+        }
+        disabled={logout.isPending}
+      >
+        {logout.isPending ? "Signing out…" : "Sign out"}
+      </button>
     </nav>
   );
 }

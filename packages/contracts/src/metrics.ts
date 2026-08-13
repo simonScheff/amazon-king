@@ -55,6 +55,26 @@ export const campaignRowSchema = z.object({
 });
 export type CampaignRow = z.infer<typeof campaignRowSchema>;
 
+/** Profitability for one campaign over the campaign-list date window. */
+export const campaignProfitabilitySchema = z.object({
+  dateRange: z.object({
+    start: isoDateSchema,
+    end: isoDateSchema,
+  }),
+  currency: currencyCodeSchema,
+  estimatedRoyalty: nonNegativeDecimalStringSchema.nullable(),
+  estimatedAdProfit: decimalStringSchema.nullable(),
+  economicsMissing: z.boolean(),
+  dataCurrentThrough: isoDateSchema.nullable(),
+});
+export type CampaignProfitability = z.infer<typeof campaignProfitabilitySchema>;
+
+/** GET /api/campaigns row, including profitability for the requested window. */
+export const campaignListRowSchema = campaignRowSchema.extend({
+  profitability: campaignProfitabilitySchema,
+});
+export type CampaignListRow = z.infer<typeof campaignListRowSchema>;
+
 /** A named entity (ad group, target, search term) with its metric totals. */
 export const namedMetricRowSchema = z.object({
   id: z.string(),

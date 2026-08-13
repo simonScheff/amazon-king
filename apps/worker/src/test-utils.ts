@@ -428,6 +428,9 @@ export function fakeGateway(
     syncCampaignStructure: async () => {
       throw new Error("not implemented");
     },
+    getCampaignBidControls: async () => {
+      throw new Error("not implemented");
+    },
     requestReport: async () => {
       throw new Error("not implemented");
     },

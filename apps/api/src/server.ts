@@ -5,11 +5,13 @@ import fastifyRateLimit from "@fastify/rate-limit";
 import {
   bookEconomicsInputSchema,
   bookMappingInputSchema,
+  cannibalizationResolutionCreateSchema,
   changeSetCreateSchema,
   loginRequestSchema,
   profileUpdateSchema,
   recommendationStateSchema,
   recommendationTypeSchema,
+  setCampaignMaxCpcSchema,
 } from "@amazon-king/contracts";
 import { withRequestId } from "@amazon-king/observability";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
@@ -196,9 +198,12 @@ export async function buildServer(
     { config: { rateLimit: STRICT_RATE } },
     async (request) => {
       const body = parse(loginRequestSchema, request.body);
-      await services.session.startLogin(body.email, meta(request));
+      const result = await services.session.startLogin(
+        body.email,
+        meta(request),
+      );
       // Always 200: never reveal whether an email is allowed.
-      return { ok: true };
+      return { ok: true, ...result };
     },
   );
 
@@ -424,6 +429,20 @@ export async function buildServer(
     return rec;
   });
 
+  app.get(
+    "/api/recommendations/:id/cannibalization-context",
+    async (request) => {
+      const auth = await authenticate(request);
+      const { id } = request.params as { id: string };
+      const context = await services.read.getCannibalizationResolutionContext(
+        auth.workspaceId,
+        id,
+      );
+      if (!context) throw notFound("Unknown recommendation");
+      return context;
+    },
+  );
+
   app.post("/api/recommendations/:id/reject", async (request) => {
     const auth = await authenticate(request);
     const { id } = request.params as { id: string };
@@ -446,6 +465,46 @@ export async function buildServer(
     );
     return result.changeSet;
   });
+
+  app.post(
+    "/api/recommendations/:id/cannibalization-change-set",
+    { config: { rateLimit: WRITE_RATE } },
+    async (request) => {
+      const auth = await authenticate(request);
+      const { id } = request.params as { id: string };
+      const body = parse(cannibalizationResolutionCreateSchema, request.body);
+      const result = await services.changes.createCannibalizationChangeSet(
+        auth,
+        id,
+        body.destinationCampaignId,
+        meta(request),
+      );
+      return result.changeSet;
+    },
+  );
+
+  app.get("/api/campaigns/:campaignId/max-cpc", async (request) => {
+    const auth = await authenticate(request);
+    const { campaignId } = request.params as { campaignId: string };
+    return services.changes.getCampaignMaxCpc(auth.workspaceId, campaignId);
+  });
+
+  app.post(
+    "/api/campaigns/:campaignId/max-cpc",
+    { config: { rateLimit: WRITE_RATE } },
+    async (request) => {
+      const auth = await authenticate(request);
+      requireRecentAuth(auth);
+      const { campaignId } = request.params as { campaignId: string };
+      const body = parse(setCampaignMaxCpcSchema, request.body);
+      return services.changes.setCampaignMaxCpc(
+        auth,
+        campaignId,
+        body.maxCpc,
+        meta(request),
+      );
+    },
+  );
 
   app.get("/api/change-sets", async (request) => {
     const auth = await authenticate(request);

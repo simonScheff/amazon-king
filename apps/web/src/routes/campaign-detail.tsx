@@ -8,6 +8,7 @@ import {
 import type { MetricTotals } from "@amazon-king/contracts";
 import { useCampaign, useProfiles } from "../api/endpoints";
 import { KpiCard } from "../components/kpi-card";
+import { CampaignMaxCpc } from "../components/campaign-max-cpc";
 import { PerformanceTrendChart } from "../components/performance-trend-chart";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -21,8 +22,12 @@ import {
   formatDateTime,
   formatMoney,
 } from "../lib/format";
+import {
+  getCampaignProfitStatus,
+  hasCampaignActivity,
+} from "../lib/campaign-profit";
 
-type Tab = "adGroups" | "targets" | "searchTerms";
+type Tab = "adGroups" | "targets" | "searchTerms" | "maxCpc";
 
 const DAY_OPTIONS = [7, 14, 30, 60] as const;
 
@@ -30,6 +35,7 @@ const tabs: Array<{ key: Tab; label: string }> = [
   { key: "adGroups", label: "Ad groups" },
   { key: "targets", label: "Targets" },
   { key: "searchTerms", label: "Search terms" },
+  { key: "maxCpc", label: "Max CPC" },
 ];
 
 interface Row {
@@ -111,25 +117,16 @@ export function CampaignDetailPage() {
   const country = (profiles.data ?? []).find(
     (profile) => profile.profileId === c.profileId,
   )?.countryCode;
-  const hasActivity =
-    c.totals.impressions > 0 ||
-    c.totals.clicks > 0 ||
-    c.totals.orders > 0 ||
-    Number(c.totals.cost) > 0 ||
-    Number(c.totals.sales) > 0;
+  const hasActivity = hasCampaignActivity(c.totals);
   const estimatedProfit =
     c.totals.estimatedAdProfit === null
       ? null
       : Number(c.totals.estimatedAdProfit);
-  const profitStatus = !hasActivity
-    ? { label: "No activity", tone: "neutral" as const }
-    : campaign.data.economicsMissing || estimatedProfit === null
-      ? { label: "Profit unavailable", tone: "warning" as const }
-      : estimatedProfit > 0
-        ? { label: "Profitable", tone: "success" as const }
-        : estimatedProfit < 0
-          ? { label: "Not profitable", tone: "danger" as const }
-          : { label: "Break-even", tone: "neutral" as const };
+  const profitStatus = getCampaignProfitStatus(
+    c.totals,
+    campaign.data.economicsMissing,
+    c.totals.estimatedAdProfit,
+  );
 
   return (
     <div className="flex max-w-6xl flex-col gap-4">
@@ -251,7 +248,11 @@ export function CampaignDetailPage() {
         </div>
         <CardBody className="p-0">
           <div role="tabpanel">
-            <MetricsTable rows={campaign.data[tab]} currency={currency} />
+            {tab === "maxCpc" ? (
+              <CampaignMaxCpc campaignId={id} />
+            ) : (
+              <MetricsTable rows={campaign.data[tab]} currency={currency} />
+            )}
           </div>
         </CardBody>
       </Card>

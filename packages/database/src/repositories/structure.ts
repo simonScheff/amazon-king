@@ -311,6 +311,7 @@ export interface CampaignRow {
   amazonCampaignId: string;
   name: string;
   state: string;
+  targetingType: string | null;
 }
 
 /** Fetch a campaign by internal PK. */
@@ -324,8 +325,9 @@ export async function getCampaign(
     amazon_campaign_id: string;
     name: string;
     state: string;
+    targeting_type: string | null;
   }>(
-    `select id, profile_id, amazon_campaign_id, name, state
+    `select id, profile_id, amazon_campaign_id, name, state, targeting_type
      from campaigns where id = $1`,
     [campaignPk],
   );
@@ -337,6 +339,7 @@ export async function getCampaign(
         amazonCampaignId: row.amazon_campaign_id,
         name: row.name,
         state: row.state,
+        targetingType: row.targeting_type,
       }
     : null;
 }
@@ -353,9 +356,11 @@ export async function findCampaignByAmazonId(
     amazon_campaign_id: string;
     name: string;
     state: string;
+    targeting_type: string | null;
     amazon_profile_id: string;
   }>(
     `select c.id, c.profile_id, c.amazon_campaign_id, c.name, c.state,
+            c.targeting_type,
             p.profile_id as amazon_profile_id
      from campaigns c
      join amazon_profiles p on p.id = c.profile_id
@@ -373,6 +378,7 @@ export async function findCampaignByAmazonId(
         amazonCampaignId: row.amazon_campaign_id,
         name: row.name,
         state: row.state,
+        targetingType: row.targeting_type,
         amazonProfileId: row.amazon_profile_id,
       }
     : null;

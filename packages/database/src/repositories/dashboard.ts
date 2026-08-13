@@ -41,10 +41,20 @@ export interface CampaignRowData {
   amazonCampaignId: string;
   name: string;
   state: string;
+  currency: string;
   totals: TotalsRow;
+  /** Null when activity exists but royalty economics are incomplete. */
+  estimatedRoyalty: string | null;
+  economicsMissing: boolean;
+  dataCurrentThrough: string | null;
+  mixedCurrency: boolean;
 }
 
-/** Campaigns of a workspace with metric totals over a date range. */
+/**
+ * Campaigns of a workspace with metric totals and KDP royalty over a date
+ * range. Profitability is calculated in one batched query so the campaigns
+ * page does not issue one query per campaign.
+ */
 export async function listCampaignRows(
   db: Db,
   workspaceId: string,
@@ -59,25 +69,146 @@ export async function listCampaignRows(
       amazon_campaign_id: string;
       name: string;
       state: string;
+      currency: string;
+      estimated_royalty: string | null;
+      economics_missing: boolean;
+      data_current_through: string | null;
+      mixed_currency: boolean;
     }
   >(
-    `select c.id, c.profile_id, p.profile_id as amazon_profile_id,
+    `with campaign_rollup as (
+       select profile_id, campaign_id,
+              sum(impressions)::text as impressions,
+              sum(clicks)::text as clicks,
+              sum(cost)::text as cost,
+              sum(sales)::text as sales,
+              sum(orders)::text as orders,
+              min(currency)::text as currency,
+              count(distinct currency) > 1 as mixed_currency,
+              max(metric_date)::text as data_current_through
+       from campaign_metrics_daily
+       where metric_date between $2 and $3
+       group by profile_id, campaign_id
+     ),
+     campaign_days as (
+       select profile_id, campaign_id, metric_date,
+              sum(orders) as orders,
+              min(currency)::text as currency,
+              count(distinct currency) > 1 as mixed_currency
+       from campaign_metrics_daily
+       where metric_date between $2 and $3
+       group by profile_id, campaign_id, metric_date
+     ),
+     single_book_campaigns as (
+       select c.profile_id, c.amazon_campaign_id as campaign_id,
+              min(bpl.book_id) as book_id
+       from campaigns c
+       join ad_groups g on g.campaign_id = c.id
+       join ads a on a.profile_id = c.profile_id and a.ad_group_id = g.id
+       left join book_profile_links bpl
+         on bpl.profile_id = c.profile_id
+        and bpl.marketplace_asin = a.asin
+        and bpl.enabled = true
+       group by c.profile_id, c.amazon_campaign_id
+       having count(distinct bpl.book_id) = 1
+          and count(*) filter (where bpl.book_id is null) = 0
+     ),
+     royalty_daily as (
+       select m.profile_id, m.campaign_id, m.metric_date,
+              sum(m.orders * economics.estimated_royalty_per_sale)
+                as estimated_royalty,
+              bool_or(economics.estimated_royalty_per_sale is null)
+                as economics_missing,
+              count(distinct m.currency) > 1 as mixed_currency
+       from advertised_product_metrics_daily m
+       left join ads a
+         on a.profile_id = m.profile_id and a.amazon_ad_id = m.ad_id
+       left join lateral (
+         select be.estimated_royalty_per_sale
+         from book_profile_links bpl
+         join book_economics be
+           on be.book_id = bpl.book_id and be.profile_id = bpl.profile_id
+         where bpl.profile_id = m.profile_id
+           and bpl.marketplace_asin = a.asin
+           and bpl.enabled = true
+           and be.currency = m.currency
+           and be.effective_from <= m.metric_date
+         order by be.effective_from desc, be.id desc
+         limit 1
+       ) economics on true
+       where m.metric_date between $2 and $3
+       group by m.profile_id, m.campaign_id, m.metric_date
+     ),
+     royalty_rollup as (
+       select d.profile_id, d.campaign_id,
+              bool_or(
+                d.orders > 0
+                and (
+                  (r.metric_date is not null and r.economics_missing)
+                  or (r.metric_date is null and fallback.royalty is null)
+                )
+              )
+                as economics_missing,
+              bool_or(
+                d.mixed_currency or coalesce(r.mixed_currency, false)
+              ) as mixed_currency,
+              case
+                when bool_or(
+                  d.orders > 0
+                  and (
+                    (r.metric_date is not null and r.economics_missing)
+                    or (r.metric_date is null and fallback.royalty is null)
+                  )
+                )
+                  then null
+                else coalesce(sum(
+                  case
+                    when d.orders = 0 then 0
+                    when r.metric_date is not null then r.estimated_royalty
+                    else d.orders * fallback.royalty
+                  end
+                ), 0)::text
+              end as estimated_royalty
+       from campaign_days d
+       left join royalty_daily r
+         on r.profile_id = d.profile_id
+        and r.campaign_id = d.campaign_id
+        and r.metric_date = d.metric_date
+       left join single_book_campaigns sbc
+         on sbc.profile_id = d.profile_id
+        and sbc.campaign_id = d.campaign_id
+       left join lateral (
+         select be.estimated_royalty_per_sale as royalty
+         from book_economics be
+         where be.book_id = sbc.book_id
+           and be.profile_id = d.profile_id
+           and be.currency = d.currency
+           and be.effective_from <= d.metric_date
+         order by be.effective_from desc, be.id desc
+         limit 1
+       ) fallback on r.metric_date is null
+       group by d.profile_id, d.campaign_id
+     )
+     select c.id, c.profile_id, p.profile_id as amazon_profile_id,
             c.amazon_campaign_id, c.name, c.state,
-            sum(m.impressions)::text as impressions,
-            sum(m.clicks)::text as clicks,
-            sum(m.cost)::text as cost,
-            sum(m.sales)::text as sales,
-            sum(m.orders)::text as orders
+            cr.impressions, cr.clicks, cr.cost, cr.sales, cr.orders,
+            coalesce(cr.currency, p.currency_code)::text as currency,
+            rr.estimated_royalty,
+            coalesce(rr.economics_missing, false) as economics_missing,
+            cr.data_current_through,
+            coalesce(cr.mixed_currency, false)
+              or coalesce(rr.mixed_currency, false) as mixed_currency
      from campaigns c
      join amazon_profiles p on p.id = c.profile_id
      join amazon_connections conn on conn.id = p.connection_id
-     left join campaign_metrics_daily m
-       on m.profile_id = c.profile_id
-      and m.campaign_id = c.amazon_campaign_id
-      and m.metric_date between $2 and $3
+     left join campaign_rollup cr
+       on cr.profile_id = c.profile_id
+      and cr.campaign_id = c.amazon_campaign_id
+     left join royalty_rollup rr
+       on rr.profile_id = c.profile_id
+      and rr.campaign_id = c.amazon_campaign_id
      where conn.workspace_id = $1
-     group by c.id, p.profile_id
-     order by coalesce(sum(m.cost), 0) desc, c.id`,
+     order by coalesce(cr.cost::numeric, 0) desc, c.id`,
     [workspaceId, dateStart, dateEnd],
   );
   return result.rows.map((row) => ({
@@ -87,7 +218,12 @@ export async function listCampaignRows(
     amazonCampaignId: row.amazon_campaign_id,
     name: row.name,
     state: row.state,
+    currency: row.currency,
     totals: toTotals(row),
+    estimatedRoyalty: row.estimated_royalty,
+    economicsMissing: row.economics_missing,
+    dataCurrentThrough: row.data_current_through,
+    mixedCurrency: row.mixed_currency,
   }));
 }
 
@@ -220,7 +356,9 @@ export interface CampaignDailyPoint {
  * Daily performance and estimated KDP royalty for one campaign. Campaign
  * spend/sales remain sourced from the canonical campaign report. Royalty is
  * attributed at advertised-product grain so campaigns containing multiple
- * books use each book's own effective-dated economics.
+ * books use each book's own effective-dated economics. When Amazon's product
+ * report omits a day for a campaign whose current ads all map to one book, the
+ * campaign orders use that single book's in-effect royalty as a safe fallback.
  */
 export async function campaignDailySeries(
   db: Db,
@@ -239,7 +377,7 @@ export async function campaignDailySeries(
   }>(
     `with campaign_daily as (
        select metric_date, sum(cost)::text as cost, sum(sales)::text as sales,
-              sum(orders)::text as orders, currency
+              sum(orders) as orders, currency
        from campaign_metrics_daily
        where profile_id = $1 and campaign_id = $2
          and metric_date between $3 and $4
@@ -270,15 +408,47 @@ export async function campaignDailySeries(
        where m.profile_id = $1 and m.campaign_id = $2
          and m.metric_date between $3 and $4
        group by m.metric_date
+     ),
+     single_book_campaign as (
+       select min(bpl.book_id) as book_id
+       from campaigns campaign
+       join ad_groups g on g.campaign_id = campaign.id
+       join ads a
+         on a.profile_id = campaign.profile_id and a.ad_group_id = g.id
+       left join book_profile_links bpl
+         on bpl.profile_id = campaign.profile_id
+        and bpl.marketplace_asin = a.asin
+        and bpl.enabled = true
+       where campaign.profile_id = $1
+         and campaign.amazon_campaign_id = $2
+       group by campaign.id
+       having count(distinct bpl.book_id) = 1
+          and count(*) filter (where bpl.book_id is null) = 0
      )
-     select c.metric_date::text as metric_date, c.cost, c.sales, c.orders,
+     select c.metric_date::text as metric_date, c.cost, c.sales,
+            c.orders::text as orders,
             c.currency,
             case
-              when r.metric_date is null or r.economics_missing then null
-              else coalesce(r.estimated_royalty, '0')
+              when c.orders = 0 then '0'
+              when r.metric_date is not null and not r.economics_missing
+                then coalesce(r.estimated_royalty, '0')
+              when r.metric_date is null and fallback.royalty is not null
+                then (c.orders * fallback.royalty)::text
+              else null
             end as estimated_royalty
      from campaign_daily c
      left join royalty_daily r on r.metric_date = c.metric_date
+     left join single_book_campaign sbc on true
+     left join lateral (
+       select be.estimated_royalty_per_sale as royalty
+       from book_economics be
+       where be.book_id = sbc.book_id
+         and be.profile_id = $1
+         and be.currency = c.currency
+         and be.effective_from <= c.metric_date
+       order by be.effective_from desc, be.id desc
+       limit 1
+     ) fallback on r.metric_date is null
      order by c.metric_date`,
     [profilePk, amazonCampaignId, dateStart, dateEnd],
   );

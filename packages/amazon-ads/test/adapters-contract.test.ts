@@ -195,11 +195,20 @@ describe("SP list fixtures", () => {
     expect(targets[0].expressionType).toBe("MANUAL");
 
     const { http: negHttp } = makeHttp({
-      handler: () => jsonResponse(fixture("sp-negativeKeywords-list.json")),
+      handler: (request) =>
+        jsonResponse(
+          request.url.endsWith("/sp/campaignNegativeKeywords/list")
+            ? fixture("sp-campaignNegativeKeywords-list.json")
+            : fixture("sp-negativeKeywords-list.json"),
+        ),
     });
     const negatives = await listNegativeKeywords(negHttp, TEST_CONTEXT);
     expect(negatives[0].matchType).toBe("NEGATIVE_EXACT");
     expect(negatives[0].negativeKeywordId).toBe("990123456");
+    expect(negatives[1]).toMatchObject({
+      negativeKeywordId: "990123458",
+      adGroupId: null,
+    });
   });
 
   it("tolerates additive fields on list items", async () => {

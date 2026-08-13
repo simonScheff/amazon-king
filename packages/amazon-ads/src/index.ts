@@ -11,3 +11,4 @@ export * from "./adapters/profiles.js";
 export * from "./adapters/reporting.js";
 export * from "./adapters/sp-campaigns.js";
 export * from "./adapters/sp-writes.js";
+export * from "./adapters/sp-rules.js";

@@ -1,17 +1,47 @@
 import { Link } from "@tanstack/react-router";
-import { useCampaigns, useProfiles } from "../api/endpoints";
+import { useCampaigns } from "../api/endpoints";
 import { Badge } from "../components/ui/badge";
 import { Card } from "../components/ui/card";
 import { Table, Td, Th } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
+import {
+  getCampaignProfitStatus,
+  hasCampaignActivity,
+  type ProfitStatus,
+} from "../lib/campaign-profit";
 import { formatAcos, formatCount, formatMoney } from "../lib/format";
 
-export function CampaignsPage() {
-  const campaigns = useCampaigns();
-  const profiles = useProfiles();
-  const currencyByProfile = new Map(
-    (profiles.data ?? []).map((p) => [p.profileId, p.currencyCode]),
+const PROFITABILITY_DAYS = 7;
+
+function ProfitabilityResult({
+  status,
+  amount,
+  currency,
+  economicsMissing,
+  hasActivity,
+}: {
+  status: ProfitStatus;
+  amount: string | null;
+  currency: string;
+  economicsMissing: boolean;
+  hasActivity: boolean;
+}) {
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <Badge tone={status.tone}>{status.label}</Badge>
+      <span className="text-xs text-zinc-400">
+        {hasActivity && amount !== null
+          ? formatMoney(amount, currency)
+          : economicsMissing
+            ? "Missing economics"
+            : "—"}
+      </span>
+    </div>
   );
+}
+
+export function CampaignsPage() {
+  const campaigns = useCampaigns(PROFITABILITY_DAYS);
 
   return (
     <div className="flex max-w-6xl flex-col gap-4">
@@ -32,6 +62,9 @@ export function CampaignsPage() {
                 <Th>Campaign</Th>
                 <Th>Profile</Th>
                 <Th>State</Th>
+                <Th className="hidden md:table-cell">
+                  {PROFITABILITY_DAYS}-day profit
+                </Th>
                 <Th className="text-right">Impressions</Th>
                 <Th className="text-right">Clicks</Th>
                 <Th className="text-right">Spend</Th>
@@ -42,7 +75,13 @@ export function CampaignsPage() {
             </thead>
             <tbody>
               {campaigns.data.map((c) => {
-                const currency = currencyByProfile.get(c.profileId) ?? "USD";
+                const currency = c.profitability.currency;
+                const hasActivity = hasCampaignActivity(c.totals);
+                const profitStatus = getCampaignProfitStatus(
+                  c.totals,
+                  c.profitability.economicsMissing,
+                  c.profitability.estimatedAdProfit,
+                );
                 // ACoS is a ratio derived for display only; money itself is
                 // never aggregated in the browser.
                 const acos =
@@ -55,10 +94,23 @@ export function CampaignsPage() {
                       <Link
                         to="/campaigns/$id"
                         params={{ id: c.campaignId }}
+                        search={{ days: PROFITABILITY_DAYS }}
                         className="text-sky-400 hover:underline"
                       >
                         {c.name}
                       </Link>
+                      <div className="mt-2 md:hidden">
+                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                          {PROFITABILITY_DAYS}-day profit
+                        </p>
+                        <ProfitabilityResult
+                          status={profitStatus}
+                          amount={c.profitability.estimatedAdProfit}
+                          currency={currency}
+                          economicsMissing={c.profitability.economicsMissing}
+                          hasActivity={hasActivity}
+                        />
+                      </div>
                     </Td>
                     <Td className="font-mono text-xs text-zinc-500">
                       {c.profileId}
@@ -69,6 +121,18 @@ export function CampaignsPage() {
                       >
                         {c.state}
                       </Badge>
+                    </Td>
+                    <Td
+                      className="hidden whitespace-nowrap md:table-cell"
+                      aria-label={`${c.name} seven-day profit: ${profitStatus.label}`}
+                    >
+                      <ProfitabilityResult
+                        status={profitStatus}
+                        amount={c.profitability.estimatedAdProfit}
+                        currency={currency}
+                        economicsMissing={c.profitability.economicsMissing}
+                        hasActivity={hasActivity}
+                      />
                     </Td>
                     <Td className="text-right">
                       {formatCount(c.totals.impressions)}

@@ -29,6 +29,7 @@ const statusTone: Record<
   verification_failed: "danger",
   rolled_back: "neutral",
   pending: "neutral",
+  not_applied: "danger",
 };
 
 function ChangeSetDetail({ changeSet }: { changeSet: ChangeSet }) {
@@ -85,55 +86,86 @@ function ChangeSetDetail({ changeSet }: { changeSet: ChangeSet }) {
                 </tr>
               </thead>
               <tbody>
-                {preview.data.actions.map((a) => (
-                  <tr key={a.id}>
-                    <Td>{labelize(a.actionType)}</Td>
-                    <Td className="text-right font-mono text-xs">
-                      {a.beforeValue ?? "—"}
-                    </Td>
-                    <Td className="text-right font-mono text-xs">
-                      {a.afterValue ?? "—"}
-                    </Td>
-                    <Td>
-                      <Badge tone={statusTone[a.status] ?? "neutral"}>
-                        {labelize(a.status)}
-                      </Badge>
-                    </Td>
-                    <Td className="font-mono text-xs text-zinc-500">
-                      {a.amazonRequestId ?? "—"}
-                    </Td>
-                    <Td>
-                      {(a.status === "applied" ||
-                        a.status === "partially_applied") && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={rollback.isPending}
-                          onClick={() =>
-                            rollback.mutate(a.id, {
-                              onSuccess: () => toast("Rollback requested"),
-                              onError: (err) =>
-                                toast(
-                                  `Rollback failed: ${err.message}`,
-                                  "error",
-                                ),
-                            })
-                          }
-                        >
-                          Roll back
-                        </Button>
-                      )}
-                    </Td>
-                  </tr>
-                ))}
+                {preview.data.actions.map((a) => {
+                  const displayStatus =
+                    changeSet.status === "failed" && a.status === "pending"
+                      ? "not_applied"
+                      : a.status;
+                  return (
+                    <tr key={a.id}>
+                      <Td>{labelize(a.actionType)}</Td>
+                      <Td className="max-w-72 text-right font-mono text-xs">
+                        {a.beforeValue ?? a.beforeDetail ?? "—"}
+                      </Td>
+                      <Td className="max-w-72 text-right font-mono text-xs">
+                        {a.afterValue ?? a.afterDetail ?? "—"}
+                      </Td>
+                      <Td>
+                        <Badge tone={statusTone[displayStatus] ?? "neutral"}>
+                          {labelize(displayStatus)}
+                        </Badge>
+                      </Td>
+                      <Td className="font-mono text-xs text-zinc-500">
+                        {a.amazonRequestId ?? "—"}
+                      </Td>
+                      <Td>
+                        {a.rollbackAvailable &&
+                          (a.status === "applied" ||
+                            a.status === "partially_applied") && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={rollback.isPending}
+                              onClick={() =>
+                                rollback.mutate(a.id, {
+                                  onSuccess: () => toast("Rollback requested"),
+                                  onError: (err) =>
+                                    toast(
+                                      `Rollback failed: ${err.message}`,
+                                      "error",
+                                    ),
+                                })
+                              }
+                            >
+                              Roll back
+                            </Button>
+                          )}
+                      </Td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </Table>
           )}
+          {changeSet.status === "failed" && (
+            <div
+              role="alert"
+              className="mx-4 rounded-lg border border-red-900/70 bg-red-950/30 px-3 py-2 text-sm text-red-200"
+            >
+              <p>This attempt did not complete.</p>
+              {preview.data.actions.find((a) => a.errorMessage)
+                ?.errorMessage && (
+                <p className="mt-1 text-xs text-red-300">
+                  {
+                    preview.data.actions.find((a) => a.errorMessage)
+                      ?.errorMessage
+                  }
+                </p>
+              )}
+              <p className="mt-1 text-xs text-zinc-400">
+                A retry re-reads Amazon first and stops if the live settings no
+                longer match this approval.
+              </p>
+            </div>
+          )}
           {(changeSet.status === "draft" ||
-            changeSet.status === "previewed") && (
+            changeSet.status === "previewed" ||
+            changeSet.status === "failed") && (
             <div className="flex justify-end px-4 pb-3">
               <Button variant="primary" onClick={() => setConfirmApply(true)}>
-                Apply to Amazon…
+                {changeSet.status === "failed"
+                  ? "Retry apply to Amazon…"
+                  : "Apply to Amazon…"}
               </Button>
             </div>
           )}
@@ -142,8 +174,16 @@ function ChangeSetDetail({ changeSet }: { changeSet: ChangeSet }) {
 
       <Dialog
         open={confirmApply}
-        title="Apply this change set to Amazon?"
-        confirmLabel="Yes, write to Amazon"
+        title={
+          changeSet.status === "failed"
+            ? "Retry this change set on Amazon?"
+            : "Apply this change set to Amazon?"
+        }
+        confirmLabel={
+          changeSet.status === "failed"
+            ? "Yes, retry Amazon write"
+            : "Yes, write to Amazon"
+        }
         confirmVariant="danger"
         busy={apply.isPending}
         onClose={() => setConfirmApply(false)}

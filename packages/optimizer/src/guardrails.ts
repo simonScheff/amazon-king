@@ -42,7 +42,11 @@ export const DEFAULT_GUARDRAIL_CONFIG: GuardrailConfig = {
 };
 
 export interface GuardrailAction {
-  actionType: "update_bid" | "add_negative_exact" | "update_budget";
+  actionType:
+    | "update_bid"
+    | "add_negative_exact"
+    | "remove_negative_exact"
+    | "update_budget";
   targetId?: string | null;
   campaignId?: string | null;
   searchTerm?: string | null;
@@ -164,6 +168,10 @@ export function checkGuardrails(input: GuardrailInput): GuardrailResult {
         }
         break;
       }
+      case "remove_negative_exact":
+        // A rollback removes a negative; protected-term checks apply only
+        // when creating the exclusion. Campaign protection still applies.
+        break;
       case "update_bid": {
         const before = action.beforeMicros ?? null;
         const after = action.afterMicros ?? null;

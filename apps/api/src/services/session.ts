@@ -10,6 +10,7 @@ import {
 import type { MagicLinkSender } from "../email.js";
 import type {
   AuthContext,
+  LoginStartResult,
   RequestMeta,
   SessionService,
   VerifiedLogin,
@@ -72,7 +73,10 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
   }
 
   return {
-    async startLogin(email: string, meta: RequestMeta): Promise<void> {
+    async startLogin(
+      email: string,
+      meta: RequestMeta,
+    ): Promise<LoginStartResult> {
       if (
         config.ownerEmail &&
         email.toLowerCase() !== config.ownerEmail.toLowerCase()
@@ -80,7 +84,7 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
         // Single-owner lock: do not issue tokens to other addresses, and do
         // not reveal whether the address is allowed (silent no-op).
         logger.warn({ event: "login_denied" }, "Login denied by OWNER_EMAIL");
-        return;
+        return {};
       }
       const token = randomToken();
       await sessions.createLoginToken(db, {
@@ -98,7 +102,7 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
           expiresInMinutes: LOGIN_TOKEN_TTL_MS / 60_000,
         });
         logger.info({ event: "magic_link_sent" }, "Magic login link sent");
-        return;
+        return {};
       }
       if (!config.isDevelopment) {
         throw new Error("Magic-link delivery is not configured");
@@ -110,6 +114,7 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
         "Magic login link (dev delivery)",
       );
       void meta;
+      return { devLoginUrl: link };
     },
 
     async verifyLogin(

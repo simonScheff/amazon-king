@@ -12,11 +12,14 @@ import {
   auditEventSchema,
   bookSchema,
   campaignDetailSchema,
-  campaignRowSchema,
+  campaignListRowSchema,
+  campaignMaxCpcSchema,
+  cannibalizationResolutionContextSchema,
   changeActionSchema,
   changeSetSchema,
   dashboardSummarySchema,
   dataFreshnessSchema,
+  maxCpcChangeSetResultSchema,
   recommendationSchema,
   sessionInfoSchema,
   syncRunSchema,
@@ -28,7 +31,7 @@ import {
   type RecommendationState,
   type RecommendationType,
 } from "@amazon-king/contracts";
-import { apiFetch, setCsrfToken } from "./client";
+import { ApiError, apiFetch, setCsrfToken } from "./client";
 
 // ---------------------------------------------------------------------------
 // Response schemas. Where the contracts package does not yet define a shape
@@ -39,6 +42,11 @@ import { apiFetch, setCsrfToken } from "./client";
 // needs one to send x-csrf-token on mutations.
 const sessionResponseSchema = sessionInfoSchema.extend({
   csrfToken: z.string(),
+});
+
+const loginResponseSchema = z.object({
+  ok: z.literal(true),
+  devLoginUrl: z.url().optional(),
 });
 
 export const dashboardSummaryResponseSchema = dashboardSummarySchema;
@@ -79,17 +87,39 @@ export function useSession() {
 export function useLogin() {
   return useMutation({
     mutationFn: (body: LoginRequest) =>
-      apiFetch("/api/session/login", { method: "POST", body }),
+      apiFetch("/api/session/login", {
+        method: "POST",
+        body,
+        schema: loginResponseSchema,
+      }),
   });
 }
 
 export function useLogout() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => apiFetch("/api/session/logout", { method: "POST" }),
+    mutationFn: async () => {
+      try {
+        await apiFetch("/api/session/logout", { method: "POST" });
+      } catch (error) {
+        // An expired session is already signed out. A stale CSRF token can
+        // happen in a long-open tab; refresh it once from the live session and
+        // retry instead of trapping the user in the authenticated layout.
+        if (error instanceof ApiError && error.status === 401) return;
+        if (!(error instanceof ApiError) || error.status !== 403) throw error;
+
+        const session = await apiFetch("/api/session", {
+          schema: sessionResponseSchema,
+        });
+        setCsrfToken(session.csrfToken);
+        await apiFetch("/api/session/logout", { method: "POST" });
+      }
+    },
     onSuccess: () => {
       setCsrfToken(null);
-      qc.clear();
+      // Remove only the stale authenticated session. Clearing or refetching
+      // from inside this mutation can dispose the observer or race navigation.
+      qc.removeQueries({ queryKey: ["session"], exact: true });
     },
   });
 }
@@ -183,11 +213,14 @@ export function useDataFreshness() {
 // Campaigns
 // ---------------------------------------------------------------------------
 
-export function useCampaigns() {
+export function useCampaigns(days = 7) {
   return useQuery({
-    queryKey: ["campaigns"],
+    queryKey: ["campaigns", days],
     queryFn: () =>
-      apiFetch("/api/campaigns", { schema: z.array(campaignRowSchema) }),
+      apiFetch("/api/campaigns", {
+        query: { days },
+        schema: z.array(campaignListRowSchema),
+      }),
   });
 }
 
@@ -200,6 +233,34 @@ export function useCampaign(campaignId: string, days: number) {
         query: { days },
         schema: campaignDetailSchema,
       }),
+  });
+}
+
+export function useCampaignMaxCpc(campaignId: string) {
+  return useQuery({
+    queryKey: ["campaign-max-cpc", campaignId],
+    queryFn: () =>
+      apiFetch(`/api/campaigns/${campaignId}/max-cpc`, {
+        schema: campaignMaxCpcSchema,
+      }),
+  });
+}
+
+export function useSetCampaignMaxCpc(campaignId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { maxCpc: string }) =>
+      apiFetch(`/api/campaigns/${campaignId}/max-cpc`, {
+        method: "POST",
+        body,
+        schema: maxCpcChangeSetResultSchema,
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["campaign-max-cpc", campaignId] }),
+        qc.invalidateQueries({ queryKey: ["change-sets"] }),
+      ]);
+    },
   });
 }
 
@@ -228,6 +289,35 @@ export function useRecommendation(id: string) {
       apiFetch(`/api/recommendations/${id}`, {
         schema: recommendationSchema,
       }),
+  });
+}
+
+export function useCannibalizationResolutionContext(id: string) {
+  return useQuery({
+    queryKey: ["recommendation", id, "cannibalization-context"],
+    queryFn: () =>
+      apiFetch(`/api/recommendations/${id}/cannibalization-context`, {
+        schema: cannibalizationResolutionContextSchema,
+      }),
+  });
+}
+
+export function useCreateCannibalizationChangeSet(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { destinationCampaignId: string }) =>
+      apiFetch(`/api/recommendations/${id}/cannibalization-change-set`, {
+        method: "POST",
+        body,
+        schema: changeSetSchema,
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["recommendations"] }),
+        qc.invalidateQueries({ queryKey: ["recommendation", id] }),
+        qc.invalidateQueries({ queryKey: ["change-sets"] }),
+      ]);
+    },
   });
 }
 
@@ -286,7 +376,13 @@ export function useApplyChangeSet(changeSetId: string) {
   return useMutation({
     mutationFn: () =>
       apiFetch(`/api/change-sets/${changeSetId}/apply`, { method: "POST" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["change-sets"] }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["change-sets"] }),
+        qc.invalidateQueries({ queryKey: ["campaign-max-cpc"] }),
+        qc.invalidateQueries({ queryKey: ["campaign"] }),
+      ]);
+    },
   });
 }
 

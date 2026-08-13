@@ -265,3 +265,18 @@ export async function getRecommendationForWorkspace(
   );
   return result.rows[0] ? withProfile(result.rows[0]) : null;
 }
+
+/** Fetch the immutable inputs captured when a recommendation was produced. */
+export async function getRecommendationEvidence(
+  db: Db,
+  recommendationId: string,
+): Promise<unknown | null> {
+  const result = await db.query<{ inputs: unknown }>(
+    `select inputs from recommendation_evidence
+     where recommendation_id = $1
+     order by id
+     limit 1`,
+    [recommendationId],
+  );
+  return result.rows[0]?.inputs ?? null;
+}

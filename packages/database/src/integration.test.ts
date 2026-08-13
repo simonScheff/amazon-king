@@ -8,7 +8,10 @@ import {
   dashboardTotals,
   MixedCurrencyError,
 } from "./repositories/metrics.js";
-import { campaignDailySeries } from "./repositories/dashboard.js";
+import {
+  campaignDailySeries,
+  listCampaignRows,
+} from "./repositories/dashboard.js";
 import { enqueue, claim, reapExpiredLeases, complete } from "./queue.js";
 import {
   upsertAd,
@@ -76,7 +79,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
 
   it("applies migrations cleanly and is re-runnable", async () => {
     const applied = await migrate(pool);
-    expect(applied).toEqual(["0001"]);
+    expect(applied).toEqual(["0001", "0002"]);
     const again = await migrate(pool);
     expect(again).toEqual([]);
     const tables = await pool.query<{ count: string }>(
@@ -321,6 +324,12 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         campaignId: "amzn-campaign-book-map",
         metricDate: "2026-08-13",
       },
+      {
+        ...metricValues,
+        profileId,
+        campaignId: "amzn-campaign-book-map",
+        metricDate: "2026-08-14",
+      },
     ]);
     await upsertAdvertisedProductMetrics(pool, [
       {
@@ -338,7 +347,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         profileId,
         "amzn-campaign-book-map",
         "2026-08-13",
-        "2026-08-13",
+        "2026-08-14",
       ),
     ).resolves.toEqual([
       {
@@ -348,6 +357,26 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         orders: 2,
         currency: "USD",
         estimatedRoyalty: "8.5000",
+      },
+      {
+        date: "2026-08-14",
+        cost: "5.0000",
+        sales: "20.0000",
+        orders: 2,
+        currency: "USD",
+        estimatedRoyalty: "8.5000",
+      },
+    ]);
+    await expect(
+      listCampaignRows(pool, workspaceId, "2026-08-13", "2026-08-14"),
+    ).resolves.toMatchObject([
+      {
+        amazonCampaignId: "amzn-campaign-book-map",
+        currency: "USD",
+        estimatedRoyalty: "17.0000",
+        economicsMissing: false,
+        dataCurrentThrough: "2026-08-14",
+        mixedCurrency: false,
       },
     ]);
     await expect(
@@ -371,6 +400,30 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       [workspaceId, profileId],
     );
     expect(counts.rows[0]).toEqual({ books: "1", links: "1" });
+
+    // Do not infer attribution when another current ad is not mapped to the
+    // same book. Product-level data remains mandatory in that case.
+    await upsertAd(pool, {
+      profileId,
+      adGroupId: adGroup.id,
+      amazonAdId: "amzn-ad-unmapped",
+      asin: "B099999999",
+      state: "enabled",
+    });
+    await expect(
+      campaignDailySeries(
+        pool,
+        profileId,
+        "amzn-campaign-book-map",
+        "2026-08-14",
+        "2026-08-14",
+      ),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        date: "2026-08-14",
+        estimatedRoyalty: null,
+      }),
+    ]);
   });
 
   it("recommendations store immutable evidence and expire stale rows", async () => {

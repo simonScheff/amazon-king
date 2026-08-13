@@ -70,6 +70,9 @@ describe("gateway.syncCampaignStructure", () => {
       "/sp/keywords/list": fixture("sp-keywords-list.json"),
       "/sp/targets/list": fixture("sp-targets-list.json"),
       "/sp/negativeKeywords/list": fixture("sp-negativeKeywords-list.json"),
+      "/sp/campaignNegativeKeywords/list": fixture(
+        "sp-campaignNegativeKeywords-list.json",
+      ),
     };
     const { gateway } = makeGateway((request) => {
       const path = new URL(request.url).pathname;
@@ -89,7 +92,7 @@ describe("gateway.syncCampaignStructure", () => {
     expect(snapshot.ads[0].asin).toBe("B0CXYZ1234");
     expect(snapshot.keywords).toHaveLength(2);
     expect(snapshot.targets).toHaveLength(1);
-    expect(snapshot.negativeKeywords).toHaveLength(1);
+    expect(snapshot.negativeKeywords).toHaveLength(2);
   });
 });
 
@@ -137,7 +140,14 @@ describe("gateway.previewCapabilities", () => {
         "spTargeting",
         "spAdvertisedProduct",
       ],
-      writeOperations: ["update_bid", "add_negative_exact"],
+      writeOperations: [
+        "update_bid",
+        "update_ad_group_default_bid",
+        "update_campaign_bidding",
+        "update_optimization_rule",
+        "add_negative_exact",
+        "remove_negative_exact",
+      ],
     });
   });
 });
@@ -149,6 +159,14 @@ describe("gateway.applyActions", () => {
         return jsonResponse(fixture("sp-keywords-write-207.json"), {
           status: 207,
         });
+      }
+      if (request.url.endsWith("/sp/campaignNegativeKeywords")) {
+        return jsonResponse(
+          fixture("sp-campaignNegativeKeywords-write-207.json"),
+          {
+            status: 207,
+          },
+        );
       }
       if (request.url.endsWith("/sp/negativeKeywords")) {
         return jsonResponse(fixture("sp-negativeKeywords-write-207.json"), {
@@ -197,5 +215,42 @@ describe("gateway.applyActions", () => {
     ]);
     // Batch HTTP success never implies per-item success.
     expect(results[1].code).toBe("INVALID_VALUE");
+  });
+
+  it("routes campaign negative rollback to the matching delete resource", async () => {
+    const { gateway, calls } = makeGateway((request) => {
+      if (request.url.endsWith("/sp/campaignNegativeKeywords/delete")) {
+        return jsonResponse(
+          {
+            campaignNegativeKeywords: {
+              success: [{ index: 0, campaignNegativeKeywordId: "990123459" }],
+              error: [],
+            },
+          },
+          { status: 207 },
+        );
+      }
+      throw new Error(`unexpected call: ${request.url}`);
+    });
+    const results = await gateway.applyActions({
+      changeSetId: "rollback-1",
+      profileId: "1111111111",
+      actions: [
+        {
+          actionId: "remove-1",
+          kind: "remove_negative_exact",
+          negativeKeywordId: "990123459",
+          scope: "campaign",
+        },
+      ],
+    });
+    expect(calls).toHaveLength(1);
+    expect(JSON.parse(calls[0].body as string)).toEqual({
+      campaignNegativeKeywordIdFilter: { include: ["990123459"] },
+    });
+    expect(results[0]).toMatchObject({
+      actionId: "remove-1",
+      status: "applied",
+    });
   });
 });

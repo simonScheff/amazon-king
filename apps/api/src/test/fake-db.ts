@@ -22,8 +22,10 @@ export interface FakeTables {
   adGroups: FakeRow[];
   targets: FakeRow[];
   recommendations: FakeRow[];
+  recommendationEvidence: FakeRow[];
   changeSets: FakeRow[];
   changeActions: FakeRow[];
+  campaignBidPolicies: FakeRow[];
   syncRuns: FakeRow[];
   jobQueue: FakeRow[];
   auditEvents: FakeRow[];
@@ -43,8 +45,10 @@ function emptyTables(): FakeTables {
     adGroups: [],
     targets: [],
     recommendations: [],
+    recommendationEvidence: [],
     changeSets: [],
     changeActions: [],
+    campaignBidPolicies: [],
     syncRuns: [],
     jobQueue: [],
     auditEvents: [],
@@ -157,6 +161,20 @@ export class FakeDb {
     return row;
   }
 
+  seedRecommendationEvidence(
+    recommendationId: string,
+    inputs: unknown,
+  ): FakeRow {
+    const row = {
+      id: nextId(),
+      recommendation_id: recommendationId,
+      inputs,
+      created_at: new Date(),
+    };
+    this.tables.recommendationEvidence.push(row);
+    return row;
+  }
+
   seedChangeSet(overrides: Partial<FakeRow> = {}): FakeRow {
     const row = {
       id: nextId(),
@@ -167,6 +185,8 @@ export class FakeDb {
       fingerprint: `fp-${nextId()}`,
       created_at: new Date(),
       applied_at: null,
+      kind: "recommendation",
+      metadata: {},
       ...overrides,
     };
     this.tables.changeSets.push(row);
@@ -192,6 +212,10 @@ export class FakeDb {
       amazon_request_id: null,
       verified_at: null,
       rollback_of_id: null,
+      amazon_entity_id: null,
+      entity_name: null,
+      before_state: null,
+      after_state: null,
       created_at: new Date(),
       ...overrides,
     };
@@ -222,6 +246,7 @@ export class FakeDb {
       amazon_campaign_id: "camp-1",
       name: "Campaign",
       state: "enabled",
+      targeting_type: "manual",
       ...overrides,
     };
     this.tables.campaigns.push(row);
@@ -657,6 +682,15 @@ export class FakeDb {
 
       // -- recommendations ---------------------------------------------------------
       {
+        match: "select inputs from recommendation_evidence",
+        handle: (p) =>
+          this.ok(
+            t.recommendationEvidence.filter(
+              (row) => row.recommendation_id === p[0],
+            ),
+          ),
+      },
+      {
         match: "from recommendations r join amazon_profiles",
         handle: (p, db, text) => {
           const rows = t.recommendations
@@ -701,6 +735,13 @@ export class FakeDb {
 
       // -- change sets / actions -----------------------------------------------------
       {
+        match: "from campaign_bid_policies where campaign_id = $1",
+        handle: (p) =>
+          this.ok(
+            t.campaignBidPolicies.filter((row) => row.campaign_id === p[0]),
+          ),
+      },
+      {
         match: "select pg_advisory_xact_lock",
         handle: () => this.ok(),
       },
@@ -721,6 +762,8 @@ export class FakeDb {
             fingerprint: p[2],
             created_at: new Date(),
             applied_at: null,
+            kind: p[4],
+            metadata: JSON.parse(p[5] as string),
           };
           t.changeSets.push(row);
           return this.ok([row]);
@@ -742,6 +785,10 @@ export class FakeDb {
             after_value: p[8],
             fingerprint: p[9],
             rollback_of_id: p[10],
+            amazon_entity_id: p[11],
+            entity_name: p[12],
+            before_state: p[13] === null ? null : JSON.parse(p[13] as string),
+            after_state: p[14] === null ? null : JSON.parse(p[14] as string),
             status: "pending",
             amazon_request: null,
             amazon_response: null,
@@ -843,6 +890,7 @@ export class FakeDb {
           if (p[3] !== null) row.amazon_response = JSON.parse(p[3] as string);
           if (p[4] !== null) row.amazon_request_id = p[4];
           if (p[5] !== null) row.verified_at = p[5];
+          if (p[6] !== null) row.amazon_entity_id = p[6];
           return { rows: [row], rowCount: 1 };
         },
       },

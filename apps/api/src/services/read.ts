@@ -1,6 +1,7 @@
 import type {
   AmazonProfile,
   Book,
+  CannibalizationResolutionContext,
   DashboardSummary,
 } from "@amazon-king/contracts";
 import {
@@ -22,6 +23,7 @@ import {
   type Db,
 } from "@amazon-king/database";
 import type { FastifyBaseLogger as Logger } from "fastify";
+import { z } from "zod";
 import type { ApiConfig } from "../config.js";
 import { ApiError, conflict, notFound } from "../errors.js";
 import {
@@ -47,6 +49,19 @@ export interface ReadServiceDeps {
 const MAX_DAYS = 90;
 const MANUAL_SYNC_HISTORY_DAYS = 60;
 const DAY_MS = 86_400_000;
+
+const cannibalizationEvidenceSchema = z.object({
+  searchTerm: z.string().min(1),
+  campaigns: z
+    .array(
+      z.object({
+        campaignId: z.string(),
+        orders: z.number().int().nonnegative(),
+        costMicros: z.number().int().nonnegative(),
+      }),
+    )
+    .min(2),
+});
 
 function dateRange(now: Date, days: number): { start: string; end: string } {
   const clamped = Math.min(Math.max(Math.trunc(days) || 30, 1), MAX_DAYS);
@@ -365,13 +380,40 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         start,
         end,
       );
-      return rows.map((row) => ({
-        profileId: row.amazonProfileId,
-        campaignId: row.amazonCampaignId,
-        name: row.name,
-        state: row.state,
-        totals: row.totals,
-      }));
+      if (rows.some((row) => row.mixedCurrency)) {
+        throw conflict(
+          "MIXED_CURRENCY",
+          "Campaign metrics mix currencies; refusing to aggregate (plan §9)",
+        );
+      }
+      return rows.map((row) => {
+        const estimatedRoyaltyMicros =
+          row.estimatedRoyalty === null
+            ? null
+            : microsFromDecimalString(row.estimatedRoyalty);
+        const costMicros = microsFromDecimalString(row.totals.cost);
+        return {
+          profileId: row.amazonProfileId,
+          campaignId: row.amazonCampaignId,
+          name: row.name,
+          state: row.state,
+          totals: row.totals,
+          profitability: {
+            dateRange: { start, end },
+            currency: row.currency as DashboardSummary["currency"],
+            estimatedRoyalty:
+              estimatedRoyaltyMicros === null
+                ? null
+                : microsToDecimalString(estimatedRoyaltyMicros),
+            estimatedAdProfit:
+              estimatedRoyaltyMicros === null
+                ? null
+                : microsToDecimalString(estimatedRoyaltyMicros - costMicros),
+            economicsMissing: row.economicsMissing,
+            dataCurrentThrough: row.dataCurrentThrough,
+          },
+        };
+      });
     },
 
     async getCampaignDetail(workspaceId, amazonCampaignId, days) {
@@ -641,6 +683,78 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         recommendationId,
       );
       return row ? toContractRecommendation(row) : null;
+    },
+
+    async getCannibalizationResolutionContext(
+      workspaceId,
+      recommendationId,
+    ): Promise<CannibalizationResolutionContext | null> {
+      const row = await recommendations.getRecommendationForWorkspace(
+        db,
+        workspaceId,
+        recommendationId,
+      );
+      if (!row) return null;
+      if (row.type !== "cannibalization_conflict") {
+        throw conflict(
+          "INVALID_RECOMMENDATION_TYPE",
+          "Only cannibalization findings have a resolution context",
+        );
+      }
+      const evidence = cannibalizationEvidenceSchema.safeParse(
+        await recommendations.getRecommendationEvidence(db, row.id),
+      );
+      if (!evidence.success) {
+        throw conflict(
+          "INCOMPLETE_EVIDENCE",
+          "This finding does not contain the campaign evidence needed for a safe resolution",
+        );
+      }
+      const profile = await profiles.getProfile(db, row.profileId);
+      if (!profile) throw new ApiError(500, "INTERNAL", "Profile row missing");
+      const campaignRows = await Promise.all(
+        evidence.data.campaigns.map(async (entry) => ({
+          entry,
+          campaign: await structure.getCampaign(db, entry.campaignId),
+        })),
+      );
+      if (
+        campaignRows.some(
+          ({ campaign }) =>
+            campaign === null || campaign.profileId !== row.profileId,
+        )
+      ) {
+        throw conflict(
+          "INCOMPLETE_EVIDENCE",
+          "An affected campaign is missing or no longer belongs to this profile; re-sync before resolving",
+        );
+      }
+      const totalCostMicros = evidence.data.campaigns.reduce(
+        (sum, campaign) => sum + campaign.costMicros,
+        0,
+      );
+      return {
+        recommendationId: row.id,
+        profileId: row.amazonProfileId,
+        searchTerm: evidence.data.searchTerm,
+        currency: profile.currencyCode,
+        confidence: Number(row.confidence),
+        evidenceWindow: {
+          start: isoDate(row.evidenceWindowStart),
+          end: isoDate(row.evidenceWindowEnd),
+        },
+        dataFreshness: isoDateTime(row.dataFreshnessAt),
+        expiresAt: isoDateTime(row.expiresAt),
+        totalSpend: microsToDecimalString(totalCostMicros),
+        campaigns: campaignRows.map(({ entry, campaign }) => ({
+          campaignId: campaign!.amazonCampaignId,
+          name: campaign!.name,
+          state: campaign!.state,
+          targetingType: campaign!.targetingType,
+          spend: microsToDecimalString(entry.costMicros),
+          orders: entry.orders,
+        })),
+      };
     },
 
     async rejectRecommendation(auth, recommendationId, meta) {

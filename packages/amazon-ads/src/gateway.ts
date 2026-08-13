@@ -15,13 +15,22 @@ import {
   listProductAds,
   listTargets,
 } from "./adapters/sp-campaigns.js";
+import { listCampaignOptimizationRules } from "./adapters/sp-rules.js";
 import {
   createNegativeKeywords,
+  createCampaignNegativeKeywords,
+  deleteCampaignNegativeKeywords,
+  deleteNegativeKeywords,
+  disableOptimizationRules,
+  updateAdGroupDefaultBids,
+  updateCampaignBidding,
   updateKeywordBids,
+  updateTargetBids,
 } from "./adapters/sp-writes.js";
 import type {
   ActionResult,
   AmazonRegion,
+  CampaignBidControls,
   Capabilities,
   ChangeSet,
   Profile,
@@ -40,6 +49,10 @@ import type {
 export interface AmazonAdsGateway {
   listProfiles(connectionId: string): Promise<Profile[]>;
   syncCampaignStructure(profileId: string): Promise<StructureSnapshot>;
+  getCampaignBidControls(
+    profileId: string,
+    campaignId: string,
+  ): Promise<CampaignBidControls>;
   requestReport(profileId: string, spec: ReportSpec): Promise<ReportJob>;
   getReport(reportId: string): Promise<ReportStatus>;
   previewCapabilities(profileId: string): Promise<Capabilities>;
@@ -144,6 +157,34 @@ export function createAmazonAdsGateway(
       };
     },
 
+    async getCampaignBidControls(
+      profileId: string,
+      campaignId: string,
+    ): Promise<CampaignBidControls> {
+      const context = await contextFor(profileId);
+      const [campaigns, adGroups, keywords, targets, optimizationRules] =
+        await Promise.all([
+          listCampaigns(http, context),
+          listAdGroups(http, context),
+          listKeywords(http, context),
+          listTargets(http, context),
+          listCampaignOptimizationRules(http, context, campaignId),
+        ]);
+      const campaign = campaigns.find((item) => item.campaignId === campaignId);
+      if (!campaign) {
+        throw new Error(`Amazon campaign ${campaignId} was not found`);
+      }
+      return {
+        profileId,
+        retrievedAt: now(),
+        campaign,
+        adGroups: adGroups.filter((item) => item.campaignId === campaignId),
+        keywords: keywords.filter((item) => item.campaignId === campaignId),
+        targets: targets.filter((item) => item.campaignId === campaignId),
+        optimizationRules,
+      };
+    },
+
     async requestReport(
       profileId: string,
       spec: ReportSpec,
@@ -174,7 +215,14 @@ export function createAmazonAdsGateway(
         region: entry.region,
         adProducts: ["SPONSORED_PRODUCTS"],
         reportTypes: SUPPORTED_REPORT_TYPES,
-        writeOperations: ["update_bid", "add_negative_exact"],
+        writeOperations: [
+          "update_bid",
+          "update_ad_group_default_bid",
+          "update_campaign_bidding",
+          "update_optimization_rule",
+          "add_negative_exact",
+          "remove_negative_exact",
+        ],
       };
     },
 
@@ -183,16 +231,99 @@ export function createAmazonAdsGateway(
       const bidActions = changeSet.actions.filter(
         (action) => action.kind === "update_bid",
       );
+      const keywordBidActions = bidActions.filter(
+        (action) => action.entityType !== "target",
+      );
+      const targetBidActions = bidActions.filter(
+        (action) => action.entityType === "target",
+      );
+      const adGroupActions = changeSet.actions.filter(
+        (action) => action.kind === "update_ad_group_default_bid",
+      );
+      const campaignActions = changeSet.actions.filter(
+        (action) => action.kind === "update_campaign_bidding",
+      );
+      const ruleActions = changeSet.actions.filter(
+        (action) => action.kind === "update_optimization_rule",
+      );
       const negativeActions = changeSet.actions.filter(
         (action) => action.kind === "add_negative_exact",
       );
+      const adGroupNegativeActions = negativeActions.filter(
+        (action) => action.adGroupId !== undefined,
+      );
+      const campaignNegativeActions = negativeActions.filter(
+        (action) => action.adGroupId === undefined,
+      );
+      const negativeRemovalActions = changeSet.actions.filter(
+        (action) => action.kind === "remove_negative_exact",
+      );
+      const adGroupNegativeRemovalActions = negativeRemovalActions.filter(
+        (action) => action.scope === "ad_group",
+      );
+      const campaignNegativeRemovalActions = negativeRemovalActions.filter(
+        (action) => action.scope === "campaign",
+      );
       const results: ActionResult[] = [];
-      if (bidActions.length > 0) {
-        results.push(...(await updateKeywordBids(http, context, bidActions)));
-      }
-      if (negativeActions.length > 0) {
+      if (keywordBidActions.length > 0) {
         results.push(
-          ...(await createNegativeKeywords(http, context, negativeActions)),
+          ...(await updateKeywordBids(http, context, keywordBidActions)),
+        );
+      }
+      if (targetBidActions.length > 0) {
+        results.push(
+          ...(await updateTargetBids(http, context, targetBidActions)),
+        );
+      }
+      if (adGroupActions.length > 0) {
+        results.push(
+          ...(await updateAdGroupDefaultBids(http, context, adGroupActions)),
+        );
+      }
+      if (campaignActions.length > 0) {
+        results.push(
+          ...(await updateCampaignBidding(http, context, campaignActions)),
+        );
+      }
+      if (ruleActions.length > 0) {
+        results.push(
+          ...(await disableOptimizationRules(http, context, ruleActions)),
+        );
+      }
+      if (adGroupNegativeActions.length > 0) {
+        results.push(
+          ...(await createNegativeKeywords(
+            http,
+            context,
+            adGroupNegativeActions,
+          )),
+        );
+      }
+      if (campaignNegativeActions.length > 0) {
+        results.push(
+          ...(await createCampaignNegativeKeywords(
+            http,
+            context,
+            campaignNegativeActions,
+          )),
+        );
+      }
+      if (adGroupNegativeRemovalActions.length > 0) {
+        results.push(
+          ...(await deleteNegativeKeywords(
+            http,
+            context,
+            adGroupNegativeRemovalActions,
+          )),
+        );
+      }
+      if (campaignNegativeRemovalActions.length > 0) {
+        results.push(
+          ...(await deleteCampaignNegativeKeywords(
+            http,
+            context,
+            campaignNegativeRemovalActions,
+          )),
         );
       }
       logger.info(

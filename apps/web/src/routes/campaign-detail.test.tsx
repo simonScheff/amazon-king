@@ -45,6 +45,10 @@ vi.mock("../components/performance-trend-chart", () => ({
   ),
 }));
 
+vi.mock("../components/campaign-max-cpc", () => ({
+  CampaignMaxCpc: () => <div>Max CPC controls</div>,
+}));
+
 const detail: CampaignDetail = {
   dateRange: { start: "2026-08-07", end: "2026-08-13" },
   currency: "USD",
@@ -123,5 +127,13 @@ describe("CampaignDetailPage profitability", () => {
       search: { days: 14 },
       replace: true,
     });
+  });
+
+  it("opens campaign-wide Max CPC controls from the breakdown tabs", () => {
+    render(<CampaignDetailPage />);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Max CPC" }));
+
+    expect(screen.getByText("Max CPC controls")).toBeInTheDocument();
   });
 });

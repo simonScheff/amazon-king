@@ -1,0 +1,12 @@
+{
+  "totalResults": 1,
+  "campaignNegativeKeywords": [
+    {
+      "keywordId": 990123458,
+      "campaignId": 901234568,
+      "keywordText": "tractor colouring book",
+      "matchType": "NEGATIVE_EXACT",
+      "state": "ENABLED"
+    }
+  ]
+}

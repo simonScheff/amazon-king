@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyBaseLogger as Logger } from "fastify";
+import { AmazonApiError } from "@amazon-king/amazon-ads";
 import type {
   ActionResult,
   AmazonAdsGateway,
@@ -99,10 +100,35 @@ function snapshotWithKeywordBid(bid: number | null): StructureSnapshot {
     campaigns: [],
     adGroups: [],
     ads: [],
-    keywords: [{ keywordId: "kw-1", bid }],
+    keywords: [{ keywordId: "kw-1", bid, state: "PAUSED" }],
     targets: [],
     negativeKeywords: [],
   } as unknown as StructureSnapshot;
+}
+
+function snapshotWithNegative(present: boolean): StructureSnapshot {
+  return {
+    profileId: "amz-profile-1",
+    retrievedAt: "2026-08-13T10:00:00.000Z",
+    campaigns: [],
+    adGroups: [],
+    ads: [],
+    keywords: [],
+    targets: [],
+    negativeKeywords: present
+      ? [
+          {
+            negativeKeywordId: "negative-1",
+            campaignId: "camp-2",
+            adGroupId: null,
+            keywordText: "tractor colouring book",
+            matchType: "NEGATIVE_EXACT",
+            state: "ENABLED",
+            raw: {},
+          },
+        ]
+      : [],
+  };
 }
 
 // -- session service (Login A, plan §5) --------------------------------------
@@ -157,6 +183,21 @@ describe("session service", () => {
     expect(db.tables.sessions[0]!.token_hash).not.toBe(verified!.sessionToken);
   });
 
+  it("returns the single-use login URL when local email delivery is absent", async () => {
+    const db = new FakeDb();
+    const service = createSessionService({
+      db: db as never,
+      config: testConfig(),
+      logger: fakeLogger(),
+    });
+
+    const result = await service.startLogin("owner@example.com", META);
+
+    expect(result.devLoginUrl).toMatch(
+      /^http:\/\/localhost:3000\/api\/session\/verify\?token=/,
+    );
+  });
+
   it("consumes login tokens exactly once", async () => {
     const db = new FakeDb();
     const logger = fakeLogger();
@@ -203,7 +244,7 @@ describe("session service", () => {
       sendMagicLink,
     });
 
-    await service.startLogin("owner@example.com", META);
+    const result = await service.startLogin("owner@example.com", META);
 
     expect(sendMagicLink).toHaveBeenCalledOnce();
     expect(sendMagicLink).toHaveBeenCalledWith(
@@ -216,6 +257,7 @@ describe("session service", () => {
       }),
     );
     expect(JSON.stringify(logger.calls)).not.toContain("/api/session/verify");
+    expect(result).toEqual({});
   });
 
   it("accepts its own CSRF token and rejects anything else", async () => {
@@ -440,6 +482,9 @@ describe("read service", () => {
 describe("change service", () => {
   const gatewayBase = () => ({
     syncCampaignStructure: vi.fn(async () => snapshotWithKeywordBid(0.5)),
+    getCampaignBidControls: vi.fn(async () => {
+      throw new Error("Unexpected Max CPC controls call");
+    }),
     applyActions: vi.fn(
       async (set: {
         actions: { actionId: string }[];
@@ -478,7 +523,7 @@ describe("change service", () => {
       logger: fakeLogger(),
       gateway: gateway as unknown as Pick<
         AmazonAdsGateway,
-        "syncCampaignStructure" | "applyActions"
+        "syncCampaignStructure" | "getCampaignBidControls" | "applyActions"
       >,
     });
     const changeSetId = changeSet.id as string;
@@ -535,6 +580,11 @@ describe("change service", () => {
     expect(applied.changeSet.status).toBe("applied");
     expect(applied.actions[0]!.status).toBe("applied");
     expect(gateway.applyActions).toHaveBeenCalledTimes(1);
+    expect(gateway.applyActions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actions: [expect.objectContaining({ state: "PAUSED" })],
+      }),
+    );
 
     // Double-click / retry: no second Amazon write.
     const again = await service.applyChangeSet(
@@ -568,6 +618,66 @@ describe("change service", () => {
     expect(result.actions[0]!.status).toBe("failed");
   });
 
+  it("retries a failed set through the full guarded apply path", async () => {
+    const { db, service, gateway, changeSetId } = setup();
+    db.tables.changeSets[0]!.status = "failed";
+    db.tables.changeActions[0]!.status = "pending";
+    gateway.syncCampaignStructure
+      .mockResolvedValueOnce(snapshotWithKeywordBid(0.5))
+      .mockResolvedValueOnce(snapshotWithKeywordBid(0.55));
+
+    const result = await service.applyChangeSet(
+      authFixture(),
+      changeSetId,
+      META,
+    );
+
+    expect(result.changeSet.status).toBe("applied");
+    expect(result.actions[0]!.status).toBe("applied");
+    expect(gateway.applyActions).toHaveBeenCalledTimes(1);
+  });
+
+  it("records an Amazon request failure on each unfinished action", async () => {
+    const { db, service, gateway, changeSetId } = setup();
+    gateway.applyActions.mockRejectedValue(
+      new AmazonApiError("Amazon rejected the campaign update", {
+        status: 400,
+        requestId: "request-123",
+        details: {
+          errors: [
+            {
+              code: "INVALID_ARGUMENT",
+              details: "Empty bid adjustment arrays are not accepted",
+            },
+          ],
+        },
+      }),
+    );
+
+    await service
+      .applyChangeSet(authFixture(), changeSetId, META)
+      .catch((error) => expectApiError(error, "AMAZON_APPLY_FAILED"));
+
+    expect(db.tables.changeSets[0]!.status).toBe("failed");
+    expect(db.tables.changeActions[0]).toMatchObject({
+      status: "failed",
+      amazon_request_id: "request-123",
+      amazon_request: expect.objectContaining({ kind: "update_bid" }),
+      amazon_response: {
+        code: "AMAZON_HTTP_400",
+        message: "Empty bid adjustment arrays are not accepted",
+        details: {
+          errors: [
+            {
+              code: "INVALID_ARGUMENT",
+              details: "Empty bid adjustment arrays are not accepted",
+            },
+          ],
+        },
+      },
+    });
+  });
+
   it("marks verification_failed when the post-write re-read disagrees", async () => {
     const { service, gateway, changeSetId } = setup();
     // Both re-reads show the old bid: the write "succeeded" but did not take.
@@ -581,5 +691,235 @@ describe("change service", () => {
     );
     expect(result.actions[0]!.status).toBe("verification_failed");
     expect(result.changeSet.status).toBe("failed");
+  });
+});
+
+describe("cannibalization resolution", () => {
+  function setupCannibalization() {
+    const db = new FakeDb();
+    db.seedWorkspace();
+    db.seedUser("owner@example.com");
+    const connection = db.seedConnection();
+    const profile = db.seedProfile({
+      connection_id: connection.id,
+      write_enabled: true,
+      currency_code: "GBP",
+      profile_id: "1665213640406890",
+    });
+    db.seedCampaign({
+      id: "10",
+      profile_id: profile.id,
+      amazon_campaign_id: "camp-1",
+      name: "Exact campaign",
+      targeting_type: "manual",
+    });
+    db.seedCampaign({
+      id: "11",
+      profile_id: profile.id,
+      amazon_campaign_id: "camp-2",
+      name: "Discovery campaign",
+      targeting_type: "auto",
+    });
+    const recommendation = db.seedRecommendation({
+      profile_id: profile.id,
+      type: "cannibalization_conflict",
+      campaign_id: null,
+      ad_group_id: null,
+      target_id: null,
+      search_term: "tractor colouring book",
+      current_value: null,
+      proposed_value: null,
+      confidence: "0.500",
+      evidence_window_start: "2026-06-14",
+      evidence_window_end: new Date(2026, 7, 12),
+      data_freshness_at: new Date("2026-08-13T02:01:00.000Z"),
+      expires_at: new Date("2026-08-16T02:01:00.000Z"),
+    });
+    db.seedRecommendationEvidence(recommendation.id as string, {
+      searchTerm: "tractor colouring book",
+      campaigns: [
+        { campaignId: "10", orders: 3, costMicros: 13_000_000 },
+        { campaignId: "11", orders: 1, costMicros: 8_980_000 },
+      ],
+      totalCostMicros: 21_980_000,
+    });
+    return { db, profile, recommendation };
+  }
+
+  it("returns fact-only per-campaign evidence for destination selection", async () => {
+    const { db, recommendation } = setupCannibalization();
+    const service = createReadService({
+      db: db as never,
+      config: testConfig(),
+      logger: fakeLogger(),
+    });
+
+    const context = await service.getCannibalizationResolutionContext(
+      "1",
+      recommendation.id as string,
+    );
+
+    expect(context).toMatchObject({
+      profileId: "1665213640406890",
+      searchTerm: "tractor colouring book",
+      currency: "GBP",
+      totalSpend: "21.9800",
+      campaigns: [
+        {
+          campaignId: "camp-1",
+          name: "Exact campaign",
+          spend: "13.0000",
+          orders: 3,
+        },
+        {
+          campaignId: "camp-2",
+          name: "Discovery campaign",
+          spend: "8.9800",
+          orders: 1,
+        },
+      ],
+    });
+  });
+
+  it("creates one campaign-level negative exact on the non-destination campaign", async () => {
+    const { db, recommendation } = setupCannibalization();
+    const gateway = {
+      syncCampaignStructure: vi.fn(async () => snapshotWithNegative(false)),
+      getCampaignBidControls: vi.fn(async () => {
+        throw new Error("Unexpected Max CPC controls call");
+      }),
+      applyActions: vi.fn(async () => []),
+    };
+    const service = createChangeService({
+      db: db as never,
+      pool: db.asPool() as never,
+      config: testConfig(),
+      logger: fakeLogger(),
+      gateway: gateway as unknown as Pick<
+        AmazonAdsGateway,
+        "syncCampaignStructure" | "getCampaignBidControls" | "applyActions"
+      >,
+    });
+
+    const result = await service.createCannibalizationChangeSet(
+      authFixture(),
+      recommendation.id as string,
+      "camp-1",
+      META,
+    );
+
+    expect(result.changeSet.status).toBe("draft");
+    expect(db.tables.changeActions).toHaveLength(1);
+    expect(db.tables.changeActions[0]).toMatchObject({
+      action_type: "add_negative_exact",
+      campaign_id: "11",
+      ad_group_id: null,
+      search_term: "tractor colouring book",
+      entity_name: "Discovery campaign",
+    });
+    expect(db.tables.changeSets[0]!.metadata).toMatchObject({
+      strategy: "route_with_negative_exact",
+      destinationCampaignId: "camp-1",
+    });
+    expect(db.tables.recommendations[0]!.state).toBe("approved");
+    expect(gateway.applyActions).not.toHaveBeenCalled();
+
+    const preview = await service.previewChangeSet(
+      authFixture(),
+      result.changeSet.id,
+      META,
+    );
+    expect(preview.changeSet.status).toBe("previewed");
+    expect(preview.actions[0]).toMatchObject({
+      actionType: "add_negative_exact",
+    });
+  });
+
+  it("rolls a verified negative exact back by deleting its Amazon entity", async () => {
+    const { db, profile } = setupCannibalization();
+    const set = db.seedChangeSet({
+      profile_id: profile.id,
+      status: "previewed",
+    });
+    const action = db.seedChangeAction({
+      change_set_id: set.id,
+      recommendation_id: null,
+      action_type: "add_negative_exact",
+      campaign_id: "11",
+      ad_group_id: null,
+      target_id: null,
+      search_term: "tractor colouring book",
+      before_value: null,
+      after_value: null,
+      entity_name: "Discovery campaign",
+      before_state: { present: false, matchType: "NEGATIVE_EXACT" },
+      after_state: { present: true, matchType: "NEGATIVE_EXACT" },
+    });
+    const gateway = {
+      syncCampaignStructure: vi
+        .fn()
+        .mockResolvedValueOnce(snapshotWithNegative(false))
+        .mockResolvedValueOnce(snapshotWithNegative(true))
+        .mockResolvedValueOnce(snapshotWithNegative(true))
+        .mockResolvedValueOnce(snapshotWithNegative(false)),
+      getCampaignBidControls: vi.fn(async () => {
+        throw new Error("Unexpected Max CPC controls call");
+      }),
+      applyActions: vi.fn(
+        async (changeSet: {
+          actions: Array<{ actionId: string; kind: string }>;
+        }) =>
+          changeSet.actions.map((item) => ({
+            actionId: item.actionId,
+            status: "applied" as const,
+            code: "SUCCESS",
+            ...(item.kind === "add_negative_exact"
+              ? { amazonEntityId: "negative-1" }
+              : {}),
+          })),
+      ),
+    };
+    const service = createChangeService({
+      db: db as never,
+      pool: db.asPool() as never,
+      config: testConfig(),
+      logger: fakeLogger(),
+      gateway: gateway as unknown as Pick<
+        AmazonAdsGateway,
+        "syncCampaignStructure" | "getCampaignBidControls" | "applyActions"
+      >,
+    });
+
+    const applied = await service.applyChangeSet(
+      authFixture(),
+      set.id as string,
+      META,
+    );
+    expect(applied.actions[0]).toMatchObject({
+      status: "applied",
+    });
+    expect(db.tables.changeActions[0]!.amazon_entity_id).toBe("negative-1");
+
+    const rollback = await service.rollbackAction(
+      authFixture(),
+      action.id as string,
+      META,
+    );
+    expect(rollback.changeSet.status).toBe("applied");
+    expect(rollback.actions[0]).toMatchObject({
+      actionType: "remove_negative_exact",
+      status: "applied",
+    });
+    expect(db.tables.changeActions[0]!.status).toBe("rolled_back");
+    expect(gateway.applyActions).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        actions: [
+          expect.objectContaining({
+            kind: "remove_negative_exact",
+            negativeKeywordId: "negative-1",
+          }),
+        ],
+      }),
+    );
   });
 });

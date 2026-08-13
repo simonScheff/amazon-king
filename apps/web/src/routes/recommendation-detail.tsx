@@ -17,6 +17,7 @@ import { useToast } from "../components/toast";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardBody, CardHeader } from "../components/ui/card";
+import { CannibalizationResolution } from "../components/cannibalization-resolution";
 import { ErrorState, Loading } from "../components/states";
 import { formatDate, formatDateTime, labelize } from "../lib/format";
 import { getRecommendationActionDetails } from "../lib/recommendation-action";
@@ -33,6 +34,9 @@ export function RecommendationDetailPage() {
   if (!rec.data) return null;
 
   const r = rec.data;
+  if (r.type === "cannibalization_conflict") {
+    return <CannibalizationResolution recommendation={r} />;
+  }
   const pending = r.state === "pending";
   const action = getRecommendationActionDetails(r);
 

@@ -62,6 +62,9 @@ export function buildChangeActionFingerprint(spec: {
   beforeValue?: string | null;
   afterValue?: string | null;
   rollbackOfId?: string | null;
+  amazonEntityId?: string | null;
+  beforeState?: unknown;
+  afterState?: unknown;
 }): string {
   return buildFingerprint({ kind: "change_action", ...spec });
 }

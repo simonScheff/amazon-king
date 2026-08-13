@@ -8,10 +8,16 @@ import { Input } from "../components/ui/input";
 export function LoginPage() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
+  const [invalidToken, setInvalidToken] = useState(
+    () =>
+      new URLSearchParams(window.location.search).get("error") ===
+      "invalid_token",
+  );
   const login = useLogin();
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
+    setInvalidToken(false);
     login.mutate({ email }, { onSuccess: () => setSent(true) });
   }
 
@@ -23,11 +29,48 @@ export function LoginPage() {
           <p className="mt-1 text-sm text-zinc-500">
             Ads optimizer for KDP authors
           </p>
-          {sent ? (
-            <p role="status" className="mt-4 text-sm text-emerald-300">
-              Check your inbox — we sent a sign-in link to{" "}
-              <span className="font-medium">{email}</span>.
+          {invalidToken && !sent && (
+            <p role="alert" className="mt-4 text-sm text-amber-300">
+              This sign-in link is invalid, expired, or already used. Request a
+              new link below.
             </p>
+          )}
+          {sent ? (
+            <div className="mt-4 space-y-3">
+              {login.data?.devLoginUrl ? (
+                <div role="status" className="space-y-2 text-sm">
+                  <p className="text-amber-300">
+                    Email delivery is not configured for this local app.
+                  </p>
+                  <a
+                    href={login.data.devLoginUrl}
+                    className="inline-flex font-medium text-sky-400 underline underline-offset-2 hover:text-sky-300"
+                  >
+                    Continue sign-in
+                  </a>
+                  <p className="text-xs text-zinc-500">
+                    This link is single-use and expires in 15 minutes.
+                  </p>
+                </div>
+              ) : (
+                <p role="status" className="text-sm text-emerald-300">
+                  Check your inbox — we sent a sign-in link to{" "}
+                  <span className="font-medium">{email}</span>.
+                </p>
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  login.reset();
+                  setInvalidToken(false);
+                  setSent(false);
+                }}
+              >
+                Send another link
+              </Button>
+            </div>
           ) : (
             <form onSubmit={onSubmit} className="mt-4 flex flex-col gap-3">
               <label htmlFor="email" className="text-sm text-zinc-300">

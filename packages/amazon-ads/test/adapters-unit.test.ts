@@ -14,10 +14,19 @@ import {
   listProductAds,
   listTargets,
 } from "../src/adapters/sp-campaigns.js";
+import { listCampaignOptimizationRules } from "../src/adapters/sp-rules.js";
 import {
+  buildAdGroupBidUpdateBody,
+  buildCampaignBiddingUpdateBody,
+  buildCampaignNegativeKeywordCreateBody,
   buildKeywordBidUpdateBody,
   buildNegativeKeywordCreateBody,
+  buildOptimizationRuleUpdateBody,
+  buildTargetBidUpdateBody,
+  deleteCampaignNegativeKeywords,
+  disableOptimizationRules,
   updateKeywordBids,
+  updateTargetBids,
 } from "../src/adapters/sp-writes.js";
 import { parseReportRows } from "../src/report-schemas.js";
 import { AmazonApiError } from "../src/errors.js";
@@ -96,7 +105,12 @@ describe("SP list pagination", () => {
     "sends the required SP v3 media type for %s",
     async (_name, list, responseKey, mediaType) => {
       const { http, calls } = makeHttp({
-        handler: () => jsonResponse({ [responseKey]: [] }),
+        handler: (request) =>
+          jsonResponse(
+            request.url.endsWith("/sp/campaignNegativeKeywords/list")
+              ? { campaignNegativeKeywords: [] }
+              : { [responseKey]: [] },
+          ),
       });
 
       await list(http, TEST_CONTEXT);
@@ -105,6 +119,76 @@ describe("SP list pagination", () => {
       expect(calls[0].headers["content-type"]).toBe(mediaType);
     },
   );
+});
+
+describe("SP optimization rules", () => {
+  it("uses exact campaign and BID category filters when discovering CPC-changing rules", async () => {
+    const { http, calls } = makeHttp({
+      handler: () =>
+        jsonResponse({
+          code: "SUCCESS",
+          nextToken: null,
+          optimizationRules: [
+            {
+              optimizationRuleId: "rule-1",
+              ruleName: "Weekend boost",
+              ruleCategory: "BID",
+              ruleSubCategory: "SCHEDULE",
+              status: "ENABLED",
+            },
+          ],
+        }),
+    });
+
+    const rules = await listCampaignOptimizationRules(
+      http,
+      TEST_CONTEXT,
+      "campaign-1",
+    );
+    expect(rules[0]?.name).toBe("Weekend boost");
+    expect(JSON.parse(calls[0]!.body as string)).toMatchObject({
+      campaignFilter: {
+        campaignId: { filterType: "EXACT_MATCH", values: ["campaign-1"] },
+      },
+      optimizationRuleFilter: {
+        ruleCategory: { filterType: "EXACT_MATCH", values: ["BID"] },
+      },
+    });
+  });
+
+  it("maps the optimization-rule multi-status response by input order", async () => {
+    const { http } = makeHttp({
+      handler: () =>
+        jsonResponse({
+          code: "SUCCESS",
+          responses: [
+            {
+              code: "SUCCESS",
+              details: "",
+              optimizationRule: { optimizationRuleId: "rule-1" },
+            },
+          ],
+        }),
+    });
+    await expect(
+      disableOptimizationRules(http, TEST_CONTEXT, [
+        {
+          actionId: "action-1",
+          kind: "update_optimization_rule",
+          optimizationRuleId: "rule-1",
+          rule: { ruleName: "Weekend boost", status: "DISABLED" },
+        },
+      ]),
+    ).resolves.toEqual([
+      {
+        actionId: "action-1",
+        status: "applied",
+        code: "SUCCESS",
+        message: "",
+        amazonEntityId: "rule-1",
+      },
+    ]);
+  });
 });
 
 describe("reporting v3 request bodies", () => {
@@ -244,18 +328,92 @@ describe("report download", () => {
 });
 
 describe("SP write request bodies", () => {
-  it("translates update_bid actions into a PUT /sp/keywords body", () => {
+  it("updates keyword bids without changing their enabled or paused state", () => {
     const body = buildKeywordBidUpdateBody([
       {
         actionId: "a1",
         kind: "update_bid",
         keywordId: "601122334",
         bid: "0.55",
+        state: "PAUSED",
       },
     ]) as { keywords: Array<Record<string, unknown>> };
     expect(body.keywords).toEqual([
-      { keywordId: 601122334, bid: 0.55, state: "ENABLED" },
+      { keywordId: "601122334", bid: 0.55, state: "PAUSED" },
     ]);
+  });
+
+  it("translates every Max CPC layer without re-enabling paused entities", () => {
+    expect(
+      buildTargetBidUpdateBody([
+        {
+          actionId: "t1",
+          kind: "update_bid",
+          entityType: "target",
+          keywordId: "88",
+          bid: "0.70",
+          state: "PAUSED",
+        },
+      ]),
+    ).toEqual({
+      targetingClauses: [{ targetId: "88", bid: 0.7, state: "PAUSED" }],
+    });
+    expect(
+      buildAdGroupBidUpdateBody([
+        {
+          actionId: "g1",
+          kind: "update_ad_group_default_bid",
+          adGroupId: "77",
+          bid: "0.70",
+          state: "PAUSED",
+        },
+      ]),
+    ).toEqual({
+      adGroups: [{ adGroupId: "77", defaultBid: 0.7, state: "PAUSED" }],
+    });
+    expect(
+      buildCampaignBiddingUpdateBody([
+        {
+          actionId: "c1",
+          kind: "update_campaign_bidding",
+          campaignId: "66",
+          state: "ENABLED",
+          dynamicBidding: {
+            strategy: "LEGACY_FOR_SALES",
+            placements: [],
+            audiences: [],
+          },
+        },
+      ]),
+    ).toEqual({
+      campaigns: [
+        {
+          campaignId: "66",
+          state: "ENABLED",
+          dynamicBidding: {
+            strategy: "LEGACY_FOR_SALES",
+          },
+        },
+      ],
+    });
+    expect(
+      buildOptimizationRuleUpdateBody([
+        {
+          actionId: "r1",
+          kind: "update_optimization_rule",
+          optimizationRuleId: "55",
+          rule: { name: "Weekend boost", status: "ENABLED" },
+        },
+      ]),
+    ).toEqual({
+      optimizationRules: [
+        {
+          optimizationRuleId: "55",
+          name: "Weekend boost",
+          status: "DISABLED",
+        },
+      ],
+    });
   });
 
   it("translates add_negative_exact actions into a POST body", () => {
@@ -275,14 +433,62 @@ describe("SP write request bodies", () => {
       },
     ]) as { negativeKeywords: Array<Record<string, unknown>> };
     expect(body.negativeKeywords[0]).toEqual({
-      campaignId: 901234567,
-      adGroupId: 705432109,
+      campaignId: "901234567",
+      adGroupId: "705432109",
       keywordText: "free books",
       matchType: "NEGATIVE_EXACT",
       state: "ENABLED",
     });
     // Campaign-level negative: no adGroupId key.
     expect(body.negativeKeywords[1]).not.toHaveProperty("adGroupId");
+  });
+
+  it("uses the campaign-negative v3 body for campaign-level routing", () => {
+    expect(
+      buildCampaignNegativeKeywordCreateBody([
+        {
+          actionId: "n1",
+          kind: "add_negative_exact",
+          campaignId: "901234567",
+          keywordText: "tractor colouring book",
+        },
+      ]),
+    ).toEqual({
+      campaignNegativeKeywords: [
+        {
+          campaignId: "901234567",
+          keywordText: "tractor colouring book",
+          matchType: "NEGATIVE_EXACT",
+          state: "ENABLED",
+        },
+      ],
+    });
+  });
+
+  it("deletes campaign negatives with the v3 id filter", async () => {
+    const { http, calls } = makeHttp({
+      handler: () =>
+        jsonResponse(fixture("sp-campaignNegativeKeywords-write-207.json"), {
+          status: 207,
+        }),
+    });
+    const results = await deleteCampaignNegativeKeywords(http, TEST_CONTEXT, [
+      {
+        actionId: "r1",
+        kind: "remove_negative_exact",
+        negativeKeywordId: "990123459",
+        scope: "campaign",
+      },
+    ]);
+    expect(calls[0].url).toContain("/sp/campaignNegativeKeywords/delete");
+    expect(JSON.parse(calls[0].body as string)).toEqual({
+      campaignNegativeKeywordIdFilter: { include: ["990123459"] },
+    });
+    expect(results[0]).toMatchObject({
+      actionId: "r1",
+      status: "applied",
+      amazonEntityId: "990123459",
+    });
   });
 
   it("applies per-item 207 results end to end", async () => {
@@ -307,5 +513,38 @@ describe("SP write request bodies", () => {
     expect(calls[0].method).toBe("PUT");
     expect(calls[0].url).toContain("/sp/keywords");
     expect(results.map((r) => r.status)).toEqual(["applied", "failed"]);
+  });
+
+  it("sends a paused automatic target as a bid-only state-preserving update", async () => {
+    const { http, calls } = makeHttp({
+      handler: () =>
+        jsonResponse(
+          {
+            targetingClauses: {
+              success: [{ targetId: 519095653042278 }],
+              error: [],
+            },
+          },
+          { status: 207 },
+        ),
+    });
+
+    const results = await updateTargetBids(http, TEST_CONTEXT, [
+      {
+        actionId: "target-1",
+        kind: "update_bid",
+        entityType: "target",
+        keywordId: "519095653042278",
+        bid: "0.65",
+        state: "PAUSED",
+      },
+    ]);
+
+    expect(JSON.parse(calls[0].body as string)).toEqual({
+      targetingClauses: [
+        { targetId: "519095653042278", bid: 0.65, state: "PAUSED" },
+      ],
+    });
+    expect(results[0]?.status).toBe("applied");
   });
 });

@@ -7,9 +7,12 @@ import type {
   BookEconomicsInput,
   BookMappingInput,
   CampaignDetail,
-  CampaignRow,
+  CampaignListRow,
+  CampaignMaxCpc,
+  CannibalizationResolutionContext,
   ChangeAction,
   ChangeSet,
+  MaxCpcChangeSetResult,
   DashboardSummary,
   DataFreshness,
   ProfileUpdate,
@@ -49,14 +52,19 @@ export interface VerifiedLogin {
   auth: AuthContext;
 }
 
+export interface LoginStartResult {
+  /** Development-only single-use URL when SMTP delivery is not configured. */
+  devLoginUrl?: string;
+}
+
 export interface SessionService {
   /**
    * Begin passwordless login: create a single-use login token and deliver the
-   * magic link (dev: logged, never returned to the client). No-ops silently
-   * when the email is not allowed (OWNER_EMAIL restriction) to avoid
-   * account enumeration.
+   * magic link. Local development without SMTP returns the link to the local
+   * browser; production delivers it by email. No-ops silently when the email
+   * is not allowed (OWNER_EMAIL restriction) to avoid account enumeration.
    */
-  startLogin(email: string, meta: RequestMeta): Promise<void>;
+  startLogin(email: string, meta: RequestMeta): Promise<LoginStartResult>;
   /**
    * Consume a login token (single use), provision user/workspace on first
    * login, and create a session. Null when the token is bad/expired/used.
@@ -123,7 +131,7 @@ export interface ReadService {
     days: number,
     countryCode: string,
   ): Promise<DashboardSummary>;
-  listCampaigns(workspaceId: string, days: number): Promise<CampaignRow[]>;
+  listCampaigns(workspaceId: string, days: number): Promise<CampaignListRow[]>;
   getCampaignDetail(
     workspaceId: string,
     amazonCampaignId: string,
@@ -152,6 +160,10 @@ export interface ReadService {
     workspaceId: string,
     recommendationId: string,
   ): Promise<Recommendation | null>;
+  getCannibalizationResolutionContext(
+    workspaceId: string,
+    recommendationId: string,
+  ): Promise<CannibalizationResolutionContext | null>;
   rejectRecommendation(
     auth: AuthContext,
     recommendationId: string,
@@ -173,6 +185,18 @@ export interface ChangeSetPreviewResult extends ChangeSetWithActions {
 }
 
 export interface ChangeService {
+  /** Fresh Amazon-side view of every control that can raise CPC. */
+  getCampaignMaxCpc(
+    workspaceId: string,
+    amazonCampaignId: string,
+  ): Promise<CampaignMaxCpc>;
+  /** Create an immutable guarded draft that enforces one campaign CPC ceiling. */
+  setCampaignMaxCpc(
+    auth: AuthContext,
+    amazonCampaignId: string,
+    maxCpc: string,
+    meta: RequestMeta,
+  ): Promise<MaxCpcChangeSetResult>;
   /**
    * Create an immutable change set from recommendation ids. Fingerprinted:
    * replaying the same ids returns the existing set (double-click safe).
@@ -180,6 +204,13 @@ export interface ChangeService {
   createChangeSet(
     auth: AuthContext,
     recommendationIds: string[],
+    meta: RequestMeta,
+  ): Promise<ChangeSetWithActions>;
+  /** Route one conflicted shopper term with campaign-level negative exacts. */
+  createCannibalizationChangeSet(
+    auth: AuthContext,
+    recommendationId: string,
+    destinationCampaignId: string,
     meta: RequestMeta,
   ): Promise<ChangeSetWithActions>;
   /** Fresh guardrail evaluation; moves draft → previewed (plan §10). */

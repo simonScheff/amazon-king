@@ -6,3 +6,4 @@ export * from "./metrics.js";
 export * from "./recommendations.js";
 export * from "./sync.js";
 export * from "./audit.js";
+export * from "./bid-controls.js";

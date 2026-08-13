@@ -37,6 +37,7 @@ const CAMPAIGN = {
   amazonCampaignId: "amazon-campaign",
   name: "General",
   state: "enabled",
+  targetingType: "manual",
 };
 
 describe("campaign profitability", () => {
@@ -64,6 +65,7 @@ describe("campaign profitability", () => {
         amazonCampaignId: "amazon-campaign",
         name: "General",
         state: "enabled",
+        currency: "USD",
         totals: {
           impressions: 100,
           clicks: 10,
@@ -71,6 +73,10 @@ describe("campaign profitability", () => {
           sales: "20.0000",
           orders: 2,
         },
+        estimatedRoyalty: "10.0000",
+        economicsMissing: false,
+        dataCurrentThrough: "2026-08-13",
+        mixedCurrency: false,
       },
     ]);
     vi.mocked(dashboard.listAdGroupRows).mockResolvedValue([]);
@@ -136,6 +142,30 @@ describe("campaign profitability", () => {
         { date: "2026-08-13", estimatedAdProfit: "-1.0000" },
       ],
     });
+  });
+
+  it("returns seven-day profitability with each campaign list row", async () => {
+    const result = await service().listCampaigns("workspace-pk", 7);
+
+    expect(dashboard.listCampaignRows).toHaveBeenCalledWith(
+      expect.anything(),
+      "workspace-pk",
+      "2026-08-07",
+      "2026-08-13",
+    );
+    expect(result).toEqual([
+      expect.objectContaining({
+        campaignId: "amazon-campaign",
+        profitability: {
+          dateRange: { start: "2026-08-07", end: "2026-08-13" },
+          currency: "USD",
+          estimatedRoyalty: "10.0000",
+          estimatedAdProfit: "2.0000",
+          economicsMissing: false,
+          dataCurrentThrough: "2026-08-13",
+        },
+      }),
+    ]);
   });
 
   it("never reports partial profit when any advertised book lacks economics", async () => {
