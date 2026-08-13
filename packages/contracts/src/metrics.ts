@@ -32,13 +32,14 @@ export const dashboardSummarySchema = z.object({
   dataCurrentThrough: isoDateTimeSchema,
   /** True when writes are unavailable (kill switch or all profiles read-only). */
   writesDisabled: z.boolean().optional(),
-  /** Per-day spend/sales series for the dashboard trend chart. */
+  /** Per-day monetary series for the dashboard trend chart. */
   daily: z
     .array(
       z.object({
         date: isoDateSchema,
         cost: nonNegativeDecimalStringSchema,
         sales: nonNegativeDecimalStringSchema,
+        estimatedRoyalty: nonNegativeDecimalStringSchema.nullable(),
       }),
     )
     .optional(),

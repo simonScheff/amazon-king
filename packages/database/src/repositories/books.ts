@@ -11,6 +11,7 @@ export interface Book {
   format: string;
   status: string;
   coverJson: unknown | null;
+  profileIds: string[];
   createdAt: string;
 }
 
@@ -22,6 +23,7 @@ interface BookRow {
   format: string;
   status: string;
   cover_json: unknown | null;
+  profile_ids?: string[];
   created_at: string;
 }
 
@@ -34,6 +36,7 @@ function toBook(row: BookRow): Book {
     format: row.format,
     status: row.status,
     coverJson: row.cover_json,
+    profileIds: row.profile_ids ?? [],
     createdAt: row.created_at,
   };
 }
@@ -74,10 +77,146 @@ export async function getBook(db: Db, bookId: string): Promise<Book | null> {
 
 export async function listBooks(db: Db, workspaceId: string): Promise<Book[]> {
   const result = await db.query<BookRow>(
-    `select * from books where workspace_id = $1 order by id`,
+    `select b.*,
+            coalesce(
+              array_agg(p.profile_id order by p.profile_id)
+                filter (where bpl.enabled = true),
+              '{}'::text[]
+            ) as profile_ids
+     from books b
+     left join book_profile_links bpl on bpl.book_id = b.id
+     left join amazon_profiles p on p.id = bpl.profile_id
+     where b.workspace_id = $1
+     group by b.id
+     order by b.id`,
     [workspaceId],
   );
   return result.rows.map(toBook);
+}
+
+export async function isBookLinkedToProfile(
+  db: Db,
+  bookId: string,
+  profileId: string,
+): Promise<boolean> {
+  const result = await db.query<{ linked: boolean }>(
+    `select exists (
+       select 1 from book_profile_links
+       where book_id = $1 and profile_id = $2 and enabled = true
+     ) as linked`,
+    [bookId, profileId],
+  );
+  return result.rows[0]?.linked ?? false;
+}
+
+export interface UnmappedAdvertisedProduct {
+  profileId: string;
+  asin: string;
+  countryCode: string;
+  currencyCode: string;
+  adCount: number;
+}
+
+interface UnmappedAdvertisedProductRow {
+  profile_id: string;
+  asin: string;
+  country_code: string;
+  currency_code: string;
+  ad_count: number;
+}
+
+/**
+ * Distinct advertised ASINs that still need a workspace book/profile link.
+ * Amazon Ads supplies the ASIN but not authoritative KDP title/format data,
+ * so callers must ask the owner to confirm those fields before mapping.
+ */
+export async function listUnmappedAdvertisedProducts(
+  db: Db,
+  workspaceId: string,
+): Promise<UnmappedAdvertisedProduct[]> {
+  const result = await db.query<UnmappedAdvertisedProductRow>(
+    `select p.profile_id, a.asin, p.country_code, p.currency_code,
+            count(distinct a.id)::int as ad_count
+     from ads a
+     join amazon_profiles p on p.id = a.profile_id
+     join amazon_connections c on c.id = p.connection_id
+     where c.workspace_id = $1
+       and a.asin <> ''
+       and not exists (
+         select 1 from book_profile_links bpl
+         where bpl.profile_id = p.id
+           and bpl.marketplace_asin = a.asin
+           and bpl.enabled = true
+       )
+     group by p.id, p.profile_id, a.asin, p.country_code, p.currency_code
+     order by a.asin, p.country_code, p.profile_id`,
+    [workspaceId],
+  );
+  return result.rows.map((row) => ({
+    profileId: row.profile_id,
+    asin: row.asin,
+    countryCode: row.country_code,
+    currencyCode: row.currency_code,
+    adCount: row.ad_count,
+  }));
+}
+
+/**
+ * Idempotently create/update the catalog book and link it to every selected
+ * profile, but only when each profile really advertises the supplied ASIN in
+ * this workspace. One statement keeps book creation and all links atomic.
+ */
+export async function mapAdvertisedProductToBook(
+  db: Db,
+  input: {
+    workspaceId: string;
+    profileIds: string[];
+    asin: string;
+    title: string;
+    format: string;
+  },
+): Promise<Book | null> {
+  const result = await db.query<BookRow>(
+    `with candidate_profiles as (
+       select p.id
+       from amazon_profiles p
+       join amazon_connections c on c.id = p.connection_id
+       where c.workspace_id = $1
+         and p.id = any($2::bigint[])
+         and exists (
+           select 1 from ads a
+           where a.profile_id = p.id and a.asin = $3
+         )
+     ),
+     upserted_book as (
+       insert into books (workspace_id, asin, title, format, status)
+       select $1, $3, $4, $5, 'active'
+       where (select count(*) from candidate_profiles) = cardinality($2::bigint[])
+       on conflict (workspace_id, asin, format) do update set
+         title = excluded.title,
+         status = 'active'
+       returning *
+     ),
+     linked_profiles as (
+       insert into book_profile_links (book_id, profile_id, marketplace_asin, enabled)
+       select b.id, p.id, $3, true
+       from upserted_book b cross join candidate_profiles p
+       on conflict (book_id, profile_id) do update set
+         marketplace_asin = excluded.marketplace_asin,
+         enabled = true
+       returning profile_id
+     )
+     select b.* from upserted_book b
+     where (select count(*) from linked_profiles) = cardinality($2::bigint[])`,
+    [
+      input.workspaceId,
+      input.profileIds,
+      input.asin,
+      input.title,
+      input.format,
+    ],
+  );
+  return result.rows[0] ? toBook(result.rows[0]) : null;
 }
 
 /** Update mutable book fields; only provided fields are changed. */
@@ -169,6 +308,35 @@ function toEconomics(row: BookEconomicsRow): BookEconomics {
     notes: row.notes,
     createdAt: row.created_at,
   };
+}
+
+export interface WorkspaceBookEconomics extends BookEconomics {
+  amazonProfileId: string;
+}
+
+interface WorkspaceBookEconomicsRow extends BookEconomicsRow {
+  amazon_profile_id: string;
+}
+
+/** Latest in-effect economics for every book/profile in a workspace. */
+export async function listLatestBookEconomicsByWorkspace(
+  db: Db,
+  workspaceId: string,
+): Promise<WorkspaceBookEconomics[]> {
+  const result = await db.query<WorkspaceBookEconomicsRow>(
+    `select distinct on (be.book_id, be.profile_id)
+            be.*, p.profile_id as amazon_profile_id
+     from book_economics be
+     join books b on b.id = be.book_id
+     join amazon_profiles p on p.id = be.profile_id
+     where b.workspace_id = $1 and be.effective_from <= current_date
+     order by be.book_id, be.profile_id, be.effective_from desc, be.id desc`,
+    [workspaceId],
+  );
+  return result.rows.map((row) => ({
+    ...toEconomics(row),
+    amazonProfileId: row.amazon_profile_id,
+  }));
 }
 
 export interface BookEconomicsInput {

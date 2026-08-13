@@ -21,6 +21,18 @@ export function isoDateTime(value: string | Date): string {
   return value instanceof Date ? value.toISOString() : value;
 }
 
+/** Keep date-only contract fields stable even when a driver returns a Date. */
+export function isoDate(value: string | Date): string {
+  if (!(value instanceof Date)) {
+    return value.slice(0, 10);
+  }
+
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export function toContractProfile(
   row: profiles.AmazonProfileRow,
 ): AmazonProfile {
@@ -55,8 +67,8 @@ export function toContractRecommendation(
     rationale: row.rationale,
     confidence: Number(row.confidence),
     evidenceWindow: {
-      start: row.evidenceWindowStart,
-      end: row.evidenceWindowEnd,
+      start: isoDate(row.evidenceWindowStart),
+      end: isoDate(row.evidenceWindowEnd),
     },
     dataFreshness: isoDateTime(row.dataFreshnessAt),
     ruleVersion: row.ruleVersion,

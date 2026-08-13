@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { recommendationSchema, sessionInfoSchema } from "./index.js";
+import {
+  bookSchema,
+  bookMappingInputSchema,
+  recommendationSchema,
+  sessionInfoSchema,
+} from "./index.js";
 
 describe("contracts smoke test", () => {
   it("round-trips a SessionInfo payload", () => {
@@ -50,5 +55,48 @@ describe("contracts smoke test", () => {
         csrfToken: "c",
       }),
     ).toThrow();
+  });
+
+  it("normalizes a book mapping and deduplicates selected profiles", () => {
+    expect(
+      bookMappingInputSchema.parse({
+        profileIds: ["profile-us", "profile-us", "profile-ca"],
+        asin: " B012345678 ",
+        title: "  My Coloring Book  ",
+        format: "paperback",
+      }),
+    ).toEqual({
+      profileIds: ["profile-us", "profile-ca"],
+      asin: "B012345678",
+      title: "My Coloring Book",
+      format: "paperback",
+    });
+  });
+
+  it("accepts saved marketplace economics on a book", () => {
+    const book = bookSchema.parse({
+      id: "book-1",
+      asin: "B012345678",
+      title: "My Coloring Book",
+      format: "paperback",
+      status: "active",
+      profileIds: ["profile-ca"],
+      economics: [
+        {
+          profileId: "profile-ca",
+          effectiveFrom: "2026-08-13",
+          currency: "CAD",
+          listPrice: "14.2100",
+          estimatedRoyaltyPerSale: "5.0000",
+          targetAcos: null,
+          goalMode: "balanced",
+          maxSpendWithoutSale: null,
+          maxBid: null,
+          maxDailyBudget: null,
+          notes: null,
+        },
+      ],
+    });
+    expect(book.economics[0]?.currency).toBe("CAD");
   });
 });

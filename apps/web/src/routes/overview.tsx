@@ -13,12 +13,14 @@ import {
   useAmazonStatus,
   useDashboardSummary,
   useDataFreshness,
+  useProfiles,
   useRecommendations,
 } from "../api/endpoints";
 import { KpiCard } from "../components/kpi-card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardBody, CardHeader } from "../components/ui/card";
+import { Select } from "../components/ui/input";
 import { EmptyState, ErrorState, Loading } from "../components/states";
 import {
   formatAcos,
@@ -28,20 +30,45 @@ import {
   formatMoney,
   labelize,
 } from "../lib/format";
+import {
+  flagForCountry,
+  marketplaceOptions,
+  resolveCountry,
+} from "../lib/marketplaces";
 
 const DAY_OPTIONS = [7, 14, 30, 60] as const;
 
 export function OverviewPage() {
-  const search = useSearch({ strict: false }) as { days?: number };
+  const search = useSearch({ strict: false }) as {
+    days?: number;
+    country?: string;
+  };
   const days = DAY_OPTIONS.includes(search.days as 7)
     ? Number(search.days)
     : 30;
   const navigate = useNavigate();
 
-  const summary = useDashboardSummary(days);
+  const profiles = useProfiles();
+  const marketplaces = marketplaceOptions(profiles.data ?? []);
+  const country = resolveCountry(search.country, marketplaces);
+  const selectedMarketplace = marketplaces.find(
+    (marketplace) => marketplace.countryCode === country,
+  );
+  const selectedProfileIds = new Set(selectedMarketplace?.profileIds ?? []);
+
+  const summary = useDashboardSummary(days, country);
   const freshness = useDataFreshness();
   const status = useAmazonStatus();
   const top = useRecommendations({ state: "pending" });
+
+  const visibleRecommendations = (top.data ?? []).filter(
+    (recommendation) =>
+      recommendation.profileId !== null &&
+      selectedProfileIds.has(recommendation.profileId),
+  );
+  const visibleFreshness = (freshness.data ?? []).filter((item) =>
+    selectedProfileIds.has(item.profileId),
+  );
 
   const currency = summary.data?.currency ?? "USD";
   const totals = summary.data?.totals;
@@ -50,29 +77,65 @@ export function OverviewPage() {
     date: d.date,
     spend: Number(d.cost),
     sales: Number(d.sales),
+    royalty: d.estimatedRoyalty === null ? null : Number(d.estimatedRoyalty),
   }));
+  const hasRoyaltyData = chartData.some((point) => point.royalty !== null);
 
   return (
     <div className="flex max-w-6xl flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-lg font-semibold text-zinc-100">Overview</h1>
-        <div
-          role="group"
-          aria-label="Date range"
-          className="ml-auto flex gap-1"
-        >
-          {DAY_OPTIONS.map((d) => (
-            <Button
-              key={d}
-              size="sm"
-              variant={d === days ? "primary" : "secondary"}
-              onClick={() =>
-                navigate({ to: "/", search: { days: d }, replace: true })
+        <div className="ml-auto flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-zinc-400">
+            <span>Country</span>
+            <Select
+              aria-label="Country"
+              value={country}
+              disabled={profiles.isPending || marketplaces.length === 0}
+              onChange={(event) =>
+                navigate({
+                  to: "/",
+                  search: { days, country: event.currentTarget.value },
+                  replace: true,
+                })
               }
             >
-              {d}d
-            </Button>
-          ))}
+              {marketplaces.length === 0 ? (
+                <option value={country}>
+                  {flagForCountry(country)}{" "}
+                  {country === "US" ? "United States" : country}
+                </option>
+              ) : (
+                marketplaces.map((marketplace) => (
+                  <option
+                    key={marketplace.countryCode}
+                    value={marketplace.countryCode}
+                  >
+                    {marketplace.flag} {marketplace.countryName} (
+                    {marketplace.currencyCodes.join(", ")})
+                  </option>
+                ))
+              )}
+            </Select>
+          </label>
+          <div role="group" aria-label="Date range" className="flex gap-1">
+            {DAY_OPTIONS.map((d) => (
+              <Button
+                key={d}
+                size="sm"
+                variant={d === days ? "primary" : "secondary"}
+                onClick={() =>
+                  navigate({
+                    to: "/",
+                    search: { days: d, country },
+                    replace: true,
+                  })
+                }
+              >
+                {d}d
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -91,7 +154,10 @@ export function OverviewPage() {
               {formatDateTime(summary.data.dataCurrentThrough)}
             </time>{" "}
             · {formatDate(summary.data.dateRange.start)} –{" "}
-            {formatDate(summary.data.dateRange.end)}
+            {formatDate(summary.data.dateRange.end)} ·{" "}
+            {selectedMarketplace
+              ? `${selectedMarketplace.flag} ${selectedMarketplace.countryName}`
+              : `${flagForCountry(country)} ${country}`}
           </p>
 
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
@@ -124,7 +190,7 @@ export function OverviewPage() {
           )}
 
           <Card>
-            <CardHeader title="Spend vs attributed sales" />
+            <CardHeader title="Spend, attributed sales & estimated royalties" />
             <CardBody>
               {chartData.length === 0 ? (
                 <EmptyState>No daily trend data available yet.</EmptyState>
@@ -151,15 +217,27 @@ export function OverviewPage() {
                       <Line
                         type="monotone"
                         dataKey="spend"
+                        name="Spend"
                         stroke="#f59e0b"
                         dot={false}
                       />
                       <Line
                         type="monotone"
                         dataKey="sales"
+                        name="Attributed sales"
                         stroke="#38bdf8"
                         dot={false}
                       />
+                      {hasRoyaltyData ? (
+                        <Line
+                          type="monotone"
+                          dataKey="royalty"
+                          name="Estimated royalties"
+                          stroke="#34d399"
+                          strokeDasharray="5 4"
+                          dot={false}
+                        />
+                      ) : null}
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -174,11 +252,14 @@ export function OverviewPage() {
                 <Loading />
               ) : top.error ? (
                 <ErrorState error={top.error} />
-              ) : top.data.length === 0 ? (
-                <EmptyState>No pending recommendations.</EmptyState>
+              ) : visibleRecommendations.length === 0 ? (
+                <EmptyState>
+                  No pending recommendations for{" "}
+                  {selectedMarketplace?.countryName ?? country}.
+                </EmptyState>
               ) : (
                 <ul className="divide-y divide-zinc-800/60">
-                  {[...top.data]
+                  {[...visibleRecommendations]
                     .sort((a, b) => a.priority - b.priority)
                     .slice(0, 5)
                     .map((r) => (
@@ -225,11 +306,14 @@ export function OverviewPage() {
                   <Loading />
                 ) : freshness.error ? (
                   <ErrorState error={freshness.error} />
-                ) : freshness.data.length === 0 ? (
-                  <p className="text-zinc-500">No sync runs yet.</p>
+                ) : visibleFreshness.length === 0 ? (
+                  <p className="text-zinc-500">
+                    No sync runs yet for{" "}
+                    {selectedMarketplace?.countryName ?? country}.
+                  </p>
                 ) : (
                   <ul className="flex flex-col gap-1.5">
-                    {freshness.data.map((f) => (
+                    {visibleFreshness.map((f) => (
                       <li
                         key={`${f.profileId}-${f.dataset}`}
                         className="flex flex-wrap items-baseline gap-x-2"

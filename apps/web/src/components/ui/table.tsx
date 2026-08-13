@@ -9,7 +9,7 @@ export function Table({
   ...props
 }: TableHTMLAttributes<HTMLTableElement>) {
   return (
-    <div className="overflow-x-auto">
+    <div className="w-full max-w-full overflow-x-auto">
       <table
         className={`w-full text-left text-sm text-zinc-300 ${className}`}
         {...props}

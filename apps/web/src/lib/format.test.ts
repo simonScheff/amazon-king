@@ -50,7 +50,7 @@ describe("formatDate / formatDateTime", () => {
   });
 
   it("renders an ISO date", () => {
-    expect(formatDate("2026-08-01")).toMatch(/Aug/);
+    expect(formatDate("2026-08-13")).toBe("Aug 13, 2026");
   });
 });
 

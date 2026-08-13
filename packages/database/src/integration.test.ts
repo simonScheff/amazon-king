@@ -8,7 +8,18 @@ import {
   MixedCurrencyError,
 } from "./repositories/metrics.js";
 import { enqueue, claim, reapExpiredLeases, complete } from "./queue.js";
-import { upsertCampaign, listEntityChanges } from "./repositories/structure.js";
+import {
+  upsertAd,
+  upsertAdGroup,
+  upsertCampaign,
+  listEntityChanges,
+} from "./repositories/structure.js";
+import {
+  listLatestBookEconomicsByWorkspace,
+  listUnmappedAdvertisedProducts,
+  mapAdvertisedProductToBook,
+  upsertBookEconomics,
+} from "./repositories/books.js";
 import {
   insertRecommendation,
   transitionRecommendationState,
@@ -226,6 +237,90 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     const budget = history.find((h) => h.field === "daily_budget")!;
     expect(budget.oldValue).toBe("10.0000");
     expect(budget.newValue).toBe("12.5000");
+  });
+
+  it("maps advertised ASINs into the book catalog idempotently", async () => {
+    const profileId = await seedProfile(pool);
+    const workspace = await pool.query<{ workspace_id: string }>(
+      `select c.workspace_id::text
+       from amazon_profiles p join amazon_connections c on c.id = p.connection_id
+       where p.id = $1`,
+      [profileId],
+    );
+    const campaign = await upsertCampaign(pool, {
+      profileId,
+      amazonCampaignId: "amzn-campaign-book-map",
+      name: "Book campaign",
+      state: "enabled",
+    });
+    const adGroup = await upsertAdGroup(pool, {
+      profileId,
+      campaignId: campaign.id,
+      amazonAdGroupId: "amzn-ad-group-book-map",
+      name: "Book ad group",
+      state: "enabled",
+    });
+    await upsertAd(pool, {
+      profileId,
+      adGroupId: adGroup.id,
+      amazonAdId: "amzn-ad-book-map",
+      asin: "B012345678",
+      state: "enabled",
+    });
+
+    const workspaceId = workspace.rows[0]!.workspace_id;
+    const candidates = await listUnmappedAdvertisedProducts(pool, workspaceId);
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]).toMatchObject({ asin: "B012345678", adCount: 1 });
+
+    const first = await mapAdvertisedProductToBook(pool, {
+      workspaceId,
+      profileIds: [profileId],
+      asin: "B012345678",
+      title: "First title",
+      format: "paperback",
+    });
+    const repeated = await mapAdvertisedProductToBook(pool, {
+      workspaceId,
+      profileIds: [profileId],
+      asin: "B012345678",
+      title: "Updated title",
+      format: "paperback",
+    });
+
+    expect(repeated?.id).toBe(first?.id);
+    expect(repeated?.title).toBe("Updated title");
+    await upsertBookEconomics(pool, {
+      bookId: first!.id,
+      profileId,
+      effectiveFrom: "2026-08-13",
+      currency: "USD",
+      listPrice: "12.99",
+      estimatedRoyaltyPerSale: "4.25",
+      targetAcos: "0.25",
+      goalMode: "balanced",
+    });
+    await expect(
+      listLatestBookEconomicsByWorkspace(pool, workspaceId),
+    ).resolves.toMatchObject([
+      {
+        bookId: first!.id,
+        amazonProfileId: expect.stringMatching(/^amzn-profile-/),
+        currency: "USD",
+        listPrice: "12.9900",
+        estimatedRoyaltyPerSale: "4.2500",
+        targetAcos: "0.2500",
+      },
+    ]);
+    await expect(
+      listUnmappedAdvertisedProducts(pool, workspaceId),
+    ).resolves.toEqual([]);
+    const counts = await pool.query<{ books: string; links: string }>(
+      `select (select count(*)::text from books where workspace_id = $1) as books,
+              (select count(*)::text from book_profile_links where profile_id = $2) as links`,
+      [workspaceId, profileId],
+    );
+    expect(counts.rows[0]).toEqual({ books: "1", links: "1" });
   });
 
   it("recommendations store immutable evidence and expire stale rows", async () => {

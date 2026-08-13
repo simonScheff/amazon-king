@@ -1,9 +1,11 @@
 import type {
   AmazonConnectionStatus,
   AmazonProfile,
+  AdvertisedBookCandidate,
   AuditEvent,
   Book,
   BookEconomicsInput,
+  BookMappingInput,
   CampaignDetail,
   CampaignRow,
   ChangeAction,
@@ -119,6 +121,7 @@ export interface ReadService {
   dashboardSummary(
     workspaceId: string,
     days: number,
+    countryCode: string,
   ): Promise<DashboardSummary>;
   listCampaigns(workspaceId: string, days: number): Promise<CampaignRow[]>;
   getCampaignDetail(
@@ -127,6 +130,14 @@ export interface ReadService {
     days: number,
   ): Promise<CampaignDetail | null>;
   listBooks(workspaceId: string): Promise<Book[]>;
+  listUnmappedAdvertisedProducts(
+    workspaceId: string,
+  ): Promise<AdvertisedBookCandidate[]>;
+  mapAdvertisedProduct(
+    auth: AuthContext,
+    input: BookMappingInput,
+    meta: RequestMeta,
+  ): Promise<Book>;
   saveBookEconomics(
     auth: AuthContext,
     bookId: string,

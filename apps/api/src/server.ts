@@ -4,6 +4,7 @@ import fastifyHelmet from "@fastify/helmet";
 import fastifyRateLimit from "@fastify/rate-limit";
 import {
   bookEconomicsInputSchema,
+  bookMappingInputSchema,
   changeSetCreateSchema,
   loginRequestSchema,
   profileUpdateSchema,
@@ -332,10 +333,19 @@ export async function buildServer(
     days: z.coerce.number().int().min(1).max(90).default(30),
   });
 
+  const dashboardQuerySchema = daysQuerySchema.extend({
+    country: z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z]{2}$/)
+      .transform((value) => value.toUpperCase())
+      .default("US"),
+  });
+
   app.get("/api/dashboard/summary", async (request) => {
     const auth = await authenticate(request);
-    const { days } = parse(daysQuerySchema, request.query);
-    return services.read.dashboardSummary(auth.workspaceId, days);
+    const { days, country } = parse(dashboardQuerySchema, request.query);
+    return services.read.dashboardSummary(auth.workspaceId, days, country);
   });
 
   app.get("/api/campaigns", async (request) => {
@@ -361,6 +371,26 @@ export async function buildServer(
     const auth = await authenticate(request);
     return services.read.listBooks(auth.workspaceId);
   });
+
+  app.get("/api/books/unmapped-products", async (request) => {
+    const auth = await authenticate(request);
+    return services.read.listUnmappedAdvertisedProducts(auth.workspaceId);
+  });
+
+  app.post(
+    "/api/books/mappings",
+    { config: { rateLimit: WRITE_RATE } },
+    async (request, reply) => {
+      const auth = await authenticate(request);
+      const input = parse(bookMappingInputSchema, request.body);
+      const book = await services.read.mapAdvertisedProduct(
+        auth,
+        input,
+        meta(request),
+      );
+      return reply.status(201).send(book);
+    },
+  );
 
   app.post("/api/books/:bookId/economics", async (request, reply) => {
     const auth = await authenticate(request);

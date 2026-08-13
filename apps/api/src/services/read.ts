@@ -1,4 +1,8 @@
-import type { AmazonProfile, DashboardSummary } from "@amazon-king/contracts";
+import type {
+  AmazonProfile,
+  Book,
+  DashboardSummary,
+} from "@amazon-king/contracts";
 import {
   microsFromDecimalString,
   microsToDecimalString,
@@ -21,6 +25,7 @@ import type { FastifyBaseLogger as Logger } from "fastify";
 import type { ApiConfig } from "../config.js";
 import { ApiError, conflict, notFound } from "../errors.js";
 import {
+  isoDate,
   isoDateTime,
   toContractAuditEvent,
   toContractChangeSet,
@@ -186,10 +191,16 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       return toContractSyncRun(run, profile.profileId);
     },
 
-    async dashboardSummary(workspaceId, days): Promise<DashboardSummary> {
+    async dashboardSummary(
+      workspaceId,
+      days,
+      countryCode,
+    ): Promise<DashboardSummary> {
       const { start, end } = dateRange(now(), days);
       const all = await profiles.listProfilesByWorkspace(db, workspaceId);
-      const enabled = all.filter((p) => p.enabled);
+      const enabled = all.filter(
+        (p) => p.enabled && p.countryCode === countryCode,
+      );
 
       let currency: string | null = null;
       let impressions = 0;
@@ -276,7 +287,38 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         );
       }
 
-      const lastDataDate = dailyRows.at(-1)?.date ?? null;
+      const dailyByDate = new Map<
+        string,
+        {
+          date: string;
+          costMicros: number;
+          salesMicros: number;
+          estimatedRoyaltyMicros: number | null;
+        }
+      >();
+      for (const row of dailyRows) {
+        const point = dailyByDate.get(row.date) ?? {
+          date: row.date,
+          costMicros: 0,
+          salesMicros: 0,
+          estimatedRoyaltyMicros: economicsMissing ? null : 0,
+        };
+        point.costMicros += microsFromDecimalString(row.cost);
+        point.salesMicros += microsFromDecimalString(row.sales);
+        if (point.estimatedRoyaltyMicros !== null) {
+          const economics = economicsByProfile.get(row.profilePk);
+          if (economics) {
+            point.estimatedRoyaltyMicros +=
+              row.orders *
+              microsFromDecimalString(economics.estimatedRoyaltyPerSale);
+          }
+        }
+        dailyByDate.set(row.date, point);
+      }
+      const daily = [...dailyByDate.values()].sort((a, b) =>
+        a.date.localeCompare(b.date),
+      );
+      const lastDataDate = daily.at(-1)?.date ?? null;
 
       return {
         dateRange: { start, end },
@@ -303,10 +345,14 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         dataCurrentThrough: `${lastDataDate ?? start}T00:00:00.000Z`,
         writesDisabled:
           config.killSwitch || enabled.every((p) => !p.writeEnabled),
-        daily: dailyRows.map((row) => ({
+        daily: daily.map((row) => ({
           date: row.date,
-          cost: row.cost,
-          sales: row.sales,
+          cost: microsToDecimalString(row.costMicros),
+          sales: microsToDecimalString(row.salesMicros),
+          estimatedRoyalty:
+            row.estimatedRoyaltyMicros === null
+              ? null
+              : microsToDecimalString(row.estimatedRoyaltyMicros),
         })),
       };
     },
@@ -379,14 +425,90 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
     },
 
     async listBooks(workspaceId) {
-      const rows = await books.listBooks(db, workspaceId);
+      const [rows, savedEconomics] = await Promise.all([
+        books.listBooks(db, workspaceId),
+        books.listLatestBookEconomicsByWorkspace(db, workspaceId),
+      ]);
+      const economicsByBook = new Map<string, typeof savedEconomics>();
+      for (const economics of savedEconomics) {
+        const current = economicsByBook.get(economics.bookId);
+        if (current) {
+          current.push(economics);
+        } else {
+          economicsByBook.set(economics.bookId, [economics]);
+        }
+      }
       return rows.map((row) => ({
         id: row.id,
         asin: row.asin,
         title: row.title,
         format: row.format,
         status: row.status,
+        profileIds: row.profileIds,
+        economics: (economicsByBook.get(row.id) ?? []).map((economics) => ({
+          profileId: economics.amazonProfileId,
+          effectiveFrom: isoDate(economics.effectiveFrom),
+          currency: economics.currency,
+          listPrice: economics.listPrice,
+          estimatedRoyaltyPerSale: economics.estimatedRoyaltyPerSale,
+          targetAcos:
+            economics.targetAcos === null ? null : Number(economics.targetAcos),
+          goalMode: economics.goalMode,
+          maxSpendWithoutSale: economics.maxSpendWithoutSale,
+          maxBid: economics.maxBid,
+          maxDailyBudget: economics.maxDailyBudget,
+          notes: economics.notes,
+        })),
       }));
+    },
+
+    async listUnmappedAdvertisedProducts(workspaceId) {
+      return books.listUnmappedAdvertisedProducts(db, workspaceId);
+    },
+
+    async mapAdvertisedProduct(auth, input, meta): Promise<Book> {
+      // Resolve every browser-visible Amazon profile id through the workspace
+      // boundary before the repository receives internal primary keys.
+      const selectedProfiles = await Promise.all(
+        input.profileIds.map((profileId) =>
+          requireProfile(auth.workspaceId, profileId),
+        ),
+      );
+      const mapped = await books.mapAdvertisedProductToBook(db, {
+        workspaceId: auth.workspaceId,
+        profileIds: selectedProfiles.map((profile) => profile.id),
+        asin: input.asin,
+        title: input.title,
+        format: input.format,
+      });
+      if (!mapped) {
+        throw notFound(
+          "Advertised ASIN was not found for every selected profile",
+        );
+      }
+      await audit.insertAuditEvent(db, {
+        workspaceId: auth.workspaceId,
+        actorUserId: auth.userId,
+        event: "books.map_advertised_asin",
+        entityType: "book",
+        entityId: mapped.id,
+        ip: meta.ip ?? null,
+        sessionId: auth.sessionId,
+        details: {
+          asin: input.asin,
+          profileIds: input.profileIds,
+          format: input.format,
+        },
+      });
+      return {
+        id: mapped.id,
+        asin: mapped.asin,
+        title: mapped.title,
+        format: mapped.format,
+        status: mapped.status,
+        profileIds: input.profileIds,
+        economics: [],
+      };
     },
 
     async saveBookEconomics(auth, bookId, input, meta) {
@@ -401,6 +523,12 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       );
       if (!profile) {
         throw notFound("Unknown profile for economics");
+      }
+      if (!(await books.isBookLinkedToProfile(db, book.id, profile.id))) {
+        throw conflict(
+          "BOOK_PROFILE_NOT_LINKED",
+          "Map this advertised book to the selected profile before saving economics",
+        );
       }
       await books.upsertBookEconomics(db, {
         bookId: book.id,

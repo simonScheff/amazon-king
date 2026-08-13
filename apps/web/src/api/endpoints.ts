@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   amazonConnectionStatusSchema,
   amazonProfileSchema,
+  advertisedBookCandidateSchema,
   auditEventSchema,
   bookSchema,
   campaignRowSchema,
@@ -16,6 +17,7 @@ import {
   recommendationSchema,
   sessionInfoSchema,
   syncRunSchema,
+  type BookMappingInput,
   type BookEconomicsInput,
   type ChangeSetCreate,
   type LoginRequest,
@@ -46,6 +48,7 @@ export const dashboardSummaryResponseSchema = dashboardSummarySchema.extend({
         date: isoDateSchema,
         cost: nonNegativeDecimalStringSchema,
         sales: nonNegativeDecimalStringSchema,
+        estimatedRoyalty: nonNegativeDecimalStringSchema.nullable(),
       }),
     )
     .optional(),
@@ -180,12 +183,12 @@ export function useEnqueueSync(profileId: string) {
 // Dashboard
 // ---------------------------------------------------------------------------
 
-export function useDashboardSummary(days: number) {
+export function useDashboardSummary(days: number, country = "US") {
   return useQuery({
-    queryKey: ["dashboard-summary", days],
+    queryKey: ["dashboard-summary", days, country],
     queryFn: () =>
       apiFetch("/api/dashboard/summary", {
-        query: { days },
+        query: { days, country },
         schema: dashboardSummaryResponseSchema,
       }),
   });
@@ -327,6 +330,34 @@ export function useBooks() {
   return useQuery({
     queryKey: ["books"],
     queryFn: () => apiFetch("/api/books", { schema: z.array(bookSchema) }),
+  });
+}
+
+export function useUnmappedAdvertisedProducts() {
+  return useQuery({
+    queryKey: ["books", "unmapped-products"],
+    queryFn: () =>
+      apiFetch("/api/books/unmapped-products", {
+        schema: z.array(advertisedBookCandidateSchema),
+      }),
+  });
+}
+
+export function useMapAdvertisedBook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: BookMappingInput) =>
+      apiFetch("/api/books/mappings", {
+        method: "POST",
+        body,
+        schema: bookSchema,
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["books"] }),
+        qc.invalidateQueries({ queryKey: ["audit-events"] }),
+      ]);
+    },
   });
 }
 

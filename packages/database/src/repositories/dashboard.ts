@@ -208,14 +208,18 @@ export async function listSearchTermRows(
 
 export interface DailyPoint {
   date: string;
+  profilePk: string;
   cost: string;
   sales: string;
+  orders: number;
   currency: string;
 }
 
 /**
- * Per-day cost/sales across the given profiles (trend chart). Rows are per
- * currency; the caller must refuse to merge differing currencies.
+ * Per-day cost/sales/orders for each given profile (trend chart). Rows remain
+ * separate by profile so the caller can apply profile-specific royalty
+ * economics before combining them. The caller must refuse to merge differing
+ * currencies.
  */
 export async function dailySeries(
   db: Db,
@@ -228,25 +232,31 @@ export async function dailySeries(
   }
   const result = await db.query<{
     metric_date: string;
+    profile_id: string;
     cost: string;
     sales: string;
+    orders: string;
     currency: string;
   }>(
     `select metric_date::text as metric_date,
+            profile_id::text as profile_id,
             sum(cost)::text as cost,
             sum(sales)::text as sales,
+            sum(orders)::text as orders,
             currency
      from campaign_metrics_daily
      where profile_id = any($1::bigint[])
        and metric_date between $2 and $3
-     group by metric_date, currency
-     order by metric_date`,
+     group by metric_date, profile_id, currency
+     order by metric_date, profile_id`,
     [profilePks.map(String), dateStart, dateEnd],
   );
   return result.rows.map((row) => ({
     date: row.metric_date,
+    profilePk: row.profile_id,
     cost: row.cost,
     sales: row.sales,
+    orders: Number(row.orders),
     currency: row.currency,
   }));
 }

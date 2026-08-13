@@ -1,15 +1,22 @@
 import { useState, type FormEvent } from "react";
 import {
+  bookFormatSchema,
   goalModeSchema,
+  type AdvertisedBookCandidate,
   type AmazonProfile,
   type Book,
+  type BookEconomics,
+  type BookFormat,
+  type GoalMode,
 } from "@amazon-king/contracts";
 import {
   useAuditEvents,
   useBooks,
   useEnqueueSync,
+  useMapAdvertisedBook,
   useProfiles,
   useSaveBookEconomics,
+  useUnmappedAdvertisedProducts,
   useUpdateProfile,
 } from "../api/endpoints";
 import { useToast } from "../components/toast";
@@ -19,68 +26,201 @@ import { Card, CardBody, CardHeader } from "../components/ui/card";
 import { Input, Select } from "../components/ui/input";
 import { Table, Td, Th } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
-import { formatDateTime, labelize } from "../lib/format";
+import { formatDate, formatDateTime, labelize } from "../lib/format";
+import { countryNameForCode, flagForCountry } from "../lib/marketplaces";
 
-function BookEconomicsForm({
+interface AdvertisedBookGroup {
+  asin: string;
+  candidates: AdvertisedBookCandidate[];
+}
+
+function groupAdvertisedBooks(
+  candidates: AdvertisedBookCandidate[],
+): AdvertisedBookGroup[] {
+  const groups = new Map<string, AdvertisedBookCandidate[]>();
+  for (const candidate of candidates) {
+    const group = groups.get(candidate.asin);
+    if (group) {
+      group.push(candidate);
+    } else {
+      groups.set(candidate.asin, [candidate]);
+    }
+  }
+  return [...groups].map(([asin, groupedCandidates]) => ({
+    asin,
+    candidates: groupedCandidates,
+  }));
+}
+
+const BOOK_FORMAT_LABELS: Record<BookFormat, string> = {
+  paperback: "Paperback",
+  hardcover: "Hardcover",
+  kindle: "Kindle eBook",
+  other: "Other",
+};
+
+function AdvertisedBookMappingForm({ asin, candidates }: AdvertisedBookGroup) {
+  const mapBook = useMapAdvertisedBook();
+  const toast = useToast();
+  const [title, setTitle] = useState("");
+  const [format, setFormat] = useState<BookFormat>("paperback");
+  const marketplaces = candidates
+    .map((candidate) => `${candidate.countryCode} (${candidate.currencyCode})`)
+    .join(" · ");
+  const adCount = candidates.reduce(
+    (total, candidate) => total + candidate.adCount,
+    0,
+  );
+
+  function onSubmit(event: FormEvent) {
+    event.preventDefault();
+    mapBook.mutate(
+      {
+        profileIds: candidates.map((candidate) => candidate.profileId),
+        asin,
+        title,
+        format,
+      },
+      {
+        onSuccess: (book) => toast(`${book.title} added to your book catalog`),
+        onError: (error) =>
+          toast(`Book mapping failed: ${error.message}`, "error"),
+      },
+    );
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="flex flex-col gap-3 px-4 py-4">
+      <div>
+        <p className="font-mono text-sm font-medium text-zinc-200">{asin}</p>
+        <p className="mt-0.5 text-xs text-zinc-500">
+          {marketplaces} · {adCount} {adCount === 1 ? "ad" : "ads"}
+        </p>
+      </div>
+      <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(10rem,1fr)_auto] md:items-end">
+        <label className="flex flex-col gap-1 text-xs text-zinc-500">
+          Book title
+          <Input
+            required
+            maxLength={500}
+            placeholder="Enter the KDP book title"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-zinc-500">
+          Format
+          <Select
+            value={format}
+            onChange={(event) =>
+              setFormat(bookFormatSchema.parse(event.target.value))
+            }
+          >
+            {bookFormatSchema.options.map((option) => (
+              <option key={option} value={option}>
+                {BOOK_FORMAT_LABELS[option]}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <Button
+          type="submit"
+          variant="primary"
+          disabled={mapBook.isPending || title.trim().length === 0}
+        >
+          {mapBook.isPending ? "Adding…" : "Add book"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function inputDecimal(value: string | null | undefined): string {
+  if (value == null || value === "") return "";
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? String(numeric) : value;
+}
+
+function BookEconomicsProfileForm({
   book,
-  profiles,
+  profile,
+  economics,
 }: {
   book: Book;
-  profiles: AmazonProfile[];
+  profile: AmazonProfile;
+  economics?: BookEconomics;
 }) {
   const save = useSaveBookEconomics(book.id);
   const toast = useToast();
-  const [profileId, setProfileId] = useState(profiles[0]?.profileId ?? "");
-  const [listPrice, setListPrice] = useState("");
-  const [royalty, setRoyalty] = useState("");
-  const [targetAcosPct, setTargetAcosPct] = useState("");
-  const [goalMode, setGoalMode] = useState<string>("balanced");
-  const [notes, setNotes] = useState("");
-
-  const currency =
-    profiles.find((p) => p.profileId === profileId)?.currencyCode ?? "USD";
+  const [listPrice, setListPrice] = useState(() =>
+    inputDecimal(economics?.listPrice),
+  );
+  const [royalty, setRoyalty] = useState(() =>
+    inputDecimal(economics?.estimatedRoyaltyPerSale),
+  );
+  const [targetAcosPct, setTargetAcosPct] = useState(() =>
+    economics?.targetAcos == null
+      ? ""
+      : inputDecimal(String(economics.targetAcos * 100)),
+  );
+  const [goalMode, setGoalMode] = useState<GoalMode>(
+    economics?.goalMode ?? "balanced",
+  );
+  const [notes, setNotes] = useState(economics?.notes ?? "");
+  const countryName = countryNameForCode(profile.countryCode);
+  const saved = economics !== undefined;
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     const pct = targetAcosPct.trim();
     save.mutate(
       {
-        profileId,
+        profileId: profile.profileId,
         effectiveFrom: new Date().toISOString().slice(0, 10),
-        currency,
+        currency: profile.currencyCode,
         listPrice,
         estimatedRoyaltyPerSale: royalty,
         targetAcos: pct === "" ? null : Number(pct) / 100,
-        goalMode: goalMode as (typeof goalModeSchema.options)[number],
+        goalMode,
         ...(notes.trim() ? { notes: notes.trim() } : {}),
       },
       {
-        onSuccess: () => toast(`Economics saved for ${book.title}`),
+        onSuccess: () => toast(`${countryName} economics saved`),
         onError: (err) => toast(`Save failed: ${err.message}`, "error"),
       },
     );
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-3">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+    <form
+      aria-label={`${countryName} book economics`}
+      onSubmit={onSubmit}
+      className="rounded-md border border-zinc-800 bg-zinc-950/40 p-3"
+    >
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold text-zinc-100">
+            <span className="mr-2" aria-hidden="true">
+              {flagForCountry(profile.countryCode)}
+            </span>
+            {countryName}
+          </p>
+          <p className="mt-0.5 text-xs text-zinc-500">
+            {profile.currencyCode} · Marketplace-specific price and royalty
+          </p>
+        </div>
+        <Badge tone={saved ? "success" : "warning"}>
+          {saved
+            ? `Saved ${formatDate(economics.effectiveFrom)}`
+            : "Needs setup"}
+        </Badge>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <label className="flex flex-col gap-1 text-xs text-zinc-500">
-          Profile
-          <Select
-            value={profileId}
-            onChange={(e) => setProfileId(e.target.value)}
-            required
-          >
-            {profiles.map((p) => (
-              <option key={p.profileId} value={p.profileId}>
-                {p.profileId} ({p.countryCode})
-              </option>
-            ))}
-          </Select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-zinc-500">
-          List price ({currency})
+          List price ({profile.currencyCode})
           <Input
+            aria-label={`${countryName} list price`}
             inputMode="decimal"
             required
             placeholder="9.99"
@@ -89,8 +229,9 @@ function BookEconomicsForm({
           />
         </label>
         <label className="flex flex-col gap-1 text-xs text-zinc-500">
-          Royalty per sale ({currency})
+          Net royalty per sale ({profile.currencyCode})
           <Input
+            aria-label={`${countryName} net royalty per sale`}
             inputMode="decimal"
             required
             placeholder="2.04"
@@ -101,19 +242,19 @@ function BookEconomicsForm({
         <label className="flex flex-col gap-1 text-xs text-zinc-500">
           Target ACoS (%)
           <Input
+            aria-label={`${countryName} target ACoS`}
             inputMode="decimal"
             placeholder="e.g. 25"
             value={targetAcosPct}
             onChange={(e) => setTargetAcosPct(e.target.value)}
           />
         </label>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
         <label className="flex flex-col gap-1 text-xs text-zinc-500">
           Goal mode
           <Select
+            aria-label={`${countryName} goal mode`}
             value={goalMode}
-            onChange={(e) => setGoalMode(e.target.value)}
+            onChange={(e) => setGoalMode(goalModeSchema.parse(e.target.value))}
           >
             {goalModeSchema.options.map((g) => (
               <option key={g} value={g}>
@@ -122,32 +263,104 @@ function BookEconomicsForm({
             ))}
           </Select>
         </label>
-        <label className="flex flex-col gap-1 text-xs text-zinc-500">
+        <label className="flex flex-col gap-1 text-xs text-zinc-500 sm:col-span-2">
           Notes (optional)
-          <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
+          <Input
+            aria-label={`${countryName} notes`}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
         </label>
       </div>
-      <div>
-        <Button
-          type="submit"
-          variant="primary"
-          disabled={save.isPending || !profileId}
-        >
-          {save.isPending ? "Saving…" : "Save economics"}
+      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-zinc-600">
+          {saved
+            ? "Edit and save to update this country."
+            : "Not configured yet."}
+        </p>
+        <Button type="submit" variant="primary" disabled={save.isPending}>
+          {save.isPending
+            ? "Saving…"
+            : `${saved ? "Update" : "Save"} ${countryName}`}
         </Button>
       </div>
     </form>
   );
 }
 
+function BookEconomicsForms({
+  book,
+  profiles,
+}: {
+  book: Book;
+  profiles: AmazonProfile[];
+}) {
+  const linkedProfiles = profiles
+    .filter((profile) => book.profileIds.includes(profile.profileId))
+    .sort((a, b) => {
+      if (a.countryCode === "US") return -1;
+      if (b.countryCode === "US") return 1;
+      return countryNameForCode(a.countryCode).localeCompare(
+        countryNameForCode(b.countryCode),
+      );
+    });
+  const economicsByProfile = new Map(
+    book.economics.map((economics) => [economics.profileId, economics]),
+  );
+  const configuredCount = linkedProfiles.filter((profile) =>
+    economicsByProfile.has(profile.profileId),
+  ).length;
+
+  return (
+    <article className="px-4 py-4">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold text-zinc-100">{book.title}</h3>
+          <p className="mt-1 text-xs text-zinc-500">
+            <span className="font-mono">{book.asin}</span> ·{" "}
+            {labelize(book.format)}
+          </p>
+        </div>
+        <Badge
+          tone={
+            configuredCount === linkedProfiles.length ? "success" : "warning"
+          }
+        >
+          {configuredCount} of {linkedProfiles.length} countries configured
+        </Badge>
+      </div>
+      {linkedProfiles.length === 0 ? (
+        <p className="text-xs text-zinc-500">
+          No profile is linked to this book.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {linkedProfiles.map((profile) => (
+            <BookEconomicsProfileForm
+              key={profile.profileId}
+              book={book}
+              profile={profile}
+              economics={economicsByProfile.get(profile.profileId)}
+            />
+          ))}
+        </div>
+      )}
+    </article>
+  );
+}
+
 export function SettingsPage() {
   const books = useBooks();
+  const unmappedProducts = useUnmappedAdvertisedProducts();
   const profiles = useProfiles();
   const audit = useAuditEvents();
   const toast = useToast();
+  const advertisedBookGroups = groupAdvertisedBooks(
+    unmappedProducts.data ?? [],
+  );
 
   return (
-    <div className="flex max-w-5xl flex-col gap-4">
+    <div className="flex w-full min-w-0 max-w-5xl flex-col gap-4">
       <h1 className="text-lg font-semibold text-zinc-100">Settings & health</h1>
 
       <Card>
@@ -184,30 +397,60 @@ export function SettingsPage() {
       <Card>
         <CardHeader title="Book economics" />
         {books.isPending ? (
-          <Loading />
+          <Loading label="Loading book economics…" />
         ) : books.error ? (
           <ErrorState error={books.error} />
-        ) : books.data.length === 0 ? (
+        ) : books.data.length > 0 ? (
+          <div className="border-b border-zinc-800">
+            <div className="bg-emerald-950/15 px-4 py-3">
+              <p className="text-sm font-medium text-emerald-200">Your books</p>
+              <p className="mt-1 text-xs leading-5 text-zinc-400">
+                Enter the list price and net KDP royalty separately for every
+                country where the book is advertised.
+              </p>
+            </div>
+            <div className="divide-y divide-zinc-800">
+              {books.data.map((book) => (
+                <BookEconomicsForms
+                  key={book.id}
+                  book={book}
+                  profiles={profiles.data ?? []}
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {unmappedProducts.isPending ? (
+          <Loading label="Looking for new advertised ASINs…" />
+        ) : unmappedProducts.error ? (
+          <ErrorState error={unmappedProducts.error} />
+        ) : advertisedBookGroups.length > 0 ? (
+          <div>
+            <div className="bg-sky-950/20 px-4 py-3">
+              <p className="text-sm font-medium text-sky-200">
+                New advertised ASINs to identify
+              </p>
+              <p className="mt-1 text-xs leading-5 text-zinc-400">
+                Amazon Ads supplied these ASINs without a KDP title or format.
+                Identify each one to add it to Your books.
+              </p>
+            </div>
+            <div className="divide-y divide-zinc-800">
+              {advertisedBookGroups.map((group) => (
+                <AdvertisedBookMappingForm key={group.asin} {...group} />
+              ))}
+            </div>
+          </div>
+        ) : (books.data ?? []).length === 0 ? (
           <EmptyState>
-            No books imported yet. Economics are required before royalty and
-            profit estimates appear.
+            No advertised books found yet. Run Sync now for a profile that has
+            Sponsored Products ads.
           </EmptyState>
         ) : (
-          <div className="divide-y divide-zinc-800">
-            {books.data.map((b) => (
-              <div key={b.id} className="px-4 py-3">
-                <p className="mb-2 text-sm font-medium text-zinc-200">
-                  {b.title}{" "}
-                  <span className="text-xs font-normal text-zinc-500">
-                    {b.asin} · {b.format} · {b.status}
-                  </span>
-                </p>
-                {(profiles.data ?? []).length > 0 && (
-                  <BookEconomicsForm book={b} profiles={profiles.data ?? []} />
-                )}
-              </div>
-            ))}
-          </div>
+          <p className="px-4 py-3 text-xs text-zinc-500">
+            All advertised ASINs have been identified.
+          </p>
         )}
       </Card>
 

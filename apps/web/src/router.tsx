@@ -35,9 +35,18 @@ const appRoute = createRoute({
 const overviewRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/",
-  validateSearch: (search: Record<string, unknown>): { days?: number } => {
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { days?: number; country?: string } => {
     const days = Number(search.days);
-    return Number.isFinite(days) && days > 0 ? { days } : {};
+    const country =
+      typeof search.country === "string" && /^[A-Za-z]{2}$/.test(search.country)
+        ? search.country.toUpperCase()
+        : undefined;
+    return {
+      ...(Number.isFinite(days) && days > 0 ? { days } : {}),
+      ...(country ? { country } : {}),
+    };
   },
   component: OverviewPage,
 });
