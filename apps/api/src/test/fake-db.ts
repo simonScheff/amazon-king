@@ -389,6 +389,7 @@ export class FakeDb {
             email: p[0],
             token_hash: p[1],
             expires_at: p[2],
+            origin: p[3] ?? null,
             used_at: null,
             created_at: new Date(),
           };
@@ -407,7 +408,10 @@ export class FakeDb {
           );
           if (!row) return { rows: [], rowCount: 0 };
           row.used_at = new Date();
-          return { rows: [{ email: row.email }], rowCount: 1 };
+          return {
+            rows: [{ email: row.email, origin: row.origin }],
+            rowCount: 1,
+          };
         },
       },
       {

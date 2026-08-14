@@ -8,6 +8,7 @@ import {
 import type { SearchTermCampaignRow } from "@amazon-king/contracts";
 import { useSearchTerm } from "../api/endpoints";
 import { KpiCard } from "../components/kpi-card";
+import { AmazonProductLink } from "../components/amazon-product-link";
 import { ProfitabilityResult } from "../components/profitability-result";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -137,6 +138,11 @@ export function SearchTermDetailPage() {
           {data.searchTerm}
         </h1>
         <span className="text-xs text-zinc-500">{currency}</span>
+        <AmazonProductLink
+          term={data.searchTerm}
+          countryCode={data.countryCode}
+          className="text-xs"
+        />
         <div className="ml-auto flex flex-wrap items-center gap-3">
           <label className="flex items-center gap-2 text-sm text-zinc-400">
             <span>Market</span>

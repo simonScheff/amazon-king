@@ -66,15 +66,17 @@ describe("migration files", () => {
 
   it("allows campaign-creation change sets and create actions", async () => {
     const migrations = await loadMigrations();
-    expect(migrations.at(-1)?.filename).toBe("0005_campaign_creation.sql");
-    expect(migrations.at(-1)?.sql).toContain("'campaign_creation'");
+    const migration = migrations.find(
+      (file) => file.filename === "0005_campaign_creation.sql",
+    );
+    expect(migration?.sql).toContain("'campaign_creation'");
     for (const actionType of [
       "create_campaign",
       "create_ad_group",
       "create_product_ad",
       "create_keyword",
     ]) {
-      expect(migrations.at(-1)?.sql).toContain(`'${actionType}'`);
+      expect(migration?.sql).toContain(`'${actionType}'`);
     }
   });
 

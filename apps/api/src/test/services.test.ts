@@ -198,6 +198,74 @@ describe("session service", () => {
     );
   });
 
+  it("builds the magic link from an allowlisted request origin (tunnel)", async () => {
+    const db = new FakeDb();
+    const logger = fakeLogger();
+    const service = createSessionService({
+      db: db as never,
+      config: testConfig(),
+      logger,
+    });
+    const tunnel = "https://random-words-123.trycloudflare.com";
+
+    const result = await service.startLogin("owner@example.com", META, tunnel);
+
+    expect(result.devLoginUrl).toMatch(
+      new RegExp(
+        `^${tunnel.replaceAll(".", "\\.")}/api/session/verify\\?token=`,
+      ),
+    );
+    const token = new URL(result.devLoginUrl!).searchParams.get("token")!;
+    const verified = await service.verifyLogin(token, META);
+    expect(verified!.webOrigin).toBe(tunnel);
+  });
+
+  it("ignores a disallowed request origin and falls back to config", async () => {
+    const db = new FakeDb();
+    const logger = fakeLogger();
+    const service = createSessionService({
+      db: db as never,
+      config: testConfig(),
+      logger,
+    });
+
+    const result = await service.startLogin(
+      "owner@example.com",
+      META,
+      "https://evil.example.com",
+    );
+
+    expect(result.devLoginUrl).toMatch(
+      /^http:\/\/localhost:3000\/api\/session\/verify\?token=/,
+    );
+    const token = new URL(result.devLoginUrl!).searchParams.get("token")!;
+    const verified = await service.verifyLogin(token, META);
+    expect(verified!.webOrigin).toBe("http://localhost:5173");
+  });
+
+  it("rejects non-configured origins outside development", async () => {
+    const db = new FakeDb();
+    const service = createSessionService({
+      db: db as never,
+      config: testConfig({
+        nodeEnv: "production",
+        isDevelopment: false,
+        ownerEmail: "owner@example.com",
+        apiPublicUrl: "https://ads.example.com",
+      }),
+      logger: fakeLogger(),
+      sendMagicLink: vi.fn(async () => undefined),
+    });
+
+    await service.startLogin(
+      "owner@example.com",
+      META,
+      "https://random-words-123.trycloudflare.com",
+    );
+
+    expect(db.tables.loginTokens[0]!.origin).toBeNull();
+  });
+
   it("consumes login tokens exactly once", async () => {
     const db = new FakeDb();
     const logger = fakeLogger();

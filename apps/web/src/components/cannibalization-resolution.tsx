@@ -8,6 +8,7 @@ import {
   useRejectRecommendation,
 } from "../api/endpoints";
 import { formatDate, formatDateTime, formatMoney } from "../lib/format";
+import { AmazonProductLink } from "./amazon-product-link";
 import { ErrorState, Loading } from "./states";
 import { useToast } from "./toast";
 import { Badge } from "./ui/badge";
@@ -144,6 +145,11 @@ export function CannibalizationResolution({
               <p className="mt-1 text-lg font-semibold text-zinc-100">
                 “{data.searchTerm}”
               </p>
+              <AmazonProductLink
+                term={data.searchTerm}
+                countryCode={countryCode}
+                className="mt-1 inline-block text-xs"
+              />
               <p className="mt-4 text-xs text-zinc-500">Profile</p>
               <p className="font-mono text-sm text-zinc-300">
                 {data.profileId}

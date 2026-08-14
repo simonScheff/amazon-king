@@ -204,6 +204,7 @@ export async function buildServer(
       const result = await services.session.startLogin(
         body.email,
         meta(request),
+        request.headers.origin,
       );
       // Always 200: never reveal whether an email is allowed.
       return { ok: true, ...result };
@@ -232,7 +233,7 @@ export async function buildServer(
         secure: !config.isDevelopment,
         expires: verified.auth.expiresAt,
       });
-      return reply.redirect(config.webOrigin);
+      return reply.redirect(verified.webOrigin);
     },
   );
 

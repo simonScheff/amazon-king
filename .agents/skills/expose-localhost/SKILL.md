@@ -29,12 +29,18 @@ Notes:
 - HTTPS via the tunnel enables secure-context browser features (e.g. PWA install prompts, service workers) that plain-HTTP LAN URLs like `http://10.0.0.x:5173` cannot use.
 - Do not tunnel ports serving secrets or unauthenticated admin panels without warning the user — a quick-tunnel URL is reachable by anyone who has it.
 
-## This repo: sign-in redirect must match the tunnel URL
+## This repo: sign-in works on localhost and tunnel alike
 
-The API builds the magic link from `API_PUBLIC_URL` and redirects to `WEB_ORIGIN` after verifying it (`apps/api/src/services/session.ts`, `apps/api/src/server.ts`). If these still point at localhost/LAN, sign-in through the tunnel ends with a redirect back to the LAN URL. Fix when the user reports this:
+Since migration `0006_login_token_origin.sql`, the API remembers the browser
+origin each login was started from (`Origin` header on
+`POST /api/session/login`, allowlisted in `apps/api/src/services/session.ts`:
+the configured `WEB_ORIGIN`, plus localhost and `https://*.trycloudflare.com`
+in development). The magic link is built from that origin and
+`GET /api/session/verify` redirects back to it, so no `.env` changes are
+needed when opening or closing a tunnel.
 
-1. Point both at the tunnel URL in `.env`:
-   `WEB_ORIGIN=https://<random>.trycloudflare.com` and `API_PUBLIC_URL=https://<random>.trycloudflare.com`
-   (use `sed -i ''` on `.env`; do not print the file's other contents).
-2. The API reads env only at process start (`make run` sources `.env`), so ask the user to restart `make run` — do not kill their terminal's process tree yourself.
-3. Remind the user: if the tunnel restarts with a new URL, both vars must be updated again and the API restarted.
+Keep `WEB_ORIGIN` and `API_PUBLIC_URL` in `.env` pointed at
+`http://localhost:5173` as the default; they remain the fallback when a
+request carries no origin. Note the Amazon _connect_ (OAuth) callback still
+redirects to `WEB_ORIGIN` only — connecting the Amazon account is best done
+from localhost.

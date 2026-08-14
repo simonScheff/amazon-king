@@ -8,6 +8,7 @@ import { SortableTh } from "../components/ui/sortable-th";
 import { Table, Td, Th } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
 import { Flag } from "../components/flag";
+import { AmazonProductLink } from "../components/amazon-product-link";
 import { ProfitabilityResult } from "../components/profitability-result";
 import {
   getCampaignProfitStatus,
@@ -221,6 +222,11 @@ export function SearchTermsPage() {
                       >
                         {term.searchTerm}
                       </Link>
+                      <AmazonProductLink
+                        term={term.searchTerm}
+                        countryCode={defaultCountry}
+                        className="ml-2 whitespace-nowrap text-xs"
+                      />
                       <div className="mt-2 md:hidden">
                         <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
                           {PROFITABILITY_DAYS}-day profit

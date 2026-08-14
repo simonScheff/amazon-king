@@ -161,7 +161,9 @@ exact in every conflicting campaign, with `metadata.dependsOnChangeSetId`
 pointing at the creation set; `applyLoadedSet` rejects such a set with
 `DEPENDENCY_NOT_APPLIED` until the referenced set is `applied`, so the term is
 never blocked in all campaigns at once. Passwordless email login (magic link is **logged in
-dev only**), stateless HMAC CSRF per session, single-use OAuth state marked used
+dev only**); the login token remembers the allowlisted browser origin it was
+started from (`login_tokens.origin`) so the magic link and post-verify
+redirect work on localhost and a cloudflared tunnel interchangeably, stateless HMAC CSRF per session, single-use OAuth state marked used
 before code exchange, refresh tokens envelope-encrypted via
 `@amazon-king/crypto`, recent-auth (15 min) required for apply/rollback, and the
 guarded write flow in `src/services/changes.ts` (fingerprint-idempotent create,

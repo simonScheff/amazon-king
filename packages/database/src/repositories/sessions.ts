@@ -113,32 +113,39 @@ export async function extendSession(
 /** Create a passwordless email login token. Returns the row id. */
 export async function createLoginToken(
   db: Db,
-  input: { email: string; tokenHash: string; expiresAt: Date },
+  input: {
+    email: string;
+    tokenHash: string;
+    expiresAt: Date;
+    /** Web origin the login was started from; the magic link returns there. */
+    origin?: string | null;
+  },
 ): Promise<string> {
   const result = await db.query<{ id: string }>(
-    `insert into login_tokens (email, token_hash, expires_at)
-     values ($1, $2, $3)
+    `insert into login_tokens (email, token_hash, expires_at, origin)
+     values ($1, $2, $3, $4)
      returning id`,
-    [input.email, input.tokenHash, input.expiresAt],
+    [input.email, input.tokenHash, input.expiresAt, input.origin ?? null],
   );
   return result.rows[0]!.id;
 }
 
 /**
  * Single-use consume: marks the token used atomically and returns the email
- * only when the token was unused and unexpired; null otherwise.
+ * and originating web origin only when the token was unused and unexpired;
+ * null otherwise.
  */
 export async function consumeLoginToken(
   db: Db,
   tokenHash: string,
-): Promise<string | null> {
-  const result = await db.query<{ email: string }>(
+): Promise<{ email: string; origin: string | null } | null> {
+  const result = await db.query<{ email: string; origin: string | null }>(
     `update login_tokens set used_at = now()
      where token_hash = $1 and used_at is null and expires_at > now()
-     returning email`,
+     returning email, origin`,
     [tokenHash],
   );
-  return result.rows[0]?.email ?? null;
+  return result.rows[0] ?? null;
 }
 
 /** Create a one-time OAuth state tied to the authenticated user. */

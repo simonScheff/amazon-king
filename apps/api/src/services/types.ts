@@ -55,6 +55,8 @@ export interface VerifiedLogin {
   /** Opaque session token for the cookie (never stored raw server-side). */
   sessionToken: string;
   auth: AuthContext;
+  /** Allowlisted web origin to redirect to after verify. */
+  webOrigin: string;
 }
 
 export interface LoginStartResult {
@@ -69,7 +71,12 @@ export interface SessionService {
    * browser; production delivers it by email. No-ops silently when the email
    * is not allowed (OWNER_EMAIL restriction) to avoid account enumeration.
    */
-  startLogin(email: string, meta: RequestMeta): Promise<LoginStartResult>;
+  startLogin(
+    email: string,
+    meta: RequestMeta,
+    /** Browser Origin header of the login request; used for the magic-link base and post-verify redirect when allowlisted. */
+    origin?: string,
+  ): Promise<LoginStartResult>;
   /**
    * Consume a login token (single use), provision user/workspace on first
    * login, and create a session. Null when the token is bad/expired/used.

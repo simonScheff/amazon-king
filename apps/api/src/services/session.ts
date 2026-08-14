@@ -32,6 +32,32 @@ export function randomToken(bytes = 32): string {
   return randomBytes(bytes).toString("base64url");
 }
 
+/**
+ * Redirect-target allowlist for login links (plan §13: exact allowlist for
+ * redirect destinations). The configured WEB_ORIGIN is always allowed. In
+ * development only, localhost (any port) and https quick-tunnel hosts are
+ * also allowed so the same deployment serves both local and tunneled access.
+ */
+export function isAllowedWebOrigin(
+  origin: string,
+  config: Pick<ApiConfig, "webOrigin" | "isDevelopment">,
+): boolean {
+  if (origin === config.webOrigin) return true;
+  if (!config.isDevelopment) return false;
+  let url: URL;
+  try {
+    url = new URL(origin);
+  } catch {
+    return false;
+  }
+  if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
+    return true;
+  }
+  return (
+    url.protocol === "https:" && url.hostname.endsWith(".trycloudflare.com")
+  );
+}
+
 export interface SessionServiceDeps {
   db: Db;
   config: ApiConfig;
@@ -76,6 +102,7 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
     async startLogin(
       email: string,
       meta: RequestMeta,
+      origin?: string,
     ): Promise<LoginStartResult> {
       if (
         config.ownerEmail &&
@@ -86,14 +113,22 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
         logger.warn({ event: "login_denied" }, "Login denied by OWNER_EMAIL");
         return {};
       }
+      const webOrigin =
+        origin && isAllowedWebOrigin(origin, config) ? origin : null;
       const token = randomToken();
       await sessions.createLoginToken(db, {
         email,
         tokenHash: sha256Hex(token),
         expiresAt: new Date(now().getTime() + LOGIN_TOKEN_TTL_MS),
+        origin: webOrigin,
       });
+      // The web app proxies /api, so the browser's own origin serves the
+      // verify endpoint on localhost and tunnel alike; fall back to the
+      // configured public URL when no origin accompanied the request.
       const apiBase =
-        config.apiPublicUrl ?? new URL(config.amazonRedirectUri).origin;
+        webOrigin ??
+        config.apiPublicUrl ??
+        new URL(config.amazonRedirectUri).origin;
       const link = `${apiBase}/api/session/verify?token=${token}`;
       if (deps.sendMagicLink) {
         await deps.sendMagicLink({
@@ -121,10 +156,17 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
       token: string,
       meta: RequestMeta,
     ): Promise<VerifiedLogin | null> {
-      const email = await sessions.consumeLoginToken(db, sha256Hex(token));
-      if (!email) {
+      const consumed = await sessions.consumeLoginToken(db, sha256Hex(token));
+      if (!consumed) {
         return null;
       }
+      const { email } = consumed;
+      // Return the user to the origin they started from (re-validated —
+      // stored values predate any config change), else the configured one.
+      const webOrigin =
+        consumed.origin && isAllowedWebOrigin(consumed.origin, config)
+          ? consumed.origin
+          : config.webOrigin;
       const { user, workspaceId } = await identity.findOrProvisionOwner(
         db,
         email,
@@ -154,7 +196,7 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
         meta,
         session.id,
       );
-      return { sessionToken, auth };
+      return { sessionToken, auth, webOrigin };
     },
 
     async authenticate(
