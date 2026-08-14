@@ -616,10 +616,11 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       searchTerm,
       days,
       bookId = null,
+      countryCode = null,
     ): Promise<SearchTermDetail | null> {
       const { start, end } = dateRange(now(), days);
       const bookPk = await requireBook(workspaceId, bookId);
-      const rows = await dashboard.listSearchTermCampaignRows(
+      const allRows = await dashboard.listSearchTermCampaignRows(
         db,
         workspaceId,
         searchTerm,
@@ -627,7 +628,23 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         end,
         bookPk,
       );
-      if (rows.length === 0) return null;
+      if (allRows.length === 0) return null;
+
+      const availableCountryCodes = [
+        ...new Set(allRows.map((row) => row.countryCode)),
+      ].sort((a, b) => {
+        if (a === "US") return -1;
+        if (b === "US") return 1;
+        return a.localeCompare(b);
+      });
+      const selectedCountryCode =
+        (countryCode !== null && availableCountryCodes.includes(countryCode)
+          ? countryCode
+          : null) ?? availableCountryCodes[0]!;
+      const rows = allRows.filter(
+        (row) => row.countryCode === selectedCountryCode,
+      );
+
       if (rows.some((row) => row.mixedCurrency)) {
         throw conflict(
           "MIXED_CURRENCY",
@@ -672,6 +689,8 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
 
       return {
         searchTerm,
+        countryCode: selectedCountryCode,
+        availableCountryCodes,
         dateRange: { start, end },
         currency: [...currencies][0]! as SearchTermDetail["currency"],
         totals: {

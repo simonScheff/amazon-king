@@ -683,6 +683,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     expect(breakdown).toEqual([
       expect.objectContaining({
         amazonCampaignId: "amzn-campaign-st-1",
+        countryCode: "US",
         name: "ST campaign 1",
         totals: expect.objectContaining({ cost: "5.0000", orders: 2 }),
         estimatedRoyalty: "8.5000",

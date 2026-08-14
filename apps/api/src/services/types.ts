@@ -150,6 +150,7 @@ export interface ReadService {
     searchTerm: string,
     days: number,
     bookId?: string | null,
+    countryCode?: string | null,
   ): Promise<SearchTermDetail | null>;
   listBooks(workspaceId: string): Promise<Book[]>;
   listUnmappedAdvertisedProducts(

@@ -282,13 +282,18 @@ export function useSearchTerms(days = 7, bookId?: string) {
   });
 }
 
-export function useSearchTerm(term: string, days: number, bookId?: string) {
+export function useSearchTerm(
+  term: string,
+  days: number,
+  bookId?: string,
+  countryCode?: string,
+) {
   return useQuery({
-    queryKey: ["search-term", term, days, bookId ?? null],
+    queryKey: ["search-term", term, days, bookId ?? null, countryCode ?? null],
     placeholderData: keepPreviousData,
     queryFn: () =>
       apiFetch(`/api/search-terms/${encodeURIComponent(term)}`, {
-        query: { days, book: bookId },
+        query: { days, book: bookId, country: countryCode },
         schema: searchTermDetailSchema,
       }),
   });

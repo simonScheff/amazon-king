@@ -7,13 +7,14 @@ import { Select } from "../components/ui/input";
 import { SortableTh } from "../components/ui/sortable-th";
 import { Table, Td, Th } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
+import { Flag } from "../components/flag";
 import { ProfitabilityResult } from "../components/profitability-result";
 import {
   getCampaignProfitStatus,
   hasCampaignActivity,
 } from "../lib/campaign-profit";
 import { formatAcos, formatCount, formatMoney } from "../lib/format";
-import { countryNameForCode, flagForCountry } from "../lib/marketplaces";
+import { countryNameForCode } from "../lib/marketplaces";
 import { compareNullable, nextSort, type Sort } from "../lib/sorting";
 
 const PROFITABILITY_DAYS = 7;
@@ -194,6 +195,9 @@ export function SearchTermsPage() {
             <tbody>
               {sortedRows.map((term) => {
                 const currency = term.currency;
+                const defaultCountry = term.countryCodes.includes("US")
+                  ? "US"
+                  : term.countryCodes[0];
                 const hasActivity = hasCampaignActivity(term.totals);
                 const profitStatus = getCampaignProfitStatus(
                   term.totals,
@@ -209,6 +213,9 @@ export function SearchTermsPage() {
                         search={{
                           days: PROFITABILITY_DAYS,
                           ...(book ? { book } : {}),
+                          ...(defaultCountry
+                            ? { country: defaultCountry }
+                            : {}),
                         }}
                         className="break-words text-sky-400 hover:underline"
                       >
@@ -233,9 +240,15 @@ export function SearchTermsPage() {
                         .map((code) => countryNameForCode(code))
                         .join(", ")}
                     >
-                      {term.countryCodes
-                        .map((code) => `${flagForCountry(code)} ${code}`)
-                        .join(" ")}
+                      {term.countryCodes.map((code) => (
+                        <span
+                          key={code}
+                          className="mr-2 inline-flex items-center gap-1 last:mr-0"
+                        >
+                          <Flag countryCode={code} />
+                          {code}{" "}
+                        </span>
+                      ))}
                     </Td>
                     <Td className="text-right">
                       {formatCount(term.campaignCount)}

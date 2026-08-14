@@ -85,7 +85,9 @@ Established so far (run from the repo root unless noted):
 
 `apps/web` (`@amazon-king/web`) is scaffolded: Vite + React 19 + TypeScript,
 TanStack Router (code-based routes) and Query, Tailwind CSS v4 via
-`@tailwindcss/vite`, Recharts. Commands: `dev` (Vite dev server, proxies
+`@tailwindcss/vite`, Recharts. Country flags use bundled `flag-icons` SVGs via
+the `Flag` component (`src/components/flag.tsx`) instead of Unicode flag emoji,
+which do not render on all platforms. Commands: `dev` (Vite dev server, proxies
 `/api` to `http://localhost:3000`), `build` (`vite build`), `typecheck`
 (`tsc -p tsconfig.json`), `test` (`vitest run --passWithNoTests`, jsdom +
 Testing Library). It imports `@amazon-king/contracts` (workspace link) for API

@@ -7,13 +7,14 @@ import { Card } from "../components/ui/card";
 import { SortableTh } from "../components/ui/sortable-th";
 import { Table, Td } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
+import { Flag } from "../components/flag";
 import { ProfitabilityResult } from "../components/profitability-result";
 import {
   getCampaignProfitStatus,
   hasCampaignActivity,
 } from "../lib/campaign-profit";
 import { formatAcos, formatCount, formatMoney } from "../lib/format";
-import { countryNameForCode, flagForCountry } from "../lib/marketplaces";
+import { countryNameForCode } from "../lib/marketplaces";
 import { compareNullable, nextSort, type Sort } from "../lib/sorting";
 
 const PROFITABILITY_DAYS = 7;
@@ -221,7 +222,8 @@ export function CampaignsPage() {
                           className="whitespace-nowrap"
                           title={`${countryNameForCode(countryCode)} · profile ${c.profileId}`}
                         >
-                          {flagForCountry(countryCode)} {countryCode}
+                          <Flag countryCode={countryCode} className="mr-1" />
+                          {countryCode}
                         </span>
                       ) : (
                         <span className="font-mono">{c.profileId}</span>

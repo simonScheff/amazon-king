@@ -27,8 +27,9 @@ import { Card, CardBody, CardHeader } from "../components/ui/card";
 import { Input, Select } from "../components/ui/input";
 import { Table, Td, Th } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
+import { Flag } from "../components/flag";
 import { formatDate, formatDateTime, labelize } from "../lib/format";
-import { countryNameForCode, flagForCountry } from "../lib/marketplaces";
+import { countryNameForCode } from "../lib/marketplaces";
 
 interface AdvertisedBookGroup {
   asin: string;
@@ -269,7 +270,7 @@ function BookEconomicsProfileForm({
         <div>
           <p className="text-sm font-semibold text-zinc-100">
             <span className="mr-2" aria-hidden="true">
-              {flagForCountry(profile.countryCode)}
+              <Flag countryCode={profile.countryCode} />
             </span>
             {countryName}
           </p>

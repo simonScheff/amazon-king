@@ -145,7 +145,8 @@ describe("CampaignsPage seven-day profitability", () => {
 
     const markets = screen.getAllByTitle("United States · profile profile-us");
     expect(markets).toHaveLength(4);
-    expect(markets[0]).toHaveTextContent("🇺🇸 US");
+    expect(markets[0]).toHaveTextContent("US");
+    expect(markets[0]!.querySelector(".fi.fi-us")).not.toBeNull();
   });
 
   it("sorts rows when a column header is clicked", () => {

@@ -133,6 +133,10 @@ export type SearchTermCampaignRow = z.infer<typeof searchTermCampaignRowSchema>;
 /** GET /api/search-terms/:term — a search term with its per-campaign breakdown. */
 export const searchTermDetailSchema = z.object({
   searchTerm: z.string(),
+  /** Marketplace selected for this view (two-letter Amazon country code). */
+  countryCode: z.string().regex(/^[A-Z]{2}$/),
+  /** Markets where this term has data in the selected window. */
+  availableCountryCodes: z.array(z.string().regex(/^[A-Z]{2}$/)).min(1),
   dateRange: z.object({
     start: isoDateSchema,
     end: isoDateSchema,

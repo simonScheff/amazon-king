@@ -375,6 +375,12 @@ export async function buildServer(
 
   const searchTermsQuerySchema = daysQuerySchema.extend({
     book: z.string().min(1).optional(),
+    country: z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z]{2}$/)
+      .transform((value) => value.toUpperCase())
+      .optional(),
   });
 
   app.get("/api/search-terms", async (request) => {
@@ -386,12 +392,16 @@ export async function buildServer(
   app.get("/api/search-terms/:term", async (request) => {
     const auth = await authenticate(request);
     const { term } = request.params as { term: string };
-    const { days, book } = parse(searchTermsQuerySchema, request.query);
+    const { days, book, country } = parse(
+      searchTermsQuerySchema,
+      request.query,
+    );
     const detail = await services.read.getSearchTermDetail(
       auth.workspaceId,
       term,
       days,
       book ?? null,
+      country ?? null,
     );
     if (!detail) throw notFound("Unknown search term");
     return detail;

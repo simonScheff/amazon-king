@@ -12,6 +12,7 @@ import { ProfitabilityResult } from "../components/profitability-result";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { Select } from "../components/ui/input";
 import { SortableTh } from "../components/ui/sortable-th";
 import { Table, Td } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
@@ -26,6 +27,7 @@ import {
   formatMoney,
 } from "../lib/format";
 import { compareNullable, nextSort, type Sort } from "../lib/sorting";
+import { countryNameForCode } from "../lib/marketplaces";
 
 const DAY_OPTIONS = [7, 14, 30, 60] as const;
 const DEFAULT_DAYS = 7;
@@ -82,13 +84,14 @@ export function SearchTermDetailPage() {
   const search = useSearch({ strict: false }) as {
     days?: number;
     book?: string;
+    country?: string;
   };
   const days = DAY_OPTIONS.includes(search.days as 7)
     ? Number(search.days)
     : DEFAULT_DAYS;
   const book = search.book;
   const navigate = useNavigate();
-  const detail = useSearchTerm(term, days, book);
+  const detail = useSearchTerm(term, days, book, search.country);
   const [sort, setSort] = useState<Sort<SortKey>>({
     key: "cost",
     direction: "desc",
@@ -134,26 +137,57 @@ export function SearchTermDetailPage() {
           {data.searchTerm}
         </h1>
         <span className="text-xs text-zinc-500">{currency}</span>
-        <div className="ml-auto flex items-center gap-3">
-          <span className="text-sm text-zinc-400">Date range</span>
-          <div role="group" aria-label="Date range" className="flex gap-1">
-            {DAY_OPTIONS.map((option) => (
-              <Button
-                key={option}
-                size="sm"
-                variant={option === days ? "primary" : "secondary"}
-                onClick={() =>
-                  navigate({
-                    to: "/search-terms/$term",
-                    params: { term },
-                    search: { days: option, ...(book ? { book } : {}) },
-                    replace: true,
-                  })
-                }
-              >
-                {option}d
-              </Button>
-            ))}
+        <div className="ml-auto flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-zinc-400">
+            <span>Market</span>
+            <Select
+              aria-label="Market"
+              value={data.countryCode}
+              onChange={(event) =>
+                void navigate({
+                  to: "/search-terms/$term",
+                  params: { term },
+                  search: {
+                    days,
+                    country: event.currentTarget.value,
+                    ...(book ? { book } : {}),
+                  },
+                  replace: true,
+                })
+              }
+            >
+              {data.availableCountryCodes.map((countryCode) => (
+                <option key={countryCode} value={countryCode}>
+                  {countryNameForCode(countryCode)} ({countryCode})
+                </option>
+              ))}
+            </Select>
+          </label>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-zinc-400">Date range</span>
+            <div role="group" aria-label="Date range" className="flex gap-1">
+              {DAY_OPTIONS.map((option) => (
+                <Button
+                  key={option}
+                  size="sm"
+                  variant={option === days ? "primary" : "secondary"}
+                  onClick={() =>
+                    navigate({
+                      to: "/search-terms/$term",
+                      params: { term },
+                      search: {
+                        days: option,
+                        country: data.countryCode,
+                        ...(book ? { book } : {}),
+                      },
+                      replace: true,
+                    })
+                  }
+                >
+                  {option}d
+                </Button>
+              ))}
+            </div>
           </div>
         </div>
       </div>

@@ -135,9 +135,12 @@ describe("SearchTermsPage", () => {
     expect(
       screen.getByRole("columnheader", { name: "Market" }),
     ).toBeInTheDocument();
-    expect(screen.getByTitle("United States")).toHaveTextContent("🇺🇸 US");
+    expect(screen.getByTitle("United States")).toHaveTextContent("US");
+    expect(
+      screen.getByTitle("United States").querySelector(".fi.fi-us"),
+    ).not.toBeNull();
     expect(screen.getByTitle("Germany, United States")).toHaveTextContent(
-      "🇩🇪 DE 🇺🇸 US",
+      "DE US",
     );
   });
 

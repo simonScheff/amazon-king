@@ -6,6 +6,7 @@ import {
   useProfiles,
   useRecommendations,
 } from "../api/endpoints";
+import { Flag } from "../components/flag";
 import { KpiCard } from "../components/kpi-card";
 import { PerformanceTrendChart } from "../components/performance-trend-chart";
 import { Badge } from "../components/ui/badge";
@@ -140,9 +141,20 @@ export function OverviewPage() {
             </time>{" "}
             · {formatDate(summary.data.dateRange.start)} –{" "}
             {formatDate(summary.data.dateRange.end)} ·{" "}
-            {selectedMarketplace
-              ? `${selectedMarketplace.flag} ${selectedMarketplace.countryName}`
-              : `${flagForCountry(country)} ${country}`}
+            {selectedMarketplace ? (
+              <>
+                <Flag
+                  countryCode={selectedMarketplace.countryCode}
+                  className="mr-1"
+                />
+                {selectedMarketplace.countryName}
+              </>
+            ) : (
+              <>
+                <Flag countryCode={country} className="mr-1" />
+                {country}
+              </>
+            )}
           </p>
 
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">

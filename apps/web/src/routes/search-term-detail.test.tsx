@@ -12,13 +12,15 @@ import { SearchTermDetailPage } from "./search-term-detail";
 
 const mocks = vi.hoisted(() => ({
   useSearchTerm: vi.fn(),
+  useSearch: vi.fn(),
+  navigate: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children: ReactNode }) => <a href="#">{children}</a>,
   useParams: () => ({ term: "fantasy books" }),
-  useSearch: () => ({ days: 7 }),
-  useNavigate: () => vi.fn(),
+  useSearch: mocks.useSearch,
+  useNavigate: () => mocks.navigate,
 }));
 
 vi.mock("../api/endpoints", () => ({
@@ -30,6 +32,8 @@ function detail(campaigns: SearchTermDetail["campaigns"]): SearchTermDetail {
   const economicsMissing = campaigns.some((c) => c.economicsMissing);
   return {
     searchTerm: "fantasy books",
+    countryCode: "US",
+    availableCountryCodes: ["US"],
     dateRange: { start: "2026-08-07", end: "2026-08-13" },
     currency: "USD",
     totals: {
@@ -77,6 +81,9 @@ describe("SearchTermDetailPage", () => {
 
   beforeEach(() => {
     mocks.useSearchTerm.mockReset();
+    mocks.useSearch.mockReset();
+    mocks.useSearch.mockReturnValue({ days: 7 });
+    mocks.navigate.mockReset();
     mocks.useSearchTerm.mockReturnValue({
       isPending: false,
       error: null,
@@ -97,6 +104,7 @@ describe("SearchTermDetailPage", () => {
       "fantasy books",
       7,
       undefined,
+      undefined,
     );
     expect(
       screen.getByRole("heading", { name: "fantasy books" }),
@@ -111,6 +119,30 @@ describe("SearchTermDetailPage", () => {
     );
     expect(within(research).getByText("Not profitable")).toBeInTheDocument();
     expect(within(research).getByText("-$1.00")).toBeInTheDocument();
+  });
+
+  it("switches between only the markets where the term has data", () => {
+    const data = detail([campaign("campaign-1", "General")]);
+    data.availableCountryCodes = ["US", "GB"];
+    mocks.useSearchTerm.mockReturnValue({
+      isPending: false,
+      error: null,
+      data,
+    });
+
+    render(<SearchTermDetailPage />);
+
+    const market = screen.getByRole("combobox", { name: "Market" });
+    expect(within(market).getAllByRole("option")).toHaveLength(2);
+    expect(market).toHaveValue("US");
+
+    fireEvent.change(market, { target: { value: "GB" } });
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: "/search-terms/$term",
+      params: { term: "fantasy books" },
+      search: { days: 7, country: "GB" },
+      replace: true,
+    });
   });
 
   it("warns when profit is hidden because economics are missing", () => {

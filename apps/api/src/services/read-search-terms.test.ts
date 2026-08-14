@@ -45,6 +45,7 @@ const ROLLUP_ROW = {
 
 const CAMPAIGN_ROW = {
   amazonProfileId: "amazon-profile",
+  countryCode: "US",
   amazonCampaignId: "amazon-campaign",
   name: "General",
   state: "enabled",
@@ -208,7 +209,46 @@ describe("search terms", () => {
     expect(result?.campaigns[1]?.estimatedAdProfit).toBeNull();
   });
 
-  it("refuses to combine campaigns in different currencies", async () => {
+  it("returns one market at a time when campaigns use different currencies", async () => {
+    vi.mocked(dashboard.listSearchTermCampaignRows).mockResolvedValue([
+      CAMPAIGN_ROW,
+      {
+        ...CAMPAIGN_ROW,
+        amazonProfileId: "amazon-profile-gb",
+        amazonCampaignId: "amazon-campaign-2",
+        countryCode: "GB",
+        currency: "EUR",
+      },
+    ]);
+
+    const defaultMarket = await service().getSearchTermDetail(
+      "workspace-pk",
+      "fantasy books",
+      7,
+    );
+    expect(defaultMarket).toMatchObject({
+      countryCode: "US",
+      availableCountryCodes: ["US", "GB"],
+      currency: "USD",
+      campaigns: [{ campaignId: "amazon-campaign" }],
+    });
+
+    const gbMarket = await service().getSearchTermDetail(
+      "workspace-pk",
+      "fantasy books",
+      7,
+      null,
+      "GB",
+    );
+    expect(gbMarket).toMatchObject({
+      countryCode: "GB",
+      availableCountryCodes: ["US", "GB"],
+      currency: "EUR",
+      campaigns: [{ campaignId: "amazon-campaign-2" }],
+    });
+  });
+
+  it("still refuses to combine currencies inside one market", async () => {
     vi.mocked(dashboard.listSearchTermCampaignRows).mockResolvedValue([
       CAMPAIGN_ROW,
       {

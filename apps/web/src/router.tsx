@@ -109,12 +109,19 @@ const searchTermDetailRoute = createRoute({
   path: "/search-terms/$term",
   validateSearch: (
     search: Record<string, unknown>,
-  ): { days?: number; book?: string } => {
+  ): { days?: number; book?: string; country?: string } => {
     const days = Number(search.days);
+    const country =
+      typeof search.country === "string"
+        ? search.country.trim().toUpperCase()
+        : undefined;
     return {
       ...(Number.isFinite(days) && days > 0 ? { days } : {}),
       ...(typeof search.book === "string" && search.book !== ""
         ? { book: search.book }
+        : {}),
+      ...(country !== undefined && /^[A-Z]{2}$/.test(country)
+        ? { country }
         : {}),
     };
   },

@@ -542,6 +542,7 @@ export async function listSearchTermRollupRows(
 
 export interface SearchTermCampaignRowData {
   amazonProfileId: string;
+  countryCode: string;
   amazonCampaignId: string;
   name: string;
   state: string;
@@ -565,6 +566,7 @@ export async function listSearchTermCampaignRows(
   const result = await db.query<
     RawTotals & {
       amazon_profile_id: string;
+      country_code: string;
       amazon_campaign_id: string;
       name: string;
       state: string;
@@ -577,6 +579,7 @@ export async function listSearchTermCampaignRows(
   >(
     `${SEARCH_TERM_CTES}
      select p.profile_id as amazon_profile_id,
+            p.country_code,
             d.campaign_id as amazon_campaign_id,
             c.name, c.state,
             sum(d.impressions)::text as impressions,
@@ -602,12 +605,13 @@ export async function listSearchTermCampaignRows(
       and r.campaign_id = d.campaign_id
       and r.ad_group_id = d.ad_group_id
       and r.metric_date = d.metric_date
-     group by p.profile_id, d.campaign_id, c.name, c.state
+     group by p.profile_id, p.country_code, d.campaign_id, c.name, c.state
      order by sum(d.cost) desc, d.campaign_id`,
     [workspaceId, dateStart, dateEnd, searchTerm, bookId],
   );
   return result.rows.map((row) => ({
     amazonProfileId: row.amazon_profile_id,
+    countryCode: row.country_code,
     amazonCampaignId: row.amazon_campaign_id,
     name: row.name,
     state: row.state,
