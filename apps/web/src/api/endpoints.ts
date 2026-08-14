@@ -27,6 +27,7 @@ import {
   syncRunSchema,
   type BookMappingInput,
   type BookEconomicsInput,
+  type BookCoverInput,
   type ChangeSetCreate,
   type LoginRequest,
   type ProfileUpdate,
@@ -473,6 +474,20 @@ export function useSaveBookEconomics(bookId: string) {
         qc.invalidateQueries({ queryKey: ["books"] }),
         qc.invalidateQueries({ queryKey: ["campaign"] }),
         qc.invalidateQueries({ queryKey: ["dashboard-summary"] }),
+      ]);
+    },
+  });
+}
+
+export function useSaveBookCover(bookId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: BookCoverInput) =>
+      apiFetch(`/api/books/${bookId}/cover`, { method: "PUT", body }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["books"] }),
+        qc.invalidateQueries({ queryKey: ["audit-events"] }),
       ]);
     },
   });

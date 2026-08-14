@@ -28,6 +28,7 @@ import { createReadService } from "./read.js";
 const ROLLUP_ROW = {
   searchTerm: "fantasy books",
   campaignCount: 2,
+  countryCodes: ["US"],
   currency: "USD",
   totals: {
     impressions: 100,
@@ -108,6 +109,7 @@ describe("search terms", () => {
       {
         searchTerm: "fantasy books",
         campaignCount: 2,
+        countryCodes: ["US"],
         currency: "USD",
         totals: {
           impressions: 100,

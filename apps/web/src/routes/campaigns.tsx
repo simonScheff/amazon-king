@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import type { CampaignListRow } from "@amazon-king/contracts";
-import { useCampaigns } from "../api/endpoints";
+import { useCampaigns, useProfiles } from "../api/endpoints";
 import { Badge } from "../components/ui/badge";
 import { Card } from "../components/ui/card";
 import { SortableTh } from "../components/ui/sortable-th";
@@ -13,6 +13,7 @@ import {
   hasCampaignActivity,
 } from "../lib/campaign-profit";
 import { formatAcos, formatCount, formatMoney } from "../lib/format";
+import { countryNameForCode, flagForCountry } from "../lib/marketplaces";
 import { compareNullable, nextSort, type Sort } from "../lib/sorting";
 
 const PROFITABILITY_DAYS = 7;
@@ -63,10 +64,15 @@ function sortValue(row: CampaignListRow, key: SortKey): number | string | null {
 
 export function CampaignsPage() {
   const campaigns = useCampaigns(PROFITABILITY_DAYS);
+  const profiles = useProfiles();
   const [sort, setSort] = useState<Sort<SortKey>>({
     key: "cost",
     direction: "desc",
   });
+
+  const countryByProfile = new Map(
+    (profiles.data ?? []).map((p) => [p.profileId, p.countryCode]),
+  );
 
   function onSort(column: SortKey) {
     setSort((current) => nextSort(current, column, TEXT_COLUMNS));
@@ -172,6 +178,7 @@ export function CampaignsPage() {
             <tbody>
               {sortedRows.map((c) => {
                 const currency = c.profitability.currency;
+                const countryCode = countryByProfile.get(c.profileId);
                 const hasActivity = hasCampaignActivity(c.totals);
                 const profitStatus = getCampaignProfitStatus(
                   c.totals,
@@ -208,8 +215,17 @@ export function CampaignsPage() {
                         />
                       </div>
                     </Td>
-                    <Td className="font-mono text-xs text-zinc-500">
-                      {c.profileId}
+                    <Td className="text-xs text-zinc-500">
+                      {countryCode ? (
+                        <span
+                          className="whitespace-nowrap"
+                          title={`${countryNameForCode(countryCode)} · profile ${c.profileId}`}
+                        >
+                          {flagForCountry(countryCode)} {countryCode}
+                        </span>
+                      ) : (
+                        <span className="font-mono">{c.profileId}</span>
+                      )}
                     </Td>
                     <Td>
                       <Badge

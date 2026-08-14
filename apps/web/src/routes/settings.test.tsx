@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsPage } from "./settings";
 
 const mocks = vi.hoisted(() => ({
@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   candidates: [] as unknown[],
   mapBook: vi.fn(),
   saveEconomics: vi.fn(),
+  saveCover: vi.fn(),
   mutation: vi.fn(),
 }));
 
@@ -56,6 +57,10 @@ vi.mock("../api/endpoints", () => ({
     isPending: false,
     mutate: mocks.saveEconomics,
   }),
+  useSaveBookCover: () => ({
+    isPending: false,
+    mutate: mocks.saveCover,
+  }),
   useUnmappedAdvertisedProducts: () => ({
     isPending: false,
     error: null,
@@ -65,9 +70,12 @@ vi.mock("../api/endpoints", () => ({
 }));
 
 describe("SettingsPage book mapping", () => {
+  afterEach(() => cleanup());
+
   beforeEach(() => {
     mocks.mapBook.mockReset();
     mocks.saveEconomics.mockReset();
+    mocks.saveCover.mockReset();
     mocks.mutation.mockReset();
     mocks.books = [];
     mocks.candidates = [];
@@ -189,6 +197,53 @@ describe("SettingsPage book mapping", () => {
         targetAcos: null,
         goalMode: "balanced",
       }),
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      }),
+    );
+  });
+
+  it("saves and clears a book cover image URL", () => {
+    mocks.books = [
+      {
+        id: "book-1",
+        asin: "B012345678",
+        title: "My Coloring Book",
+        format: "paperback",
+        status: "active",
+        coverImageUrl: "https://example.com/cover.jpg",
+        profileIds: ["profile-us"],
+        economics: [],
+      },
+    ];
+    render(<SettingsPage />);
+
+    const coverInput = screen.getByLabelText(
+      "My Coloring Book cover image URL",
+    );
+    expect(coverInput).toHaveValue("https://example.com/cover.jpg");
+    expect(screen.getByAltText("My Coloring Book cover")).toHaveAttribute(
+      "src",
+      "https://example.com/cover.jpg",
+    );
+
+    fireEvent.change(coverInput, {
+      target: { value: "https://example.com/new-cover.jpg" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save cover" }));
+    expect(mocks.saveCover).toHaveBeenCalledWith(
+      { coverImageUrl: "https://example.com/new-cover.jpg" },
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      }),
+    );
+
+    fireEvent.change(coverInput, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save cover" }));
+    expect(mocks.saveCover).toHaveBeenLastCalledWith(
+      { coverImageUrl: null },
       expect.objectContaining({
         onSuccess: expect.any(Function),
         onError: expect.any(Function),

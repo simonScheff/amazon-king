@@ -13,6 +13,7 @@ import {
   hasCampaignActivity,
 } from "../lib/campaign-profit";
 import { formatAcos, formatCount, formatMoney } from "../lib/format";
+import { countryNameForCode, flagForCountry } from "../lib/marketplaces";
 import { compareNullable, nextSort, type Sort } from "../lib/sorting";
 
 const PROFITABILITY_DAYS = 7;
@@ -135,6 +136,7 @@ export function SearchTermsPage() {
                   sort={sort}
                   onSort={onSort}
                 />
+                <Th>Market</Th>
                 <SortableTh
                   label="Campaigns"
                   column="campaignCount"
@@ -224,6 +226,16 @@ export function SearchTermsPage() {
                           hasActivity={hasActivity}
                         />
                       </div>
+                    </Td>
+                    <Td
+                      className="whitespace-nowrap text-xs text-zinc-500"
+                      title={term.countryCodes
+                        .map((code) => countryNameForCode(code))
+                        .join(", ")}
+                    >
+                      {term.countryCodes
+                        .map((code) => `${flagForCountry(code)} ${code}`)
+                        .join(" ")}
                     </Td>
                     <Td className="text-right">
                       {formatCount(term.campaignCount)}

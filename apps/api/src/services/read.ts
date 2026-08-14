@@ -52,6 +52,15 @@ const MAX_DAYS = 90;
 const MANUAL_SYNC_HISTORY_DAYS = 60;
 const DAY_MS = 86_400_000;
 
+/** Extract the user-entered cover image URL from a book's `cover_json` blob. */
+function coverImageUrlOf(coverJson: unknown): string | null {
+  if (coverJson && typeof coverJson === "object" && "imageUrl" in coverJson) {
+    const url = (coverJson as { imageUrl?: unknown }).imageUrl;
+    if (typeof url === "string") return url;
+  }
+  return null;
+}
+
 const cannibalizationEvidenceSchema = z.object({
   searchTerm: z.string().min(1),
   campaigns: z
@@ -582,6 +591,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         return {
           searchTerm: row.searchTerm,
           campaignCount: row.campaignCount,
+          countryCodes: row.countryCodes,
           currency: row.currency as SearchTermListRow["currency"],
           totals: {
             ...row.totals,
@@ -726,6 +736,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         title: row.title,
         format: row.format,
         status: row.status,
+        coverImageUrl: coverImageUrlOf(row.coverJson),
         profileIds: row.profileIds,
         economics: (economicsByBook.get(row.id) ?? []).map((economics) => ({
           profileId: economics.amazonProfileId,
@@ -762,6 +773,9 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         asin: input.asin,
         title: input.title,
         format: input.format,
+        coverJson: input.coverImageUrl
+          ? { imageUrl: input.coverImageUrl }
+          : undefined,
       });
       if (!mapped) {
         throw notFound(
@@ -780,6 +794,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
           asin: input.asin,
           profileIds: input.profileIds,
           format: input.format,
+          coverImageUrl: input.coverImageUrl ?? null,
         },
       });
       return {
@@ -788,6 +803,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         title: mapped.title,
         format: mapped.format,
         status: mapped.status,
+        coverImageUrl: coverImageUrlOf(mapped.coverJson),
         profileIds: input.profileIds,
         economics: [],
       };
@@ -839,6 +855,28 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
           effectiveFrom: input.effectiveFrom,
           goalMode: input.goalMode,
         },
+      });
+    },
+
+    async saveBookCover(auth, bookId, input, meta) {
+      const book = await books.getBook(db, bookId);
+      if (!book || book.workspaceId !== auth.workspaceId) {
+        throw notFound("Unknown book");
+      }
+      await books.updateBook(db, book.id, {
+        coverJson: input.coverImageUrl
+          ? { imageUrl: input.coverImageUrl }
+          : null,
+      });
+      await audit.insertAuditEvent(db, {
+        workspaceId: auth.workspaceId,
+        actorUserId: auth.userId,
+        event: "books.cover",
+        entityType: "book",
+        entityId: book.id,
+        ip: meta.ip ?? null,
+        sessionId: auth.sessionId,
+        details: { coverImageUrl: input.coverImageUrl },
       });
     },
 

@@ -47,6 +47,7 @@ describe("read service book mapping", () => {
           "B012345678",
           "My Coloring Book",
           "paperback",
+          null,
         ]);
         return {
           rows: [
@@ -108,6 +109,7 @@ describe("read service book mapping", () => {
       title: "My Coloring Book",
       format: "paperback",
       status: "active",
+      coverImageUrl: null,
       profileIds: ["profile-us", "profile-ca"],
       economics: [],
     });
@@ -119,6 +121,7 @@ describe("read service book mapping", () => {
       asin: "B012345678",
       profileIds: ["profile-us", "profile-ca"],
       format: "paperback",
+      coverImageUrl: null,
     });
   });
 
@@ -181,6 +184,7 @@ describe("read service book mapping", () => {
         title: "My Coloring Book",
         format: "paperback",
         status: "active",
+        coverImageUrl: null,
         profileIds: ["profile-ca", "profile-us"],
         economics: [
           {
@@ -250,5 +254,105 @@ describe("read service book mapping", () => {
         {},
       ),
     ).rejects.toMatchObject({ code: "BOOK_PROFILE_NOT_LINKED" });
+  });
+
+  it("sets and clears the cover image and audits the change", async () => {
+    const updatedCovers: (string | null)[] = [];
+    const query = vi.fn(async (sql: string, params: unknown[] = []) => {
+      if (sql.includes("select * from books where id = $1")) {
+        return {
+          rows: [
+            {
+              id: params[0],
+              workspace_id: "workspace-1",
+              asin: "B012345678",
+              title: "My Coloring Book",
+              format: "paperback",
+              status: "active",
+              cover_json: null,
+              created_at: "2026-08-13T00:00:00Z",
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+      if (sql.includes("update books set")) {
+        updatedCovers.push(params[4] as string | null);
+        return { rows: [], rowCount: 1 };
+      }
+      if (sql.includes("insert into audit_events")) {
+        return {
+          rows: [
+            {
+              id: "audit-1",
+              workspace_id: "workspace-1",
+              actor_user_id: "user-1",
+              event: "books.cover",
+              entity_type: "book",
+              entity_id: "book-1",
+              ip: "127.0.0.1",
+              session_id: "session-1",
+              details: {},
+              created_at: "2026-08-13T00:00:00Z",
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+      throw new Error(`Unexpected SQL: ${sql}`);
+    });
+    const service = createReadService({
+      db: { query } as never,
+      config: {} as ApiConfig,
+      logger: {} as Logger,
+    });
+
+    await service.saveBookCover(
+      auth,
+      "book-1",
+      { coverImageUrl: "https://example.com/cover.jpg" },
+      { ip: "127.0.0.1" },
+    );
+    await service.saveBookCover(
+      auth,
+      "book-1",
+      { coverImageUrl: null },
+      { ip: "127.0.0.1" },
+    );
+
+    expect(updatedCovers).toEqual([
+      JSON.stringify({ imageUrl: "https://example.com/cover.jpg" }),
+      null,
+    ]);
+    const auditEvents = query.mock.calls
+      .filter(([sql]) => sql.includes("insert into audit_events"))
+      .map((call) => JSON.parse(call[1]?.[7] as string));
+    expect(auditEvents).toEqual([
+      { coverImageUrl: "https://example.com/cover.jpg" },
+      { coverImageUrl: null },
+    ]);
+  });
+
+  it("rejects cover updates for a book outside the workspace", async () => {
+    const query = vi.fn(async (sql: string) => {
+      if (sql.includes("select * from books where id = $1")) {
+        return { rows: [], rowCount: 0 };
+      }
+      throw new Error(`Unexpected SQL: ${sql}`);
+    });
+    const service = createReadService({
+      db: { query } as never,
+      config: {} as ApiConfig,
+      logger: {} as Logger,
+    });
+
+    await expect(
+      service.saveBookCover(
+        auth,
+        "book-9",
+        { coverImageUrl: "https://example.com/cover.jpg" },
+        {},
+      ),
+    ).rejects.toMatchObject({ statusCode: 404 });
   });
 });

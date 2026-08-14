@@ -15,6 +15,7 @@ import {
   useEnqueueSync,
   useMapAdvertisedBook,
   useProfiles,
+  useSaveBookCover,
   useSaveBookEconomics,
   useUnmappedAdvertisedProducts,
   useUpdateProfile,
@@ -64,6 +65,7 @@ function AdvertisedBookMappingForm({ asin, candidates }: AdvertisedBookGroup) {
   const toast = useToast();
   const [title, setTitle] = useState("");
   const [format, setFormat] = useState<BookFormat>("paperback");
+  const [coverUrl, setCoverUrl] = useState("");
   const marketplaces = candidates
     .map((candidate) => `${candidate.countryCode} (${candidate.currencyCode})`)
     .join(" · ");
@@ -74,12 +76,14 @@ function AdvertisedBookMappingForm({ asin, candidates }: AdvertisedBookGroup) {
 
   function onSubmit(event: FormEvent) {
     event.preventDefault();
+    const trimmedCoverUrl = coverUrl.trim();
     mapBook.mutate(
       {
         profileIds: candidates.map((candidate) => candidate.profileId),
         asin,
         title,
         format,
+        ...(trimmedCoverUrl ? { coverImageUrl: trimmedCoverUrl } : {}),
       },
       {
         onSuccess: (book) => toast(`${book.title} added to your book catalog`),
@@ -131,6 +135,67 @@ function AdvertisedBookMappingForm({ asin, candidates }: AdvertisedBookGroup) {
           {mapBook.isPending ? "Adding…" : "Add book"}
         </Button>
       </div>
+      <label className="flex flex-col gap-1 text-xs text-zinc-500">
+        Cover image URL (optional)
+        <Input
+          aria-label="Cover image URL"
+          type="url"
+          maxLength={2048}
+          placeholder="https://…"
+          value={coverUrl}
+          onChange={(event) => setCoverUrl(event.target.value)}
+        />
+      </label>
+    </form>
+  );
+}
+
+function BookCoverForm({ book }: { book: Book }) {
+  const save = useSaveBookCover(book.id);
+  const toast = useToast();
+  const [url, setUrl] = useState(book.coverImageUrl ?? "");
+
+  function onSubmit(event: FormEvent) {
+    event.preventDefault();
+    const trimmed = url.trim();
+    save.mutate(
+      { coverImageUrl: trimmed === "" ? null : trimmed },
+      {
+        onSuccess: () =>
+          toast(trimmed === "" ? "Cover image removed" : "Cover image saved"),
+        onError: (error) =>
+          toast(`Cover save failed: ${error.message}`, "error"),
+      },
+    );
+  }
+
+  return (
+    <form
+      aria-label={`${book.title} cover image`}
+      onSubmit={onSubmit}
+      className="mb-3 flex flex-wrap items-end gap-3"
+    >
+      {book.coverImageUrl ? (
+        <img
+          src={book.coverImageUrl}
+          alt={`${book.title} cover`}
+          className="h-16 w-12 rounded border border-zinc-800 object-cover"
+        />
+      ) : null}
+      <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-zinc-500">
+        Cover image URL (optional)
+        <Input
+          aria-label={`${book.title} cover image URL`}
+          type="url"
+          maxLength={2048}
+          placeholder="https://…"
+          value={url}
+          onChange={(event) => setUrl(event.target.value)}
+        />
+      </label>
+      <Button type="submit" variant="primary" disabled={save.isPending}>
+        {save.isPending ? "Saving…" : "Save cover"}
+      </Button>
     </form>
   );
 }
@@ -342,6 +407,7 @@ function BookEconomicsForms({
           {configuredCount} of {linkedProfiles.length} countries configured
         </Badge>
       </div>
+      <BookCoverForm book={book} />
       {linkedProfiles.length === 0 ? (
         <p className="text-xs text-zinc-500">
           No profile is linked to this book.

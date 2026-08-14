@@ -104,6 +104,8 @@ export type NegativeKeywordRow = z.infer<typeof negativeKeywordRowSchema>;
 export const searchTermListRowSchema = z.object({
   searchTerm: z.string(),
   campaignCount: z.number().int().nonnegative(),
+  /** Distinct marketplace country codes the term's metrics come from. */
+  countryCodes: z.array(z.string()),
   currency: currencyCodeSchema,
   totals: metricTotalsSchema.extend({
     acos: z.number().nullable(),

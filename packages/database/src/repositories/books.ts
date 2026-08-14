@@ -174,6 +174,7 @@ export async function mapAdvertisedProductToBook(
     asin: string;
     title: string;
     format: string;
+    coverJson?: unknown;
   },
 ): Promise<Book | null> {
   const result = await db.query<BookRow>(
@@ -189,12 +190,13 @@ export async function mapAdvertisedProductToBook(
          )
      ),
      upserted_book as (
-       insert into books (workspace_id, asin, title, format, status)
-       select $1, $3, $4, $5, 'active'
+       insert into books (workspace_id, asin, title, format, status, cover_json)
+       select $1, $3, $4, $5, 'active', $6::jsonb
        where (select count(*) from candidate_profiles) = cardinality($2::bigint[])
        on conflict (workspace_id, asin, format) do update set
          title = excluded.title,
-         status = 'active'
+         status = 'active',
+         cover_json = coalesce(excluded.cover_json, books.cover_json)
        returning *
      ),
      linked_profiles as (
@@ -214,12 +216,14 @@ export async function mapAdvertisedProductToBook(
       input.asin,
       input.title,
       input.format,
+      input.coverJson == null ? null : JSON.stringify(input.coverJson),
     ],
   );
   return result.rows[0] ? toBook(result.rows[0]) : null;
 }
 
-/** Update mutable book fields; only provided fields are changed. */
+/** Update mutable book fields; only provided fields are changed. An explicit
+ * `coverJson: null` clears the cover; `undefined` leaves it untouched. */
 export async function updateBook(
   db: Db,
   bookId: string,
@@ -235,7 +239,7 @@ export async function updateBook(
        title = coalesce($2, title),
        format = coalesce($3, format),
        status = coalesce($4, status),
-       cover_json = coalesce($5::jsonb, cover_json)
+       cover_json = case when $6 then $5::jsonb else cover_json end
      where id = $1
      returning *`,
     [
@@ -244,6 +248,7 @@ export async function updateBook(
       input.format ?? null,
       input.status ?? null,
       input.coverJson == null ? null : JSON.stringify(input.coverJson),
+      input.coverJson !== undefined,
     ],
   );
   return result.rows[0] ? toBook(result.rows[0]) : null;

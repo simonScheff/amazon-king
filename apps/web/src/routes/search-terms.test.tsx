@@ -35,6 +35,7 @@ function searchTerm(
   return {
     searchTerm: term,
     campaignCount: 2,
+    countryCodes: ["US"],
     currency: "USD",
     totals: {
       impressions: 100,
@@ -118,6 +119,26 @@ describe("SearchTermsPage", () => {
         ),
       ).getByText("Missing economics"),
     ).toBeInTheDocument();
+  });
+
+  it("shows the market flags of each search term", () => {
+    mocks.useSearchTerms.mockReturnValue({
+      isPending: false,
+      error: null,
+      data: [
+        searchTerm("fantasy books", { countryCodes: ["US"] }),
+        searchTerm("dragons", { countryCodes: ["DE", "US"] }),
+      ],
+    });
+    render(<SearchTermsPage />);
+
+    expect(
+      screen.getByRole("columnheader", { name: "Market" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTitle("United States")).toHaveTextContent("🇺🇸 US");
+    expect(screen.getByTitle("Germany, United States")).toHaveTextContent(
+      "🇩🇪 DE 🇺🇸 US",
+    );
   });
 
   it("sorts by a column when its header is clicked and toggles direction", () => {

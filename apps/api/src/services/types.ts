@@ -4,6 +4,7 @@ import type {
   AdvertisedBookCandidate,
   AuditEvent,
   Book,
+  BookCoverInput,
   BookEconomicsInput,
   BookMappingInput,
   CampaignDetail,
@@ -163,6 +164,12 @@ export interface ReadService {
     auth: AuthContext,
     bookId: string,
     input: BookEconomicsInput,
+    meta: RequestMeta,
+  ): Promise<void>;
+  saveBookCover(
+    auth: AuthContext,
+    bookId: string,
+    input: BookCoverInput,
     meta: RequestMeta,
   ): Promise<void>;
   listRecommendations(

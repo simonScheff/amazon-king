@@ -649,6 +649,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       expect.objectContaining({
         searchTerm: "fantasy books",
         campaignCount: 2,
+        countryCodes: ["US"],
         currency: "USD",
         totals: expect.objectContaining({ cost: "8.0000", orders: 3 }),
         // (2 + 1 orders) × 4.25 royalty per sale.

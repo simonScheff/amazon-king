@@ -28,12 +28,15 @@ export const bookEconomicsSchema = z.object({
 });
 export type BookEconomics = z.infer<typeof bookEconomicsSchema>;
 
+export const coverImageUrlSchema = z.string().trim().url().max(2048);
+
 export const bookSchema = z.object({
   id: z.string(),
   asin: z.string(),
   title: z.string(),
   format: z.string(),
   status: z.string(),
+  coverImageUrl: coverImageUrlSchema.nullable().default(null),
   profileIds: z.array(z.string()).default([]),
   economics: z.array(bookEconomicsSchema).default([]),
 });
@@ -69,8 +72,15 @@ export const bookMappingInputSchema = z.object({
   asin: z.string().trim().min(1).max(64),
   title: z.string().trim().min(1).max(500),
   format: bookFormatSchema,
+  coverImageUrl: coverImageUrlSchema.optional(),
 });
 export type BookMappingInput = z.infer<typeof bookMappingInputSchema>;
+
+/** Set or clear the cover image URL of an already-mapped book. */
+export const bookCoverInputSchema = z.object({
+  coverImageUrl: coverImageUrlSchema.nullable(),
+});
+export type BookCoverInput = z.infer<typeof bookCoverInputSchema>;
 
 /**
  * User-entered KDP royalty economics for a book/profile, effective-dated.

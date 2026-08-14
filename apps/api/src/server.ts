@@ -4,6 +4,7 @@ import fastifyHelmet from "@fastify/helmet";
 import fastifyRateLimit from "@fastify/rate-limit";
 import {
   bookEconomicsInputSchema,
+  bookCoverInputSchema,
   bookMappingInputSchema,
   cannibalizationResolutionCreateSchema,
   changeSetCreateSchema,
@@ -428,6 +429,18 @@ export async function buildServer(
     await services.read.saveBookEconomics(auth, bookId, input, meta(request));
     return reply.status(204).send();
   });
+
+  app.put(
+    "/api/books/:bookId/cover",
+    { config: { rateLimit: WRITE_RATE } },
+    async (request, reply) => {
+      const auth = await authenticate(request);
+      const { bookId } = request.params as { bookId: string };
+      const input = parse(bookCoverInputSchema, request.body);
+      await services.read.saveBookCover(auth, bookId, input, meta(request));
+      return reply.status(204).send();
+    },
+  );
 
   // -------------------------------------------------------------------------
   // Recommendations and change sets

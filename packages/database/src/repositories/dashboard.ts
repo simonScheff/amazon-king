@@ -461,6 +461,8 @@ const SEARCH_TERM_CTES = `with st_daily as (
 export interface SearchTermRollupRowData {
   searchTerm: string;
   campaignCount: number;
+  /** Distinct marketplace country codes contributing to the row, sorted. */
+  countryCodes: string[];
   currency: string;
   totals: TotalsRow;
   /** Null when orders exist but royalty economics are incomplete. */
@@ -488,6 +490,7 @@ export async function listSearchTermRollupRows(
     RawTotals & {
       search_term: string;
       campaign_count: string;
+      country_codes: string[];
       currency: string;
       estimated_royalty: string | null;
       economics_missing: boolean;
@@ -498,6 +501,7 @@ export async function listSearchTermRollupRows(
     `${SEARCH_TERM_CTES}
      select d.search_term,
             count(distinct (d.profile_id, d.campaign_id))::text as campaign_count,
+            array_agg(distinct ap.country_code order by ap.country_code) as country_codes,
             sum(d.impressions)::text as impressions,
             sum(d.clicks)::text as clicks,
             sum(d.cost)::text as cost,
@@ -512,6 +516,7 @@ export async function listSearchTermRollupRows(
               else coalesce(sum(r.estimated_royalty), 0)::text
             end as estimated_royalty
      from st_daily d
+     join amazon_profiles ap on ap.id = d.profile_id
      left join royalty_daily r
        on r.profile_id = d.profile_id
       and r.search_term = d.search_term
@@ -525,6 +530,7 @@ export async function listSearchTermRollupRows(
   return result.rows.map((row) => ({
     searchTerm: row.search_term,
     campaignCount: Number(row.campaign_count),
+    countryCodes: row.country_codes,
     currency: row.currency,
     totals: toTotals(row),
     estimatedRoyalty: row.estimated_royalty,

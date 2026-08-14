@@ -12,6 +12,7 @@ import { CampaignsPage } from "./campaigns";
 
 const mocks = vi.hoisted(() => ({
   useCampaigns: vi.fn(),
+  useProfiles: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -20,6 +21,7 @@ vi.mock("@tanstack/react-router", () => ({
 
 vi.mock("../api/endpoints", () => ({
   useCampaigns: mocks.useCampaigns,
+  useProfiles: mocks.useProfiles,
 }));
 
 function campaign(
@@ -57,6 +59,22 @@ describe("CampaignsPage seven-day profitability", () => {
 
   beforeEach(() => {
     mocks.useCampaigns.mockReset();
+    mocks.useProfiles.mockReset();
+    mocks.useProfiles.mockReturnValue({
+      data: [
+        {
+          profileId: "profile-us",
+          accountId: "account-1",
+          region: "NA",
+          countryCode: "US",
+          currencyCode: "USD",
+          timezone: "America/Los_Angeles",
+          accountType: "seller",
+          enabled: true,
+          writeEnabled: false,
+        },
+      ],
+    });
     mocks.useCampaigns.mockReturnValue({
       isPending: false,
       error: null,
@@ -120,6 +138,14 @@ describe("CampaignsPage seven-day profitability", () => {
         screen.getByLabelText("New campaign seven-day profit: No activity"),
       ).getByText("—"),
     ).toBeInTheDocument();
+  });
+
+  it("shows the market flag of each campaign's profile", () => {
+    render(<CampaignsPage />);
+
+    const markets = screen.getAllByTitle("United States · profile profile-us");
+    expect(markets).toHaveLength(4);
+    expect(markets[0]).toHaveTextContent("🇺🇸 US");
   });
 
   it("sorts rows when a column header is clicked", () => {
