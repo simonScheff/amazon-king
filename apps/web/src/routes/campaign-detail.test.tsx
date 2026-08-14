@@ -89,6 +89,26 @@ const detail: CampaignDetail = {
   adGroups: [],
   targets: [],
   searchTerms: [],
+  negativeKeywords: [
+    {
+      id: "negative-campaign",
+      keywordText: "free books",
+      matchType: "NEGATIVE_EXACT",
+      level: "campaign",
+      adGroupId: null,
+      adGroupName: null,
+      state: "ENABLED",
+    },
+    {
+      id: "negative-ad-group",
+      keywordText: "used books",
+      matchType: "NEGATIVE_PHRASE",
+      level: "ad_group",
+      adGroupId: "ad-group-1",
+      adGroupName: "Exact ad group",
+      state: "PAUSED",
+    },
+  ],
 };
 
 describe("CampaignDetailPage profitability", () => {
@@ -135,5 +155,22 @@ describe("CampaignDetailPage profitability", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Max CPC" }));
 
     expect(screen.getByText("Max CPC controls")).toBeInTheDocument();
+  });
+
+  it("shows every synced campaign and ad-group negative keyword", () => {
+    render(<CampaignDetailPage />);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Negative keywords" }));
+
+    expect(
+      screen.getByRole("cell", { name: "free books" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Campaign" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("cell", { name: "used books" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("cell", { name: "Ad group · Exact ad group" }),
+    ).toBeInTheDocument();
   });
 });

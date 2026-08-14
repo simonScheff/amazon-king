@@ -15,6 +15,8 @@ import { RecommendationsPage } from "./routes/recommendations";
 import { RecommendationDetailPage } from "./routes/recommendation-detail";
 import { CampaignsPage } from "./routes/campaigns";
 import { CampaignDetailPage } from "./routes/campaign-detail";
+import { SearchTermsPage } from "./routes/search-terms";
+import { SearchTermDetailPage } from "./routes/search-term-detail";
 import { ChangesPage } from "./routes/changes";
 import { SettingsPage } from "./routes/settings";
 
@@ -91,6 +93,34 @@ const campaignDetailRoute = createRoute({
   component: CampaignDetailPage,
 });
 
+const searchTermsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/search-terms",
+  validateSearch: (search: Record<string, unknown>): { book?: string } => ({
+    ...(typeof search.book === "string" && search.book !== ""
+      ? { book: search.book }
+      : {}),
+  }),
+  component: SearchTermsPage,
+});
+
+const searchTermDetailRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/search-terms/$term",
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { days?: number; book?: string } => {
+    const days = Number(search.days);
+    return {
+      ...(Number.isFinite(days) && days > 0 ? { days } : {}),
+      ...(typeof search.book === "string" && search.book !== ""
+        ? { book: search.book }
+        : {}),
+    };
+  },
+  component: SearchTermDetailPage,
+});
+
 const changesRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/changes",
@@ -117,6 +147,8 @@ const routeTree = rootRoute.addChildren([
     recommendationDetailRoute,
     campaignsRoute,
     campaignDetailRoute,
+    searchTermsRoute,
+    searchTermDetailRoute,
     changesRoute,
     connectRoute,
     settingsRoute,

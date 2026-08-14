@@ -21,6 +21,8 @@ import {
   dataFreshnessSchema,
   maxCpcChangeSetResultSchema,
   recommendationSchema,
+  searchTermDetailSchema,
+  searchTermListRowSchema,
   sessionInfoSchema,
   syncRunSchema,
   type BookMappingInput,
@@ -261,6 +263,33 @@ export function useSetCampaignMaxCpc(campaignId: string) {
         qc.invalidateQueries({ queryKey: ["change-sets"] }),
       ]);
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Search terms
+// ---------------------------------------------------------------------------
+
+export function useSearchTerms(days = 7, bookId?: string) {
+  return useQuery({
+    queryKey: ["search-terms", days, bookId ?? null],
+    queryFn: () =>
+      apiFetch("/api/search-terms", {
+        query: { days, book: bookId },
+        schema: z.array(searchTermListRowSchema),
+      }),
+  });
+}
+
+export function useSearchTerm(term: string, days: number, bookId?: string) {
+  return useQuery({
+    queryKey: ["search-term", term, days, bookId ?? null],
+    placeholderData: keepPreviousData,
+    queryFn: () =>
+      apiFetch(`/api/search-terms/${encodeURIComponent(term)}`, {
+        query: { days, book: bookId },
+        schema: searchTermDetailSchema,
+      }),
   });
 }
 

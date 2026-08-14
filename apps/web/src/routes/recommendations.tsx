@@ -103,7 +103,9 @@ export function RecommendationsPage() {
   return (
     <div className="flex max-w-6xl flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-lg font-semibold text-zinc-100">Recommendations</h1>
+        <h1 className="text-xl font-bold tracking-tight text-zinc-100">
+          Recommendations
+        </h1>
         <div className="ml-auto flex gap-2">
           <Select
             aria-label="Filter by type"

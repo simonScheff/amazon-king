@@ -25,7 +25,7 @@ export function Th({
   return (
     <th
       scope="col"
-      className={`border-b border-zinc-800 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-500 ${className}`}
+      className={`border-b border-zinc-800 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 ${className}`}
       {...props}
     />
   );
@@ -37,7 +37,7 @@ export function Td({
 }: TdHTMLAttributes<HTMLTableCellElement>) {
   return (
     <td
-      className={`border-b border-zinc-800/60 px-3 py-2 align-top ${className}`}
+      className={`border-b border-zinc-800/60 px-4 py-3 align-top ${className}`}
       {...props}
     />
   );

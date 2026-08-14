@@ -19,6 +19,8 @@ import type {
   Recommendation,
   RecommendationState,
   RecommendationType,
+  SearchTermDetail,
+  SearchTermListRow,
   SyncRun,
 } from "@amazon-king/contracts";
 
@@ -137,6 +139,17 @@ export interface ReadService {
     amazonCampaignId: string,
     days: number,
   ): Promise<CampaignDetail | null>;
+  listSearchTerms(
+    workspaceId: string,
+    days: number,
+    bookId?: string | null,
+  ): Promise<SearchTermListRow[]>;
+  getSearchTermDetail(
+    workspaceId: string,
+    searchTerm: string,
+    days: number,
+    bookId?: string | null,
+  ): Promise<SearchTermDetail | null>;
   listBooks(workspaceId: string): Promise<Book[]>;
   listUnmappedAdvertisedProducts(
     workspaceId: string,

@@ -374,7 +374,9 @@ export function SettingsPage() {
 
   return (
     <div className="flex w-full min-w-0 max-w-5xl flex-col gap-4">
-      <h1 className="text-lg font-semibold text-zinc-100">Settings & health</h1>
+      <h1 className="text-xl font-bold tracking-tight text-zinc-100">
+        Settings & health
+      </h1>
 
       <Card>
         <CardHeader title="Profiles: sync & write access" />

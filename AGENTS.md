@@ -128,7 +128,8 @@ or real DB).
 cors, rate-limit. All §11 routes plus the frontend's contract extensions
 (`GET /api/change-sets`, cannibalization comparison + campaign-level
 negative-exact draft creation, `csrfToken` on the session response, dashboard
-`daily` series + `writesDisabled`). Passwordless email login (magic link is **logged in
+`daily` series + `writesDisabled`, and the cross-campaign search-term
+screens: `GET /api/search-terms` + `GET /api/search-terms/:term`). Passwordless email login (magic link is **logged in
 dev only**), stateless HMAC CSRF per session, single-use OAuth state marked used
 before code exchange, refresh tokens envelope-encrypted via
 `@amazon-king/crypto`, recent-auth (15 min) required for apply/rollback, and the

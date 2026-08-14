@@ -182,9 +182,21 @@ describe("contracts smoke test", () => {
       adGroups: [],
       targets: [],
       searchTerms: [],
+      negativeKeywords: [
+        {
+          id: "negative-1",
+          keywordText: "free books",
+          matchType: "NEGATIVE_EXACT",
+          level: "campaign",
+          adGroupId: null,
+          adGroupName: null,
+          state: "ENABLED",
+        },
+      ],
     });
 
     expect(detail.campaign.totals.estimatedAdProfit).toBe("2.0000");
+    expect(detail.negativeKeywords[0]?.keywordText).toBe("free books");
   });
 
   it("accepts a campaign-list row with windowed profitability", () => {

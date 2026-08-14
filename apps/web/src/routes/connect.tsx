@@ -65,7 +65,9 @@ export function ConnectPage() {
 
   return (
     <div className="flex max-w-3xl flex-col gap-4">
-      <h1 className="text-lg font-semibold text-zinc-100">Amazon connection</h1>
+      <h1 className="text-xl font-bold tracking-tight text-zinc-100">
+        Amazon connection
+      </h1>
 
       <Card>
         <CardHeader title="Connection status" />

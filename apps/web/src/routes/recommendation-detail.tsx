@@ -65,7 +65,7 @@ export function RecommendationDetailPage() {
       </p>
 
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-lg font-semibold text-zinc-100">
+        <h1 className="text-xl font-bold tracking-tight text-zinc-100">
           {labelize(r.type)}
         </h1>
         <Badge tone={r.priority <= 2 ? "warning" : "neutral"}>

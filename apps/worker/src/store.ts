@@ -641,8 +641,31 @@ export function createDbStore(pool: Pool): WorkerStore {
             sourceUpdatedAt: snapshot.retrievedAt,
           });
         }
-        // Negative keywords are fetched in the snapshot but the schema has no
-        // negatives table yet; they are not persisted (see docs/plan.md §7).
+        const persistedNegativeIds: string[] = [];
+        for (const negative of snapshot.negativeKeywords) {
+          const campaignId = campaignIds.get(negative.campaignId);
+          const adGroupId = negative.adGroupId
+            ? adGroupIds.get(negative.adGroupId)
+            : null;
+          if (!campaignId || (negative.adGroupId && !adGroupId)) continue;
+          await structureRepo.upsertNegativeKeyword(client, {
+            profileId: profile.id,
+            campaignId,
+            adGroupId,
+            amazonNegativeKeywordId: negative.negativeKeywordId,
+            keywordText: negative.keywordText,
+            matchType: negative.matchType,
+            state: negative.state,
+            rawJson: negative.raw,
+            sourceUpdatedAt: snapshot.retrievedAt,
+          });
+          persistedNegativeIds.push(negative.negativeKeywordId);
+        }
+        await structureRepo.deleteMissingNegativeKeywords(
+          client,
+          profile.id,
+          persistedNegativeIds,
+        );
       });
     },
 

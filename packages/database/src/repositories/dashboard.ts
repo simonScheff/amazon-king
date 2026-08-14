@@ -234,6 +234,16 @@ export interface NamedMetricRowData {
   totals: TotalsRow;
 }
 
+export interface NegativeKeywordRowData {
+  id: string;
+  keywordText: string;
+  matchType: string;
+  level: "campaign" | "ad_group";
+  adGroupId: string | null;
+  adGroupName: string | null;
+  state: string;
+}
+
 /** Ad groups of a campaign with totals aggregated from target-grain facts. */
 export async function listAdGroupRows(
   db: Db,
@@ -339,6 +349,268 @@ export async function listSearchTermRows(
     name: row.search_term,
     state: "n/a",
     totals: toTotals(row),
+  }));
+}
+
+/** Current campaign- and ad-group-level negative keywords for a campaign. */
+export async function listNegativeKeywordRows(
+  db: Db,
+  campaignPk: string,
+): Promise<NegativeKeywordRowData[]> {
+  const result = await db.query<{
+    amazon_negative_keyword_id: string;
+    keyword_text: string;
+    match_type: string;
+    amazon_ad_group_id: string | null;
+    ad_group_name: string | null;
+    state: string;
+  }>(
+    `select n.amazon_negative_keyword_id, n.keyword_text, n.match_type,
+            g.amazon_ad_group_id, g.name as ad_group_name, n.state
+     from negative_keywords n
+     left join ad_groups g on g.id = n.ad_group_id
+     where n.campaign_id = $1
+     order by lower(n.keyword_text), n.id`,
+    [campaignPk],
+  );
+  return result.rows.map((row) => ({
+    id: row.amazon_negative_keyword_id,
+    keywordText: row.keyword_text,
+    matchType: row.match_type,
+    level: row.amazon_ad_group_id === null ? "campaign" : "ad_group",
+    adGroupId: row.amazon_ad_group_id,
+    adGroupName: row.ad_group_name,
+    state: row.state,
+  }));
+}
+
+/**
+ * Shared CTEs for the cross-campaign search-term screens. `st_daily` rolls
+ * search-term facts up to term × campaign × ad group × day; royalty is then
+ * attributed through the ad group's book exactly like single-book campaigns
+ * (plan §9): only when every ad in the ad group maps to one book with
+ * in-effect, currency-matching economics. $4 optionally pins one search term;
+ * $5 optionally restricts the facts to ad groups advertising one book.
+ */
+const SEARCH_TERM_CTES = `with st_daily as (
+       select m.profile_id, m.search_term, m.campaign_id, m.ad_group_id,
+              m.metric_date,
+              sum(m.impressions) as impressions,
+              sum(m.clicks) as clicks,
+              sum(m.cost) as cost,
+              sum(m.sales) as sales,
+              sum(m.orders) as orders,
+              min(m.currency)::text as currency,
+              count(distinct m.currency) > 1 as mixed_currency
+       from search_term_metrics_daily m
+       join amazon_profiles p on p.id = m.profile_id
+       join amazon_connections conn on conn.id = p.connection_id
+       where conn.workspace_id = $1
+         and m.metric_date between $2 and $3
+         and ($4::text is null or m.search_term = $4)
+         and ($5::bigint is null or exists (
+           select 1
+           from ad_groups fg
+           join ads fa
+             on fa.profile_id = fg.profile_id and fa.ad_group_id = fg.id
+           join book_profile_links fb
+             on fb.profile_id = fg.profile_id
+            and fb.marketplace_asin = fa.asin
+            and fb.enabled = true
+           where fg.profile_id = m.profile_id
+             and fg.amazon_ad_group_id = m.ad_group_id
+             and fb.book_id = $5
+         ))
+       group by m.profile_id, m.search_term, m.campaign_id, m.ad_group_id,
+                m.metric_date
+     ),
+     single_book_ad_groups as (
+       select g.profile_id, g.amazon_ad_group_id, min(bpl.book_id) as book_id
+       from ad_groups g
+       join ads a on a.profile_id = g.profile_id and a.ad_group_id = g.id
+       left join book_profile_links bpl
+         on bpl.profile_id = g.profile_id
+        and bpl.marketplace_asin = a.asin
+        and bpl.enabled = true
+       group by g.profile_id, g.amazon_ad_group_id
+       having count(distinct bpl.book_id) = 1
+          and count(*) filter (where bpl.book_id is null) = 0
+     ),
+     royalty_daily as (
+       select d.profile_id, d.search_term, d.campaign_id, d.ad_group_id,
+              d.metric_date,
+              d.orders * economics.estimated_royalty_per_sale
+                as estimated_royalty
+       from st_daily d
+       join single_book_ad_groups s
+         on s.profile_id = d.profile_id
+        and s.amazon_ad_group_id = d.ad_group_id
+       join lateral (
+         select be.estimated_royalty_per_sale
+         from book_economics be
+         where be.book_id = s.book_id
+           and be.profile_id = d.profile_id
+           and be.currency = d.currency
+           and be.effective_from <= d.metric_date
+         order by be.effective_from desc, be.id desc
+         limit 1
+       ) economics on true
+       where d.orders > 0
+     )`;
+
+export interface SearchTermRollupRowData {
+  searchTerm: string;
+  campaignCount: number;
+  currency: string;
+  totals: TotalsRow;
+  /** Null when orders exist but royalty economics are incomplete. */
+  estimatedRoyalty: string | null;
+  economicsMissing: boolean;
+  dataCurrentThrough: string | null;
+  mixedCurrency: boolean;
+}
+
+/**
+ * Search terms aggregated across every campaign of the workspace, with KDP
+ * royalty estimated per ad group (single-book attribution, as in
+ * listCampaignRows). `estimatedRoyalty` is null for a term whenever any
+ * campaign-day with orders lacks attributable economics — profit is never
+ * guessed.
+ */
+export async function listSearchTermRollupRows(
+  db: Db,
+  workspaceId: string,
+  dateStart: string,
+  dateEnd: string,
+  bookId: string | null = null,
+): Promise<SearchTermRollupRowData[]> {
+  const result = await db.query<
+    RawTotals & {
+      search_term: string;
+      campaign_count: string;
+      currency: string;
+      estimated_royalty: string | null;
+      economics_missing: boolean;
+      data_current_through: string | null;
+      mixed_currency: boolean;
+    }
+  >(
+    `${SEARCH_TERM_CTES}
+     select d.search_term,
+            count(distinct (d.profile_id, d.campaign_id))::text as campaign_count,
+            sum(d.impressions)::text as impressions,
+            sum(d.clicks)::text as clicks,
+            sum(d.cost)::text as cost,
+            sum(d.sales)::text as sales,
+            sum(d.orders)::text as orders,
+            min(d.currency)::text as currency,
+            bool_or(d.mixed_currency) as mixed_currency,
+            max(d.metric_date)::text as data_current_through,
+            bool_or(d.orders > 0 and r.ad_group_id is null) as economics_missing,
+            case
+              when bool_or(d.orders > 0 and r.ad_group_id is null) then null
+              else coalesce(sum(r.estimated_royalty), 0)::text
+            end as estimated_royalty
+     from st_daily d
+     left join royalty_daily r
+       on r.profile_id = d.profile_id
+      and r.search_term = d.search_term
+      and r.campaign_id = d.campaign_id
+      and r.ad_group_id = d.ad_group_id
+      and r.metric_date = d.metric_date
+     group by d.search_term
+     order by sum(d.cost) desc, d.search_term`,
+    [workspaceId, dateStart, dateEnd, null, bookId],
+  );
+  return result.rows.map((row) => ({
+    searchTerm: row.search_term,
+    campaignCount: Number(row.campaign_count),
+    currency: row.currency,
+    totals: toTotals(row),
+    estimatedRoyalty: row.estimated_royalty,
+    economicsMissing: row.economics_missing,
+    dataCurrentThrough: row.data_current_through,
+    mixedCurrency: row.mixed_currency,
+  }));
+}
+
+export interface SearchTermCampaignRowData {
+  amazonProfileId: string;
+  amazonCampaignId: string;
+  name: string;
+  state: string;
+  currency: string;
+  totals: TotalsRow;
+  estimatedRoyalty: string | null;
+  economicsMissing: boolean;
+  dataCurrentThrough: string | null;
+  mixedCurrency: boolean;
+}
+
+/** Per-campaign breakdown for one shopper search term (drill-down). */
+export async function listSearchTermCampaignRows(
+  db: Db,
+  workspaceId: string,
+  searchTerm: string,
+  dateStart: string,
+  dateEnd: string,
+  bookId: string | null = null,
+): Promise<SearchTermCampaignRowData[]> {
+  const result = await db.query<
+    RawTotals & {
+      amazon_profile_id: string;
+      amazon_campaign_id: string;
+      name: string;
+      state: string;
+      currency: string;
+      estimated_royalty: string | null;
+      economics_missing: boolean;
+      data_current_through: string | null;
+      mixed_currency: boolean;
+    }
+  >(
+    `${SEARCH_TERM_CTES}
+     select p.profile_id as amazon_profile_id,
+            d.campaign_id as amazon_campaign_id,
+            c.name, c.state,
+            sum(d.impressions)::text as impressions,
+            sum(d.clicks)::text as clicks,
+            sum(d.cost)::text as cost,
+            sum(d.sales)::text as sales,
+            sum(d.orders)::text as orders,
+            min(d.currency)::text as currency,
+            bool_or(d.mixed_currency) as mixed_currency,
+            max(d.metric_date)::text as data_current_through,
+            bool_or(d.orders > 0 and r.ad_group_id is null) as economics_missing,
+            case
+              when bool_or(d.orders > 0 and r.ad_group_id is null) then null
+              else coalesce(sum(r.estimated_royalty), 0)::text
+            end as estimated_royalty
+     from st_daily d
+     join campaigns c
+       on c.profile_id = d.profile_id and c.amazon_campaign_id = d.campaign_id
+     join amazon_profiles p on p.id = d.profile_id
+     left join royalty_daily r
+       on r.profile_id = d.profile_id
+      and r.search_term = d.search_term
+      and r.campaign_id = d.campaign_id
+      and r.ad_group_id = d.ad_group_id
+      and r.metric_date = d.metric_date
+     group by p.profile_id, d.campaign_id, c.name, c.state
+     order by sum(d.cost) desc, d.campaign_id`,
+    [workspaceId, dateStart, dateEnd, searchTerm, bookId],
+  );
+  return result.rows.map((row) => ({
+    amazonProfileId: row.amazon_profile_id,
+    amazonCampaignId: row.amazon_campaign_id,
+    name: row.name,
+    state: row.state,
+    currency: row.currency,
+    totals: toTotals(row),
+    estimatedRoyalty: row.estimated_royalty,
+    economicsMissing: row.economics_missing,
+    dataCurrentThrough: row.data_current_through,
+    mixedCurrency: row.mixed_currency,
   }));
 }
 

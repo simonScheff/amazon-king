@@ -1,6 +1,158 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
 @import "tailwindcss";
+
+/*
+ * KDP King Design System — premium dark control-room theme.
+ * The palette keeps the class-name semantics the app already uses
+ * (zinc-950 = app background, zinc-100 = brightest text) but replaces the
+ * flat default zinc with refined obsidian surfaces, and sky with the
+ * violet brand scale. Emerald/amber/red are retuned to rich dark tints.
+ */
+@theme {
+  --font-sans:
+    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+
+  /* Obsidian neutral scale */
+  --color-zinc-950: #0b0d13; /* app background */
+  --color-zinc-900: #141824; /* elevated card surface */
+  --color-zinc-800: #242a3a; /* borders / hover */
+  --color-zinc-700: #323a4e; /* stronger border */
+  --color-zinc-600: #4b5568; /* faint / placeholder */
+  --color-zinc-500: #7b8496; /* muted */
+  --color-zinc-400: #9aa3b2; /* secondary text */
+  --color-zinc-300: #c6cbd6; /* body emphasis */
+  --color-zinc-200: #e3e6ee; /* primary body text */
+  --color-zinc-100: #f4f6fb; /* headings */
+
+  /* sky → violet brand scale */
+  --color-sky-950: #1a1330; /* deep violet tint surface */
+  --color-sky-900: #2e2350; /* tint border */
+  --color-sky-800: #3d2d68; /* callout border */
+  --color-sky-700: #5300b7; /* darker primary */
+  --color-sky-600: #6d28d9; /* primary fill */
+  --color-sky-500: #7c3aed; /* primary hover */
+  --color-sky-400: #a78bfa; /* links / focus accent */
+  --color-sky-300: #c4b5fd; /* violet text on tints */
+  --color-sky-200: #ddd6fe; /* bright violet emphasis text */
+
+  /* success: rich dark green tints */
+  --color-emerald-950: #0c1f1a;
+  --color-emerald-900: #134e3f;
+  --color-emerald-500: #10b981;
+  --color-emerald-400: #34d399;
+  --color-emerald-300: #6ee7b7;
+  --color-emerald-200: #a7f3d0;
+
+  /* warning: rich dark amber tints */
+  --color-amber-950: #231a0b;
+  --color-amber-900: #7a5410;
+  --color-amber-300: #fcd34d;
+  --color-amber-200: #fde68a;
+
+  /* danger: deep red tints, brand error #ba1a1a */
+  --color-red-950: #2a1113;
+  --color-red-900: #84262a;
+  --color-red-700: #ba1a1a;
+  --color-red-600: #d03434;
+  --color-red-400: #f87171;
+  --color-red-300: #fca5a5;
+  --color-red-200: #fecaca;
+}
 
 html,
 body {
   overflow-x: hidden;
+}
+
+body {
+  background-color: #0b0d13;
+  background-image:
+    radial-gradient(
+      55rem 38rem at 100% -10%,
+      rgba(109, 40, 217, 0.14),
+      transparent 60%
+    ),
+    radial-gradient(
+      45rem 32rem at -10% 10%,
+      rgba(16, 185, 129, 0.06),
+      transparent 55%
+    ),
+    radial-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px);
+  background-size:
+    auto,
+    auto,
+    24px 24px;
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.02em;
+}
+
+::selection {
+  background-color: rgba(124, 58, 237, 0.4);
+  color: #f4f6fb;
+}
+
+:focus-visible {
+  outline: 2px solid #a78bfa;
+  outline-offset: 2px;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px #141824 inset;
+  -webkit-text-fill-color: #e3e6ee;
+  caret-color: #e3e6ee;
+  transition: background-color 999999s ease-in-out 0s;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: #323a4e;
+  border: 2px solid #0b0d13;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: #4b5568;
+}
+
+a,
+button,
+input,
+select,
+textarea,
+[role="button"] {
+  transition:
+    color 150ms ease,
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+tbody tr {
+  transition: background-color 150ms ease;
+}
+tbody tr:hover {
+  background-color: rgba(124, 58, 237, 0.07);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

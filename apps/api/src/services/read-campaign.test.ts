@@ -22,6 +22,7 @@ vi.mock("@amazon-king/database", () => ({
     listAdGroupRows: vi.fn(),
     listTargetRows: vi.fn(),
     listSearchTermRows: vi.fn(),
+    listNegativeKeywordRows: vi.fn(),
     campaignDailySeries: vi.fn(),
   },
 }));
@@ -82,6 +83,17 @@ describe("campaign profitability", () => {
     vi.mocked(dashboard.listAdGroupRows).mockResolvedValue([]);
     vi.mocked(dashboard.listTargetRows).mockResolvedValue([]);
     vi.mocked(dashboard.listSearchTermRows).mockResolvedValue([]);
+    vi.mocked(dashboard.listNegativeKeywordRows).mockResolvedValue([
+      {
+        id: "negative-1",
+        keywordText: "free books",
+        matchType: "NEGATIVE_EXACT",
+        level: "ad_group",
+        adGroupId: "amazon-ad-group",
+        adGroupName: "Exact ad group",
+        state: "ENABLED",
+      },
+    ]);
     vi.mocked(dashboard.campaignDailySeries).mockResolvedValue([
       {
         date: "2026-08-12",
@@ -140,6 +152,14 @@ describe("campaign profitability", () => {
       daily: [
         { date: "2026-08-12", estimatedAdProfit: "3.0000" },
         { date: "2026-08-13", estimatedAdProfit: "-1.0000" },
+      ],
+      negativeKeywords: [
+        {
+          id: "negative-1",
+          keywordText: "free books",
+          level: "ad_group",
+          adGroupName: "Exact ad group",
+        },
       ],
     });
   });

@@ -5,18 +5,24 @@ import { migrate } from "./migrate.js";
 import {
   upsertCampaignMetrics,
   upsertAdvertisedProductMetrics,
+  upsertSearchTermMetrics,
   dashboardTotals,
   MixedCurrencyError,
 } from "./repositories/metrics.js";
 import {
   campaignDailySeries,
   listCampaignRows,
+  listNegativeKeywordRows,
+  listSearchTermCampaignRows,
+  listSearchTermRollupRows,
 } from "./repositories/dashboard.js";
 import { enqueue, claim, reapExpiredLeases, complete } from "./queue.js";
 import {
   upsertAd,
   upsertAdGroup,
   upsertCampaign,
+  deleteMissingNegativeKeywords,
+  upsertNegativeKeyword,
   listEntityChanges,
 } from "./repositories/structure.js";
 import {
@@ -79,7 +85,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
 
   it("applies migrations cleanly and is re-runnable", async () => {
     const applied = await migrate(pool);
-    expect(applied).toEqual(["0001", "0002"]);
+    expect(applied).toEqual(["0001", "0002", "0003", "0004"]);
     const again = await migrate(pool);
     expect(again).toEqual([]);
     const tables = await pool.query<{ count: string }>(
@@ -242,6 +248,80 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     const budget = history.find((h) => h.field === "daily_budget")!;
     expect(budget.oldValue).toBe("10.0000");
     expect(budget.newValue).toBe("12.5000");
+  });
+
+  it("persists campaign- and ad-group-level negative keywords idempotently", async () => {
+    const profileId = await seedProfile(pool);
+    const campaign = await upsertCampaign(pool, {
+      profileId,
+      amazonCampaignId: "amzn-campaign-negatives",
+      name: "Negative keyword campaign",
+      state: "enabled",
+    });
+    const adGroup = await upsertAdGroup(pool, {
+      profileId,
+      campaignId: campaign.id,
+      amazonAdGroupId: "amzn-ad-group-negatives",
+      name: "Exact ad group",
+      state: "enabled",
+    });
+
+    const first = await upsertNegativeKeyword(pool, {
+      profileId,
+      campaignId: campaign.id,
+      amazonNegativeKeywordId: "amzn-negative-campaign",
+      keywordText: "free books",
+      matchType: "NEGATIVE_EXACT",
+      state: "ENABLED",
+    });
+    const repeated = await upsertNegativeKeyword(pool, {
+      profileId,
+      campaignId: campaign.id,
+      amazonNegativeKeywordId: "amzn-negative-campaign",
+      keywordText: "free kindle books",
+      matchType: "NEGATIVE_PHRASE",
+      state: "PAUSED",
+    });
+    await upsertNegativeKeyword(pool, {
+      profileId,
+      campaignId: campaign.id,
+      adGroupId: adGroup.id,
+      amazonNegativeKeywordId: "amzn-negative-ad-group",
+      keywordText: "used books",
+      matchType: "NEGATIVE_EXACT",
+      state: "ENABLED",
+    });
+
+    expect(repeated.id).toBe(first.id);
+    await expect(listNegativeKeywordRows(pool, campaign.id)).resolves.toEqual([
+      {
+        id: "amzn-negative-campaign",
+        keywordText: "free kindle books",
+        matchType: "NEGATIVE_PHRASE",
+        level: "campaign",
+        adGroupId: null,
+        adGroupName: null,
+        state: "PAUSED",
+      },
+      {
+        id: "amzn-negative-ad-group",
+        keywordText: "used books",
+        matchType: "NEGATIVE_EXACT",
+        level: "ad_group",
+        adGroupId: "amzn-ad-group-negatives",
+        adGroupName: "Exact ad group",
+        state: "ENABLED",
+      },
+    ]);
+
+    expect(
+      await deleteMissingNegativeKeywords(pool, profileId, [
+        "amzn-negative-ad-group",
+      ]),
+    ).toBe(1);
+    await expect(listNegativeKeywordRows(pool, campaign.id)).resolves.toEqual([
+      expect.objectContaining({ id: "amzn-negative-ad-group" }),
+    ]);
   });
 
   it("maps advertised ASINs into the book catalog idempotently", async () => {
@@ -424,6 +504,220 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         estimatedRoyalty: null,
       }),
     ]);
+  });
+
+  it("aggregates search terms across campaigns with royalty attribution", async () => {
+    const profileId = await seedProfile(pool);
+    const workspace = await pool.query<{ workspace_id: string }>(
+      `select c.workspace_id::text
+       from amazon_profiles p join amazon_connections c on c.id = p.connection_id
+       where p.id = $1`,
+      [profileId],
+    );
+    const workspaceId = workspace.rows[0]!.workspace_id;
+
+    // Two campaigns advertising the same book, plus one unmapped ad group.
+    for (const suffix of ["1", "2"]) {
+      const campaign = await upsertCampaign(pool, {
+        profileId,
+        amazonCampaignId: `amzn-campaign-st-${suffix}`,
+        name: `ST campaign ${suffix}`,
+        state: "enabled",
+      });
+      const adGroup = await upsertAdGroup(pool, {
+        profileId,
+        campaignId: campaign.id,
+        amazonAdGroupId: `amzn-ad-group-st-${suffix}`,
+        name: `ST ad group ${suffix}`,
+        state: "enabled",
+      });
+      await upsertAd(pool, {
+        profileId,
+        adGroupId: adGroup.id,
+        amazonAdId: `amzn-ad-st-${suffix}`,
+        asin: "B0STTERM01",
+        state: "enabled",
+      });
+    }
+    const unmappedCampaign = await upsertCampaign(pool, {
+      profileId,
+      amazonCampaignId: "amzn-campaign-st-unmapped",
+      name: "ST unmapped campaign",
+      state: "enabled",
+    });
+    const unmappedAdGroup = await upsertAdGroup(pool, {
+      profileId,
+      campaignId: unmappedCampaign.id,
+      amazonAdGroupId: "amzn-ad-group-st-unmapped",
+      name: "ST unmapped ad group",
+      state: "enabled",
+    });
+    await upsertAd(pool, {
+      profileId,
+      adGroupId: unmappedAdGroup.id,
+      amazonAdId: "amzn-ad-st-unmapped",
+      asin: "B0UNMAPPED9",
+      state: "enabled",
+    });
+
+    const book = await mapAdvertisedProductToBook(pool, {
+      workspaceId,
+      profileIds: [profileId],
+      asin: "B0STTERM01",
+      title: "Search term book",
+      format: "ebook",
+    });
+    await upsertBookEconomics(pool, {
+      bookId: book!.id,
+      profileId,
+      effectiveFrom: "2026-08-13",
+      currency: "USD",
+      listPrice: "9.99",
+      estimatedRoyaltyPerSale: "4.25",
+      targetAcos: "0.30",
+      goalMode: "profit",
+    });
+
+    const metricValues = {
+      impressions: 100,
+      clicks: 10,
+      purchases7d: 2,
+      sales7d: "20.00",
+      purchases14d: 2,
+      sales14d: "20.00",
+      currency: "USD",
+    };
+    await upsertSearchTermMetrics(pool, [
+      {
+        ...metricValues,
+        profileId,
+        campaignId: "amzn-campaign-st-1",
+        adGroupId: "amzn-ad-group-st-1",
+        targetId: "amzn-target-st-1",
+        searchTerm: "fantasy books",
+        metricDate: "2026-08-13",
+        cost: "5.00",
+        sales: "20.00",
+        orders: 2,
+      },
+      {
+        ...metricValues,
+        profileId,
+        campaignId: "amzn-campaign-st-2",
+        adGroupId: "amzn-ad-group-st-2",
+        targetId: "amzn-target-st-2",
+        searchTerm: "fantasy books",
+        metricDate: "2026-08-13",
+        cost: "3.00",
+        sales: "8.00",
+        orders: 1,
+      },
+      {
+        ...metricValues,
+        profileId,
+        campaignId: "amzn-campaign-st-1",
+        adGroupId: "amzn-ad-group-st-1",
+        targetId: "amzn-target-st-1",
+        searchTerm: "dragons",
+        metricDate: "2026-08-13",
+        cost: "4.00",
+        sales: "0.00",
+        orders: 0,
+      },
+      {
+        ...metricValues,
+        profileId,
+        campaignId: "amzn-campaign-st-unmapped",
+        adGroupId: "amzn-ad-group-st-unmapped",
+        targetId: "amzn-target-st-unmapped",
+        searchTerm: "unmapped series",
+        metricDate: "2026-08-13",
+        cost: "6.00",
+        sales: "10.00",
+        orders: 1,
+      },
+    ]);
+
+    const rollup = await listSearchTermRollupRows(
+      pool,
+      workspaceId,
+      "2026-08-13",
+      "2026-08-14",
+    );
+    expect(rollup).toEqual([
+      // Ordered by spend desc.
+      expect.objectContaining({
+        searchTerm: "fantasy books",
+        campaignCount: 2,
+        currency: "USD",
+        totals: expect.objectContaining({ cost: "8.0000", orders: 3 }),
+        // (2 + 1 orders) × 4.25 royalty per sale.
+        estimatedRoyalty: "12.7500",
+        economicsMissing: false,
+        dataCurrentThrough: "2026-08-13",
+        mixedCurrency: false,
+      }),
+      expect.objectContaining({
+        searchTerm: "unmapped series",
+        campaignCount: 1,
+        estimatedRoyalty: null,
+        economicsMissing: true,
+      }),
+      expect.objectContaining({
+        searchTerm: "dragons",
+        campaignCount: 1,
+        // No orders → zero royalty, not missing economics.
+        estimatedRoyalty: "0",
+        economicsMissing: false,
+      }),
+    ]);
+
+    const breakdown = await listSearchTermCampaignRows(
+      pool,
+      workspaceId,
+      "fantasy books",
+      "2026-08-13",
+      "2026-08-14",
+    );
+    expect(breakdown).toEqual([
+      expect.objectContaining({
+        amazonCampaignId: "amzn-campaign-st-1",
+        name: "ST campaign 1",
+        totals: expect.objectContaining({ cost: "5.0000", orders: 2 }),
+        estimatedRoyalty: "8.5000",
+        economicsMissing: false,
+      }),
+      expect.objectContaining({
+        amazonCampaignId: "amzn-campaign-st-2",
+        name: "ST campaign 2",
+        totals: expect.objectContaining({ cost: "3.0000", orders: 1 }),
+        estimatedRoyalty: "4.2500",
+        economicsMissing: false,
+      }),
+    ]);
+
+    // Product filter keeps only ad groups advertising the selected book.
+    const filtered = await listSearchTermRollupRows(
+      pool,
+      workspaceId,
+      "2026-08-13",
+      "2026-08-14",
+      book!.id,
+    );
+    expect(filtered.map((row) => row.searchTerm)).toEqual([
+      "fantasy books",
+      "dragons",
+    ]);
+
+    const filteredBreakdown = await listSearchTermCampaignRows(
+      pool,
+      workspaceId,
+      "unmapped series",
+      "2026-08-13",
+      "2026-08-14",
+      book!.id,
+    );
+    expect(filteredBreakdown).toEqual([]);
   });
 
   it("recommendations store immutable evidence and expire stale rows", async () => {

@@ -214,7 +214,9 @@ export function ChangesPage() {
 
   return (
     <div className="flex max-w-5xl flex-col gap-4">
-      <h1 className="text-lg font-semibold text-zinc-100">Change center</h1>
+      <h1 className="text-xl font-bold tracking-tight text-zinc-100">
+        Change center
+      </h1>
       {changeSets.isPending ? (
         <Loading />
       ) : changeSets.error ? (

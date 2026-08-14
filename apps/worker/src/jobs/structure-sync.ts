@@ -49,6 +49,7 @@ export function createStructureSyncHandler(deps: JobDeps): JobHandler {
           ads: snapshot.ads.length,
           keywords: snapshot.keywords.length,
           targets: snapshot.targets.length,
+          negativeKeywords: snapshot.negativeKeywords.length,
         },
         "Structure sync completed",
       );

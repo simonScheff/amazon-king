@@ -23,10 +23,20 @@ export function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4">
-      <Card className="w-full max-w-sm">
-        <CardBody className="p-6">
-          <h1 className="text-lg font-semibold text-zinc-100">Amazon King</h1>
-          <p className="mt-1 text-sm text-zinc-500">
+      <Card className="w-full max-w-sm shadow-[0_16px_40px_rgba(0,0,0,0.5),0_0_32px_rgba(109,40,217,0.12)]">
+        <CardBody className="p-8">
+          <div className="flex items-center gap-2.5">
+            <span
+              aria-hidden="true"
+              className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-600 text-sm font-bold text-white shadow-sm"
+            >
+              AK
+            </span>
+            <h1 className="text-2xl font-bold tracking-tight text-zinc-100">
+              Amazon King
+            </h1>
+          </div>
+          <p className="mt-1.5 text-sm text-zinc-500">
             Ads optimizer for KDP authors
           </p>
           {invalidToken && !sent && (

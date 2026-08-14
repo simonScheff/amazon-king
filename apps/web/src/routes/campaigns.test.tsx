@@ -1,7 +1,13 @@
 import type { CampaignListRow } from "@amazon-king/contracts";
-import { render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CampaignsPage } from "./campaigns";
 
 const mocks = vi.hoisted(() => ({
@@ -47,6 +53,8 @@ function campaign(
 }
 
 describe("CampaignsPage seven-day profitability", () => {
+  afterEach(() => cleanup());
+
   beforeEach(() => {
     mocks.useCampaigns.mockReset();
     mocks.useCampaigns.mockReturnValue({
@@ -112,5 +120,48 @@ describe("CampaignsPage seven-day profitability", () => {
         screen.getByLabelText("New campaign seven-day profit: No activity"),
       ).getByText("—"),
     ).toBeInTheDocument();
+  });
+
+  it("sorts rows when a column header is clicked", () => {
+    const rowNames = () =>
+      screen
+        .getAllByRole("row")
+        .slice(1)
+        .map((row) => row.querySelector("td a")?.textContent ?? "");
+
+    render(<CampaignsPage />);
+
+    // Default: spend desc (ties keep their seeded order; idle campaign last).
+    expect(rowNames()).toEqual([
+      "General",
+      "Research",
+      "Discovery",
+      "New campaign",
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: /Campaign/ }));
+    expect(rowNames()).toEqual([
+      "Discovery",
+      "General",
+      "New campaign",
+      "Research",
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: /Campaign/ }));
+    expect(rowNames()).toEqual([
+      "Research",
+      "New campaign",
+      "General",
+      "Discovery",
+    ]);
+
+    // Profit desc: unavailable profit (Discovery, New campaign) sorts last.
+    fireEvent.click(screen.getByRole("button", { name: /7-day profit/ }));
+    expect(rowNames()).toEqual([
+      "General",
+      "Research",
+      "Discovery",
+      "New campaign",
+    ]);
   });
 });

@@ -84,6 +84,69 @@ export const namedMetricRowSchema = z.object({
 });
 export type NamedMetricRow = z.infer<typeof namedMetricRowSchema>;
 
+/** Current Amazon negative keyword attached to a campaign or one ad group. */
+export const negativeKeywordRowSchema = z.object({
+  id: z.string(),
+  keywordText: z.string(),
+  matchType: z.string(),
+  level: z.enum(["campaign", "ad_group"]),
+  adGroupId: z.string().nullable(),
+  adGroupName: z.string().nullable(),
+  state: z.string(),
+});
+export type NegativeKeywordRow = z.infer<typeof negativeKeywordRowSchema>;
+
+/**
+ * GET /api/search-terms row: one shopper search term aggregated across every
+ * campaign of the workspace over the requested window. Royalty/profit follow
+ * the same rules as campaign rows — never guessed when economics are missing.
+ */
+export const searchTermListRowSchema = z.object({
+  searchTerm: z.string(),
+  campaignCount: z.number().int().nonnegative(),
+  currency: currencyCodeSchema,
+  totals: metricTotalsSchema.extend({
+    acos: z.number().nullable(),
+  }),
+  estimatedRoyalty: nonNegativeDecimalStringSchema.nullable(),
+  estimatedAdProfit: decimalStringSchema.nullable(),
+  economicsMissing: z.boolean(),
+  dataCurrentThrough: isoDateSchema.nullable(),
+});
+export type SearchTermListRow = z.infer<typeof searchTermListRowSchema>;
+
+/** One campaign's contribution to a search term (drill-down row). */
+export const searchTermCampaignRowSchema = z.object({
+  profileId: z.string(),
+  campaignId: z.string(),
+  name: z.string(),
+  state: z.string(),
+  totals: metricTotalsSchema,
+  estimatedRoyalty: nonNegativeDecimalStringSchema.nullable(),
+  estimatedAdProfit: decimalStringSchema.nullable(),
+  economicsMissing: z.boolean(),
+});
+export type SearchTermCampaignRow = z.infer<typeof searchTermCampaignRowSchema>;
+
+/** GET /api/search-terms/:term — a search term with its per-campaign breakdown. */
+export const searchTermDetailSchema = z.object({
+  searchTerm: z.string(),
+  dateRange: z.object({
+    start: isoDateSchema,
+    end: isoDateSchema,
+  }),
+  currency: currencyCodeSchema,
+  totals: metricTotalsSchema.extend({
+    acos: z.number().nullable(),
+    estimatedRoyalty: nonNegativeDecimalStringSchema.nullable(),
+    estimatedAdProfit: decimalStringSchema.nullable(),
+  }),
+  economicsMissing: z.boolean(),
+  dataCurrentThrough: isoDateSchema.nullable(),
+  campaigns: z.array(searchTermCampaignRowSchema),
+});
+export type SearchTermDetail = z.infer<typeof searchTermDetailSchema>;
+
 /** GET /api/campaigns/:id — a campaign with its hierarchy and metric totals. */
 export const campaignDetailSchema = z.object({
   dateRange: z.object({
@@ -112,5 +175,6 @@ export const campaignDetailSchema = z.object({
   adGroups: z.array(namedMetricRowSchema).default([]),
   targets: z.array(namedMetricRowSchema).default([]),
   searchTerms: z.array(namedMetricRowSchema).default([]),
+  negativeKeywords: z.array(negativeKeywordRowSchema).default([]),
 });
 export type CampaignDetail = z.infer<typeof campaignDetailSchema>;

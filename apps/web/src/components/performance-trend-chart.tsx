@@ -50,13 +50,16 @@ export function PerformanceTrendChart({
     <div className="h-64" aria-label="Daily performance trend">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data}>
-          <CartesianGrid stroke="#27272a" strokeDasharray="3 3" />
-          <XAxis dataKey="date" stroke="#71717a" fontSize={12} />
-          <YAxis stroke="#71717a" fontSize={12} />
+          <CartesianGrid stroke="#242a3a" strokeDasharray="3 3" />
+          <XAxis dataKey="date" stroke="#7b8496" fontSize={12} />
+          <YAxis stroke="#7b8496" fontSize={12} />
           <Tooltip
             contentStyle={{
-              backgroundColor: "#18181b",
-              border: "1px solid #3f3f46",
+              backgroundColor: "#1a2030",
+              border: "1px solid #323a4e",
+              borderRadius: 12,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+              color: "#e3e6ee",
               fontSize: 12,
             }}
             formatter={(value) => [
@@ -66,7 +69,7 @@ export function PerformanceTrendChart({
             ]}
           />
           <Legend />
-          {hasProfitData ? <ReferenceLine y={0} stroke="#52525b" /> : null}
+          {hasProfitData ? <ReferenceLine y={0} stroke="#4b5568" /> : null}
           <Line
             type="monotone"
             dataKey="spend"
@@ -78,7 +81,7 @@ export function PerformanceTrendChart({
             type="monotone"
             dataKey="sales"
             name="Attributed sales"
-            stroke="#38bdf8"
+            stroke="#a78bfa"
             dot={false}
           />
           {hasRoyaltyData ? (
@@ -96,7 +99,7 @@ export function PerformanceTrendChart({
               type="monotone"
               dataKey="profit"
               name="Estimated ad profit"
-              stroke="#c084fc"
+              stroke="#c4b5fd"
               strokeWidth={2}
               dot={false}
             />

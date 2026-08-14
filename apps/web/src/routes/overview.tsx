@@ -65,9 +65,11 @@ export function OverviewPage() {
   const totals = summary.data?.totals;
 
   return (
-    <div className="flex max-w-6xl flex-col gap-4">
+    <div className="flex max-w-6xl flex-col gap-6">
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-lg font-semibold text-zinc-100">Overview</h1>
+        <h1 className="text-xl font-bold tracking-tight text-zinc-100">
+          Overview
+        </h1>
         <div className="ml-auto flex flex-wrap items-center gap-3">
           <label className="flex items-center gap-2 text-sm text-zinc-400">
             <span>Country</span>
@@ -143,7 +145,7 @@ export function OverviewPage() {
               : `${flagForCountry(country)} ${country}`}
           </p>
 
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
             <KpiCard
               label="Spend"
               value={formatMoney(totals?.cost, currency)}
@@ -182,7 +184,7 @@ export function OverviewPage() {
             </CardBody>
           </Card>
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-6 lg:grid-cols-2">
             <Card>
               <CardHeader title="Top problems & opportunities" />
               {top.isPending ? (

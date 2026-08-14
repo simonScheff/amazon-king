@@ -372,6 +372,30 @@ export async function buildServer(
     return detail;
   });
 
+  const searchTermsQuerySchema = daysQuerySchema.extend({
+    book: z.string().min(1).optional(),
+  });
+
+  app.get("/api/search-terms", async (request) => {
+    const auth = await authenticate(request);
+    const { days, book } = parse(searchTermsQuerySchema, request.query);
+    return services.read.listSearchTerms(auth.workspaceId, days, book ?? null);
+  });
+
+  app.get("/api/search-terms/:term", async (request) => {
+    const auth = await authenticate(request);
+    const { term } = request.params as { term: string };
+    const { days, book } = parse(searchTermsQuerySchema, request.query);
+    const detail = await services.read.getSearchTermDetail(
+      auth.workspaceId,
+      term,
+      days,
+      book ?? null,
+    );
+    if (!detail) throw notFound("Unknown search term");
+    return detail;
+  });
+
   app.get("/api/books", async (request) => {
     const auth = await authenticate(request);
     return services.read.listBooks(auth.workspaceId);

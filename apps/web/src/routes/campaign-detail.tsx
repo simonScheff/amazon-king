@@ -5,7 +5,7 @@ import {
   useParams,
   useSearch,
 } from "@tanstack/react-router";
-import type { MetricTotals } from "@amazon-king/contracts";
+import type { MetricTotals, NegativeKeywordRow } from "@amazon-king/contracts";
 import { useCampaign, useProfiles } from "../api/endpoints";
 import { KpiCard } from "../components/kpi-card";
 import { CampaignMaxCpc } from "../components/campaign-max-cpc";
@@ -27,7 +27,8 @@ import {
   hasCampaignActivity,
 } from "../lib/campaign-profit";
 
-type Tab = "adGroups" | "targets" | "searchTerms" | "maxCpc";
+type Tab =
+  "adGroups" | "targets" | "searchTerms" | "negativeKeywords" | "maxCpc";
 
 const DAY_OPTIONS = [7, 14, 30, 60] as const;
 
@@ -35,6 +36,7 @@ const tabs: Array<{ key: Tab; label: string }> = [
   { key: "adGroups", label: "Ad groups" },
   { key: "targets", label: "Targets" },
   { key: "searchTerms", label: "Search terms" },
+  { key: "negativeKeywords", label: "Negative keywords" },
   { key: "maxCpc", label: "Max CPC" },
 ];
 
@@ -43,6 +45,59 @@ interface Row {
   name: string;
   state: string;
   totals: MetricTotals;
+}
+
+function formatAmazonLabel(value: string) {
+  const words = value
+    .replace(/^negative_/i, "")
+    .toLowerCase()
+    .split("_");
+  return words
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function NegativeKeywordsTable({ rows }: { rows: NegativeKeywordRow[] }) {
+  if (rows.length === 0) {
+    return (
+      <EmptyState>
+        No negative keywords are synced for this campaign.
+      </EmptyState>
+    );
+  }
+  return (
+    <Table>
+      <thead>
+        <tr>
+          <Th>Negative keyword</Th>
+          <Th>Match type</Th>
+          <Th>Applied to</Th>
+          <Th>State</Th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => {
+          const state = row.state.toLowerCase();
+          return (
+            <tr key={row.id}>
+              <Td className="font-medium text-zinc-100">{row.keywordText}</Td>
+              <Td>{formatAmazonLabel(row.matchType)}</Td>
+              <Td>
+                {row.level === "campaign"
+                  ? "Campaign"
+                  : `Ad group · ${row.adGroupName ?? row.adGroupId ?? "Unknown"}`}
+              </Td>
+              <Td>
+                <Badge tone={state === "enabled" ? "success" : "neutral"}>
+                  {formatAmazonLabel(state)}
+                </Badge>
+              </Td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </Table>
+  );
 }
 
 function MetricsTable({ rows, currency }: { rows: Row[]; currency: string }) {
@@ -136,7 +191,9 @@ export function CampaignDetailPage() {
         </Link>
       </p>
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-lg font-semibold text-zinc-100">{c.name}</h1>
+        <h1 className="text-xl font-bold tracking-tight text-zinc-100">
+          {c.name}
+        </h1>
         <Badge tone={c.state === "enabled" ? "success" : "neutral"}>
           {c.state}
         </Badge>
@@ -228,7 +285,7 @@ export function CampaignDetailPage() {
         <div
           role="tablist"
           aria-label="Campaign breakdown"
-          className="flex border-b border-zinc-800"
+          className="flex overflow-x-auto border-b border-zinc-800"
         >
           {tabs.map((t) => (
             <button
@@ -236,7 +293,7 @@ export function CampaignDetailPage() {
               role="tab"
               aria-selected={tab === t.key}
               onClick={() => setTab(t.key)}
-              className={`px-4 py-2 text-sm ${
+              className={`shrink-0 whitespace-nowrap px-4 py-2 text-sm ${
                 tab === t.key
                   ? "border-b-2 border-sky-500 text-zinc-100"
                   : "text-zinc-500 hover:text-zinc-300"
@@ -250,6 +307,8 @@ export function CampaignDetailPage() {
           <div role="tabpanel">
             {tab === "maxCpc" ? (
               <CampaignMaxCpc campaignId={id} />
+            ) : tab === "negativeKeywords" ? (
+              <NegativeKeywordsTable rows={campaign.data.negativeKeywords} />
             ) : (
               <MetricsTable rows={campaign.data[tab]} currency={currency} />
             )}

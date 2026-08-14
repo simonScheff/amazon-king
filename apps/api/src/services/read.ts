@@ -3,6 +3,8 @@ import type {
   Book,
   CannibalizationResolutionContext,
   DashboardSummary,
+  SearchTermDetail,
+  SearchTermListRow,
 } from "@amazon-king/contracts";
 import {
   microsFromDecimalString,
@@ -89,6 +91,16 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       throw notFound("Unknown profile");
     }
     return profile;
+  }
+
+  /** Resolve an optional product filter to a workspace-owned book. */
+  async function requireBook(workspaceId: string, bookId: string | null) {
+    if (bookId === null) return null;
+    const book = await books.getBook(db, bookId);
+    if (!book || book.workspaceId !== workspaceId) {
+      throw notFound("Unknown book");
+    }
+    return book.id;
   }
 
   return {
@@ -424,27 +436,35 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       );
       if (!campaign) return null;
       const { start, end } = dateRange(now(), days);
-      const [profile, rows, adGroups, targets, searchTerms, dailyRows] =
-        await Promise.all([
-          profiles.getProfile(db, campaign.profileId),
-          dashboard.listCampaignRows(db, workspaceId, start, end),
-          dashboard.listAdGroupRows(db, campaign.id, start, end),
-          dashboard.listTargetRows(db, campaign.id, start, end),
-          dashboard.listSearchTermRows(
-            db,
-            campaign.profileId,
-            amazonCampaignId,
-            start,
-            end,
-          ),
-          dashboard.campaignDailySeries(
-            db,
-            campaign.profileId,
-            amazonCampaignId,
-            start,
-            end,
-          ),
-        ]);
+      const [
+        profile,
+        rows,
+        adGroups,
+        targets,
+        searchTerms,
+        negativeKeywords,
+        dailyRows,
+      ] = await Promise.all([
+        profiles.getProfile(db, campaign.profileId),
+        dashboard.listCampaignRows(db, workspaceId, start, end),
+        dashboard.listAdGroupRows(db, campaign.id, start, end),
+        dashboard.listTargetRows(db, campaign.id, start, end),
+        dashboard.listSearchTermRows(
+          db,
+          campaign.profileId,
+          amazonCampaignId,
+          start,
+          end,
+        ),
+        dashboard.listNegativeKeywordRows(db, campaign.id),
+        dashboard.campaignDailySeries(
+          db,
+          campaign.profileId,
+          amazonCampaignId,
+          start,
+          end,
+        ),
+      ]);
       if (!profile) return null;
       const row = rows.find(
         (r) =>
@@ -528,6 +548,161 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         adGroups,
         targets,
         searchTerms,
+        negativeKeywords,
+      };
+    },
+
+    async listSearchTerms(
+      workspaceId,
+      days,
+      bookId = null,
+    ): Promise<SearchTermListRow[]> {
+      const { start, end } = dateRange(now(), days);
+      const bookPk = await requireBook(workspaceId, bookId);
+      const rows = await dashboard.listSearchTermRollupRows(
+        db,
+        workspaceId,
+        start,
+        end,
+        bookPk,
+      );
+      if (rows.some((row) => row.mixedCurrency)) {
+        throw conflict(
+          "MIXED_CURRENCY",
+          "Search term metrics mix currencies; refusing to aggregate (plan §9)",
+        );
+      }
+      return rows.map((row) => {
+        const costMicros = microsFromDecimalString(row.totals.cost);
+        const salesMicros = microsFromDecimalString(row.totals.sales);
+        const royaltyMicros =
+          row.estimatedRoyalty === null
+            ? null
+            : microsFromDecimalString(row.estimatedRoyalty);
+        return {
+          searchTerm: row.searchTerm,
+          campaignCount: row.campaignCount,
+          currency: row.currency as SearchTermListRow["currency"],
+          totals: {
+            ...row.totals,
+            acos: salesMicros > 0 ? costMicros / salesMicros : null,
+          },
+          estimatedRoyalty:
+            royaltyMicros === null
+              ? null
+              : microsToDecimalString(royaltyMicros),
+          estimatedAdProfit:
+            royaltyMicros === null
+              ? null
+              : microsToDecimalString(royaltyMicros - costMicros),
+          economicsMissing: row.economicsMissing,
+          dataCurrentThrough: row.dataCurrentThrough,
+        };
+      });
+    },
+
+    async getSearchTermDetail(
+      workspaceId,
+      searchTerm,
+      days,
+      bookId = null,
+    ): Promise<SearchTermDetail | null> {
+      const { start, end } = dateRange(now(), days);
+      const bookPk = await requireBook(workspaceId, bookId);
+      const rows = await dashboard.listSearchTermCampaignRows(
+        db,
+        workspaceId,
+        searchTerm,
+        start,
+        end,
+        bookPk,
+      );
+      if (rows.length === 0) return null;
+      if (rows.some((row) => row.mixedCurrency)) {
+        throw conflict(
+          "MIXED_CURRENCY",
+          "Search term metrics mix currencies; refusing to aggregate (plan §9)",
+        );
+      }
+      const currencies = new Set(rows.map((row) => row.currency));
+      if (currencies.size > 1) {
+        throw conflict(
+          "MIXED_CURRENCY",
+          "Campaigns use different currencies; refusing to aggregate (plan §9)",
+        );
+      }
+
+      let impressions = 0;
+      let clicks = 0;
+      let orders = 0;
+      let costMicros = 0;
+      let salesMicros = 0;
+      let royaltyMicros = 0;
+      // Profit is reported only when every campaign with orders has complete
+      // royalty economics — never a partial guess (plan §9).
+      const economicsMissing = rows.some((row) => row.economicsMissing);
+      let dataCurrentThrough: string | null = null;
+      for (const row of rows) {
+        impressions += row.totals.impressions;
+        clicks += row.totals.clicks;
+        orders += row.totals.orders;
+        costMicros += microsFromDecimalString(row.totals.cost);
+        salesMicros += microsFromDecimalString(row.totals.sales);
+        if (!economicsMissing && row.estimatedRoyalty !== null) {
+          royaltyMicros += microsFromDecimalString(row.estimatedRoyalty);
+        }
+        if (
+          row.dataCurrentThrough !== null &&
+          (dataCurrentThrough === null ||
+            row.dataCurrentThrough > dataCurrentThrough)
+        ) {
+          dataCurrentThrough = row.dataCurrentThrough;
+        }
+      }
+
+      return {
+        searchTerm,
+        dateRange: { start, end },
+        currency: [...currencies][0]! as SearchTermDetail["currency"],
+        totals: {
+          impressions,
+          clicks,
+          cost: microsToDecimalString(costMicros),
+          sales: microsToDecimalString(salesMicros),
+          orders,
+          acos: salesMicros > 0 ? costMicros / salesMicros : null,
+          estimatedRoyalty: economicsMissing
+            ? null
+            : microsToDecimalString(royaltyMicros),
+          estimatedAdProfit: economicsMissing
+            ? null
+            : microsToDecimalString(royaltyMicros - costMicros),
+        },
+        economicsMissing,
+        dataCurrentThrough,
+        campaigns: rows.map((row) => {
+          const rowCostMicros = microsFromDecimalString(row.totals.cost);
+          const rowRoyaltyMicros =
+            row.estimatedRoyalty === null
+              ? null
+              : microsFromDecimalString(row.estimatedRoyalty);
+          return {
+            profileId: row.amazonProfileId,
+            campaignId: row.amazonCampaignId,
+            name: row.name,
+            state: row.state,
+            totals: row.totals,
+            estimatedRoyalty:
+              rowRoyaltyMicros === null
+                ? null
+                : microsToDecimalString(rowRoyaltyMicros),
+            estimatedAdProfit:
+              rowRoyaltyMicros === null
+                ? null
+                : microsToDecimalString(rowRoyaltyMicros - rowCostMicros),
+            economicsMissing: row.economicsMissing,
+          };
+        }),
       };
     },
 

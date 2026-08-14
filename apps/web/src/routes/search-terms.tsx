@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { Link } from "@tanstack/react-router";
-import type { CampaignListRow } from "@amazon-king/contracts";
-import { useCampaigns } from "../api/endpoints";
-import { Badge } from "../components/ui/badge";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
+import type { SearchTermListRow } from "@amazon-king/contracts";
+import { useBooks, useSearchTerms } from "../api/endpoints";
 import { Card } from "../components/ui/card";
+import { Select } from "../components/ui/input";
 import { SortableTh } from "../components/ui/sortable-th";
-import { Table, Td } from "../components/ui/table";
+import { Table, Td, Th } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
 import { ProfitabilityResult } from "../components/profitability-result";
 import {
@@ -17,33 +17,29 @@ import { compareNullable, nextSort, type Sort } from "../lib/sorting";
 
 const PROFITABILITY_DAYS = 7;
 
-const TEXT_COLUMNS = ["name", "profile", "state"] as const;
+const TEXT_COLUMNS = ["searchTerm"] as const;
 
 type SortKey =
-  | "name"
-  | "profile"
-  | "state"
-  | "profit"
+  | "searchTerm"
+  | "campaignCount"
   | "impressions"
   | "clicks"
   | "cost"
   | "sales"
   | "orders"
-  | "acos";
+  | "acos"
+  | "profit";
 
 /** Display-only sort keys; money strings are converted to Number for ordering. */
-function sortValue(row: CampaignListRow, key: SortKey): number | string | null {
+function sortValue(
+  row: SearchTermListRow,
+  key: SortKey,
+): number | string | null {
   switch (key) {
-    case "name":
-      return row.name.toLowerCase();
-    case "profile":
-      return row.profileId;
-    case "state":
-      return row.state;
-    case "profit":
-      return row.profitability.estimatedAdProfit === null
-        ? null
-        : Number(row.profitability.estimatedAdProfit);
+    case "searchTerm":
+      return row.searchTerm.toLowerCase();
+    case "campaignCount":
+      return row.campaignCount;
     case "impressions":
       return row.totals.impressions;
     case "clicks":
@@ -55,14 +51,20 @@ function sortValue(row: CampaignListRow, key: SortKey): number | string | null {
     case "orders":
       return row.totals.orders;
     case "acos":
-      return Number(row.totals.sales) > 0
-        ? Number(row.totals.cost) / Number(row.totals.sales)
-        : null;
+      return row.totals.acos;
+    case "profit":
+      return row.estimatedAdProfit === null
+        ? null
+        : Number(row.estimatedAdProfit);
   }
 }
 
-export function CampaignsPage() {
-  const campaigns = useCampaigns(PROFITABILITY_DAYS);
+export function SearchTermsPage() {
+  const search = useSearch({ strict: false }) as { book?: string };
+  const book = search.book;
+  const navigate = useNavigate();
+  const books = useBooks();
+  const searchTerms = useSearchTerms(PROFITABILITY_DAYS, book);
   const [sort, setSort] = useState<Sort<SortKey>>({
     key: "cost",
     direction: "desc",
@@ -72,8 +74,8 @@ export function CampaignsPage() {
     setSort((current) => nextSort(current, column, TEXT_COLUMNS));
   }
 
-  const sortedRows = campaigns.data
-    ? [...campaigns.data].sort((a, b) =>
+  const sortedRows = searchTerms.data
+    ? [...searchTerms.data].sort((a, b) =>
         compareNullable(
           sortValue(a, sort.key),
           sortValue(b, sort.key),
@@ -84,47 +86,65 @@ export function CampaignsPage() {
 
   return (
     <div className="flex max-w-6xl flex-col gap-4">
-      <h1 className="text-xl font-bold tracking-tight text-zinc-100">
-        Campaigns
-      </h1>
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="text-xl font-bold tracking-tight text-zinc-100">
+          Search terms
+        </h1>
+        <div className="ml-auto flex items-center gap-2">
+          <label htmlFor="product-filter" className="text-sm text-zinc-400">
+            Product
+          </label>
+          <Select
+            id="product-filter"
+            value={book ?? ""}
+            onChange={(event) =>
+              void navigate({
+                to: "/search-terms",
+                search: event.target.value ? { book: event.target.value } : {},
+                replace: true,
+              })
+            }
+          >
+            <option value="">All products</option>
+            {(books.data ?? []).map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.title} ({b.format})
+              </option>
+            ))}
+          </Select>
+        </div>
+      </div>
       <Card>
-        {campaigns.isPending ? (
+        {searchTerms.isPending ? (
           <Loading />
-        ) : campaigns.error ? (
-          <ErrorState error={campaigns.error} />
+        ) : searchTerms.error ? (
+          <ErrorState error={searchTerms.error} />
         ) : sortedRows.length === 0 ? (
           <EmptyState>
-            No campaigns imported yet. Connect Amazon Ads and run a sync first.
+            {book
+              ? "No search terms for this product in the selected window."
+              : "No search terms imported yet. Connect Amazon Ads and run a sync first."}
           </EmptyState>
         ) : (
           <Table>
             <thead>
               <tr>
                 <SortableTh
-                  label="Campaign"
-                  column="name"
+                  label="Search term"
+                  column="searchTerm"
                   sort={sort}
                   onSort={onSort}
                 />
                 <SortableTh
-                  label="Profile"
-                  column="profile"
+                  label="Campaigns"
+                  column="campaignCount"
                   sort={sort}
                   onSort={onSort}
+                  className="text-right"
                 />
-                <SortableTh
-                  label="State"
-                  column="state"
-                  sort={sort}
-                  onSort={onSort}
-                />
-                <SortableTh
-                  label={`${PROFITABILITY_DAYS}-day profit`}
-                  column="profit"
-                  sort={sort}
-                  onSort={onSort}
-                  className="hidden md:table-cell"
-                />
+                <Th className="hidden md:table-cell">
+                  {PROFITABILITY_DAYS}-day profit
+                </Th>
                 <SortableTh
                   label="Impressions"
                   column="impressions"
@@ -170,30 +190,27 @@ export function CampaignsPage() {
               </tr>
             </thead>
             <tbody>
-              {sortedRows.map((c) => {
-                const currency = c.profitability.currency;
-                const hasActivity = hasCampaignActivity(c.totals);
+              {sortedRows.map((term) => {
+                const currency = term.currency;
+                const hasActivity = hasCampaignActivity(term.totals);
                 const profitStatus = getCampaignProfitStatus(
-                  c.totals,
-                  c.profitability.economicsMissing,
-                  c.profitability.estimatedAdProfit,
+                  term.totals,
+                  term.economicsMissing,
+                  term.estimatedAdProfit,
                 );
-                // ACoS is a ratio derived for display only; money itself is
-                // never aggregated in the browser.
-                const acos =
-                  Number(c.totals.sales) > 0
-                    ? Number(c.totals.cost) / Number(c.totals.sales)
-                    : null;
                 return (
-                  <tr key={c.campaignId}>
-                    <Td>
+                  <tr key={term.searchTerm}>
+                    <Td className="max-w-xs">
                       <Link
-                        to="/campaigns/$id"
-                        params={{ id: c.campaignId }}
-                        search={{ days: PROFITABILITY_DAYS }}
-                        className="text-sky-400 hover:underline"
+                        to="/search-terms/$term"
+                        params={{ term: term.searchTerm }}
+                        search={{
+                          days: PROFITABILITY_DAYS,
+                          ...(book ? { book } : {}),
+                        }}
+                        className="break-words text-sky-400 hover:underline"
                       >
-                        {c.name}
+                        {term.searchTerm}
                       </Link>
                       <div className="mt-2 md:hidden">
                         <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
@@ -201,51 +218,46 @@ export function CampaignsPage() {
                         </p>
                         <ProfitabilityResult
                           status={profitStatus}
-                          amount={c.profitability.estimatedAdProfit}
+                          amount={term.estimatedAdProfit}
                           currency={currency}
-                          economicsMissing={c.profitability.economicsMissing}
+                          economicsMissing={term.economicsMissing}
                           hasActivity={hasActivity}
                         />
                       </div>
                     </Td>
-                    <Td className="font-mono text-xs text-zinc-500">
-                      {c.profileId}
-                    </Td>
-                    <Td>
-                      <Badge
-                        tone={c.state === "enabled" ? "success" : "neutral"}
-                      >
-                        {c.state}
-                      </Badge>
+                    <Td className="text-right">
+                      {formatCount(term.campaignCount)}
                     </Td>
                     <Td
                       className="hidden whitespace-nowrap md:table-cell"
-                      aria-label={`${c.name} seven-day profit: ${profitStatus.label}`}
+                      aria-label={`${term.searchTerm} seven-day profit: ${profitStatus.label}`}
                     >
                       <ProfitabilityResult
                         status={profitStatus}
-                        amount={c.profitability.estimatedAdProfit}
+                        amount={term.estimatedAdProfit}
                         currency={currency}
-                        economicsMissing={c.profitability.economicsMissing}
+                        economicsMissing={term.economicsMissing}
                         hasActivity={hasActivity}
                       />
                     </Td>
                     <Td className="text-right">
-                      {formatCount(c.totals.impressions)}
+                      {formatCount(term.totals.impressions)}
                     </Td>
                     <Td className="text-right">
-                      {formatCount(c.totals.clicks)}
+                      {formatCount(term.totals.clicks)}
                     </Td>
                     <Td className="text-right">
-                      {formatMoney(c.totals.cost, currency)}
+                      {formatMoney(term.totals.cost, currency)}
                     </Td>
                     <Td className="text-right">
-                      {formatMoney(c.totals.sales, currency)}
+                      {formatMoney(term.totals.sales, currency)}
                     </Td>
                     <Td className="text-right">
-                      {formatCount(c.totals.orders)}
+                      {formatCount(term.totals.orders)}
                     </Td>
-                    <Td className="text-right">{formatAcos(acos)}</Td>
+                    <Td className="text-right">
+                      {formatAcos(term.totals.acos)}
+                    </Td>
                   </tr>
                 );
               })}

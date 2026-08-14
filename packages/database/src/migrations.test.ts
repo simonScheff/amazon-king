@@ -56,6 +56,12 @@ describe("migration files", () => {
     }
   });
 
+  it("adds storage for synced negative keywords", async () => {
+    const migrations = await loadMigrations();
+    expect(migrations.at(-1)?.filename).toBe("0004_negative_keywords.sql");
+    expect(migrations.at(-1)?.sql).toContain("create table negative_keywords");
+  });
+
   const tempDirs: string[] = [];
   afterAll(async () => {
     await Promise.all(

@@ -295,6 +295,67 @@ export async function upsertTarget(
   return toResult(result.rows[0]!);
 }
 
+export interface NegativeKeywordUpsertInput {
+  profileId: string;
+  campaignId: string; // internal campaigns.id
+  adGroupId?: string | null; // internal ad_groups.id; null is campaign-level
+  amazonNegativeKeywordId: string;
+  keywordText: string;
+  matchType: string;
+  state: string;
+  rawJson?: unknown;
+  sourceUpdatedAt?: string | null;
+}
+
+/** Idempotently persist one campaign- or ad-group-level negative keyword. */
+export async function upsertNegativeKeyword(
+  db: Db,
+  input: NegativeKeywordUpsertInput,
+): Promise<{ id: string; created: boolean }> {
+  const result = await db.query<{ id: string; created: boolean }>(
+    `insert into negative_keywords
+       (profile_id, campaign_id, ad_group_id, amazon_negative_keyword_id,
+        keyword_text, match_type, state, raw_json, source_updated_at)
+     values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)
+     on conflict (profile_id, amazon_negative_keyword_id) do update set
+       campaign_id = excluded.campaign_id,
+       ad_group_id = excluded.ad_group_id,
+       keyword_text = excluded.keyword_text,
+       match_type = excluded.match_type,
+       state = excluded.state,
+       raw_json = excluded.raw_json,
+       source_updated_at = excluded.source_updated_at
+     returning id, (xmax = 0) as created`,
+    [
+      input.profileId,
+      input.campaignId,
+      input.adGroupId ?? null,
+      input.amazonNegativeKeywordId,
+      input.keywordText,
+      input.matchType,
+      input.state,
+      input.rawJson == null ? "{}" : JSON.stringify(input.rawJson),
+      input.sourceUpdatedAt ?? null,
+    ],
+  );
+  return result.rows[0]!;
+}
+
+/** Remove negatives that were absent from a complete profile snapshot. */
+export async function deleteMissingNegativeKeywords(
+  db: Db,
+  profileId: string,
+  amazonNegativeKeywordIds: string[],
+): Promise<number> {
+  const result = await db.query(
+    `delete from negative_keywords
+     where profile_id = $1
+       and not (amazon_negative_keyword_id = any($2::text[]))`,
+    [profileId, amazonNegativeKeywordIds],
+  );
+  return result.rowCount ?? 0;
+}
+
 export interface EntityChange {
   id: string;
   entityType: string;
