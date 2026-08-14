@@ -11,7 +11,9 @@ import {
 } from "@amazon-king/amazon-ads";
 import {
   recommendationChangeActionType,
+  type CampaignCreationCreate,
   type CampaignMaxCpc,
+  type ChangeSet as ContractChangeSet,
   type MaxCpcChangeSetResult,
 } from "@amazon-king/contracts";
 import {
@@ -24,9 +26,11 @@ import {
 import {
   audit,
   bidPolicies,
+  books,
   buildChangeActionFingerprint,
   buildChangeSetFingerprint,
   changes,
+  enqueue,
   profiles,
   recommendations,
   structure,
@@ -91,6 +95,52 @@ const cannibalizationEvidenceSchema = z.object({
     )
     .min(2),
 });
+
+/**
+ * Immutable spec persisted in a `campaign_creation` change set's metadata and
+ * mirrored into each action's after_state. Validated again at apply time so a
+ * tampered/legacy row fails loudly instead of producing a malformed write.
+ */
+const campaignCreationKeywordSchema = z.object({
+  text: z.string().min(1),
+  matchType: z.enum(["EXACT", "PHRASE", "BROAD"]),
+  bid: z.string().min(1),
+});
+
+/** Keyword config as persisted in a create_keyword action's after_state. */
+const campaignCreationKeywordStateSchema = z.object({
+  keywordText: z.string().min(1),
+  matchType: z.enum(["EXACT", "PHRASE", "BROAD"]),
+  bid: z.string().min(1),
+  state: z.enum(["enabled", "paused"]),
+});
+
+const campaignCreationSpecSchema = z.object({
+  campaign: z.object({
+    name: z.string().min(1),
+    dailyBudget: z.string().min(1),
+    targetingType: z.enum(["AUTO", "MANUAL"]),
+    startDate: z.string().min(1),
+    state: z.enum(["enabled", "paused"]),
+  }),
+  adGroup: z.object({
+    name: z.string().min(1),
+    defaultBid: z.string().min(1),
+  }),
+  asin: z.string().min(1),
+  keywords: z.array(campaignCreationKeywordSchema).min(1),
+});
+
+const CAMPAIGN_CREATION_TYPES = new Set([
+  "create_campaign",
+  "create_ad_group",
+  "create_product_ad",
+  "create_keyword",
+]);
+
+function isCreationActionType(actionType: string): boolean {
+  return CAMPAIGN_CREATION_TYPES.has(actionType);
+}
 
 function bidMicros(bid: number | null): number | null {
   return bid === null ? null : Math.round(bid * 1_000_000);
@@ -222,7 +272,10 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
           action.actionType === "add_negative_exact" ||
           action.actionType === "remove_negative_exact"
             ? action.actionType
-            : "update_bid",
+            : action.actionType === "create_campaign"
+              ? // A new campaign commits a daily budget, not a bid change.
+                "update_budget"
+              : "update_bid",
         targetId: action.targetId ?? action.amazonEntityId,
         campaignId: action.campaignId,
         searchTerm: action.searchTerm,
@@ -351,6 +404,169 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
       changeSet: toContractChangeSet(set),
       actions: actions.map(toContractChangeAction),
     };
+  }
+
+  /**
+   * Shared validation for both cannibalization resolutions (route to an
+   * existing campaign, or route to a to-be-created campaign): the finding
+   * must be live, its evidence complete, and every affected campaign still
+   * present in the finding's profile.
+   */
+  async function loadCannibalizationResolution(
+    auth: AuthContext,
+    recommendationId: string,
+  ): Promise<{
+    rec: recommendations.RecommendationWithProfile;
+    searchTerm: string;
+    campaigns: structure.CampaignRow[];
+  }> {
+    const rec = await recommendations.getRecommendationForWorkspace(
+      db,
+      auth.workspaceId,
+      recommendationId,
+    );
+    if (!rec) throw notFound("Unknown recommendation");
+    if (rec.type !== "cannibalization_conflict") {
+      throw conflict(
+        "INVALID_RECOMMENDATION_TYPE",
+        "Only cannibalization findings can create this resolution",
+      );
+    }
+    if (rec.state !== "pending" && rec.state !== "approved") {
+      throw conflict(
+        "INVALID_STATE",
+        `Recommendation ${rec.id} is '${rec.state}' and cannot enter a change set`,
+      );
+    }
+    if (new Date(rec.expiresAt) <= now()) {
+      throw conflict(
+        "RECOMMENDATION_EXPIRED",
+        `Recommendation ${rec.id} has expired`,
+      );
+    }
+    const evidence = cannibalizationEvidenceSchema.safeParse(
+      await recommendations.getRecommendationEvidence(db, rec.id),
+    );
+    if (!evidence.success) {
+      throw conflict(
+        "INCOMPLETE_EVIDENCE",
+        "This finding does not contain the campaign evidence needed for a safe resolution",
+      );
+    }
+    const campaignRows = await Promise.all(
+      evidence.data.campaigns.map((entry) =>
+        structure.getCampaign(db, entry.campaignId),
+      ),
+    );
+    if (
+      campaignRows.some(
+        (campaign) => campaign === null || campaign.profileId !== rec.profileId,
+      )
+    ) {
+      throw conflict(
+        "INCOMPLETE_EVIDENCE",
+        "An affected campaign is missing or no longer belongs to this profile; re-sync before resolving",
+      );
+    }
+    return {
+      rec,
+      searchTerm: evidence.data.searchTerm,
+      campaigns: campaignRows as structure.CampaignRow[],
+    };
+  }
+
+  /** One campaign-level add_negative_exact spec per campaign for the term. */
+  function cannibalizationNegativeSpecs(
+    recommendationId: string,
+    searchTerm: string,
+    campaigns: readonly structure.CampaignRow[],
+  ) {
+    return campaigns.map((campaign) => ({
+      recommendationId,
+      actionType: "add_negative_exact" as const,
+      campaignId: campaign.id,
+      adGroupId: null,
+      targetId: null,
+      searchTerm,
+      beforeValue: null,
+      afterValue: null,
+      entityName: campaign.name,
+      beforeState: {
+        scope: "campaign",
+        matchType: "NEGATIVE_EXACT",
+        present: false,
+      },
+      afterState: {
+        scope: "campaign",
+        matchType: "NEGATIVE_EXACT",
+        present: true,
+      },
+    }));
+  }
+
+  /** Persist a cannibalization negatives change set from prepared specs. */
+  async function createCannibalizationNegativesSet(
+    auth: AuthContext,
+    meta: RequestMeta,
+    input: {
+      rec: recommendations.RecommendationWithProfile;
+      searchTerm: string;
+      specs: ReturnType<typeof cannibalizationNegativeSpecs>;
+      fingerprintHead: Record<string, unknown>;
+      metadata: Record<string, unknown>;
+      auditDetails: Record<string, unknown>;
+    },
+  ): Promise<ContractChangeSet> {
+    const { rec, specs } = input;
+    const setFingerprint = buildChangeSetFingerprint({
+      profileId: rec.profileId,
+      creatorUserId: auth.userId,
+      actions: [input.fingerprintHead, ...specs],
+    });
+    const created = await changes.createChangeSet(pool, {
+      profileId: rec.profileId,
+      creatorUserId: auth.userId,
+      fingerprint: setFingerprint,
+      kind: "recommendation",
+      metadata: input.metadata,
+      actions: specs.map((spec) => ({
+        ...spec,
+        fingerprint: buildChangeActionFingerprint({
+          changeSetId: setFingerprint,
+          actionType: spec.actionType,
+          targetId: spec.targetId,
+          campaignId: spec.campaignId,
+          adGroupId: spec.adGroupId,
+          searchTerm: spec.searchTerm,
+          beforeValue: spec.beforeValue,
+          afterValue: spec.afterValue,
+          beforeState: spec.beforeState,
+          afterState: spec.afterState,
+        }),
+      })),
+    });
+    if (created.created) {
+      await recommendations.transitionRecommendationState(
+        db,
+        rec.id,
+        "pending",
+        "approved",
+      );
+    }
+    await recordAudit(
+      auth,
+      meta,
+      "cannibalization.change_set.create",
+      created.changeSet.id,
+      {
+        recommendationId: rec.id,
+        ...input.auditDetails,
+        actionCount: created.actions.length,
+        replayed: !created.created,
+      },
+    );
+    const loaded = await loadSet(auth, created.changeSet.id);
+    return toContractChangeSet(loaded.set);
   }
 
   async function toCampaignMaxCpc(
@@ -870,6 +1086,156 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
     return translated;
   }
 
+  /**
+   * Build the gateway creation chain for a `campaign_creation` set. There is
+   * no before-state to compare (nothing exists yet); instead the fresh
+   * structure snapshot is checked for a campaign with the same name — when
+   * found, the whole chain is treated as already satisfied and nothing is
+   * resent (idempotent retry, mirroring add_negative_exact).
+   */
+  function translateCampaignCreation(
+    actions: readonly changes.ChangeAction[],
+    snapshot: StructureSnapshot,
+  ): TranslatedAction[] {
+    const campaignAction = actions.find(
+      (a) => a.actionType === "create_campaign",
+    );
+    const adGroupAction = actions.find(
+      (a) => a.actionType === "create_ad_group",
+    );
+    const productAdAction = actions.find(
+      (a) => a.actionType === "create_product_ad",
+    );
+    const keywordActions = actions.filter(
+      (a) => a.actionType === "create_keyword",
+    );
+    if (
+      !campaignAction ||
+      !adGroupAction ||
+      !productAdAction ||
+      keywordActions.length === 0 ||
+      actions.length !== keywordActions.length + 3
+    ) {
+      throw new ApiError(
+        500,
+        "INTERNAL",
+        "Malformed campaign_creation change set",
+      );
+    }
+    const spec = campaignCreationSpecSchema.parse({
+      campaign: stateRecord(campaignAction.afterState),
+      adGroup: stateRecord(adGroupAction.afterState),
+      asin: stateRecord(productAdAction.afterState).asin,
+      keywords: keywordActions.map((a) => {
+        const state = stateRecord(a.afterState);
+        return {
+          text: state.keywordText,
+          matchType: state.matchType,
+          bid: state.bid,
+        };
+      }),
+    });
+
+    const campaignName = spec.campaign.name.trim().toLowerCase();
+    const existingCampaign = snapshot.campaigns.find(
+      (c) => c.name.trim().toLowerCase() === campaignName,
+    );
+    const existingAdGroup = existingCampaign
+      ? snapshot.adGroups.find(
+          (ag) =>
+            ag.campaignId === existingCampaign.campaignId &&
+            ag.name === spec.adGroup.name,
+        )
+      : undefined;
+    const existingAd = existingAdGroup
+      ? snapshot.ads.find(
+          (ad) =>
+            ad.adGroupId === existingAdGroup.adGroupId && ad.asin === spec.asin,
+        )
+      : undefined;
+    // Satisfied only when the campaign itself exists; children are looked up
+    // for id recording but do not gate the skip.
+    const preSatisfied = existingCampaign !== undefined;
+
+    const translated: TranslatedAction[] = [
+      {
+        action: campaignAction,
+        gatewayAction: {
+          actionId: campaignAction.id,
+          kind: "create_campaign",
+          name: spec.campaign.name,
+          dailyBudget: spec.campaign.dailyBudget,
+          targetingType: spec.campaign.targetingType,
+          startDate: spec.campaign.startDate,
+          state: spec.campaign.state,
+        },
+        amazonTargetId: existingCampaign?.campaignId ?? null,
+        amazonCampaignId: existingCampaign?.campaignId ?? null,
+        amazonAdGroupId: null,
+        preSatisfied,
+      },
+      {
+        action: adGroupAction,
+        gatewayAction: {
+          actionId: adGroupAction.id,
+          kind: "create_ad_group",
+          campaignActionId: campaignAction.id,
+          name: spec.adGroup.name,
+          defaultBid: spec.adGroup.defaultBid,
+        },
+        amazonTargetId: existingAdGroup?.adGroupId ?? null,
+        amazonCampaignId: existingCampaign?.campaignId ?? null,
+        amazonAdGroupId: existingAdGroup?.adGroupId ?? null,
+        preSatisfied,
+      },
+      {
+        action: productAdAction,
+        gatewayAction: {
+          actionId: productAdAction.id,
+          kind: "create_product_ad",
+          adGroupActionId: adGroupAction.id,
+          asin: spec.asin,
+          state: spec.campaign.state,
+        },
+        amazonTargetId: existingAd?.adId ?? null,
+        amazonCampaignId: existingCampaign?.campaignId ?? null,
+        amazonAdGroupId: existingAdGroup?.adGroupId ?? null,
+        preSatisfied,
+      },
+    ];
+    for (const action of keywordActions) {
+      const keywordState = campaignCreationKeywordStateSchema.parse(
+        stateRecord(action.afterState),
+      );
+      const existingKeyword = existingAdGroup
+        ? snapshot.keywords.find(
+            (k) =>
+              k.adGroupId === existingAdGroup.adGroupId &&
+              k.keywordText.trim().toLowerCase() ===
+                keywordState.keywordText.trim().toLowerCase() &&
+              k.matchType === keywordState.matchType,
+          )
+        : undefined;
+      translated.push({
+        action,
+        gatewayAction: {
+          actionId: action.id,
+          kind: "create_keyword",
+          adGroupActionId: adGroupAction.id,
+          keywordText: keywordState.keywordText,
+          matchType: keywordState.matchType,
+          bid: keywordState.bid,
+          state: spec.campaign.state,
+        },
+        amazonTargetId: existingKeyword?.keywordId ?? null,
+        amazonCampaignId: existingCampaign?.campaignId ?? null,
+        amazonAdGroupId: existingAdGroup?.adGroupId ?? null,
+        preSatisfied,
+      });
+    }
+    return translated;
+  }
+
   // -------------------------------------------------------------------------
   // Apply pipeline (shared by apply and rollback)
   // -------------------------------------------------------------------------
@@ -899,6 +1265,24 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
         "CHANGE_SET_BLOCKED",
         "Change set is blocked; create a fresh set from current data",
       );
+    }
+
+    // Cross-set dependency: cannibalization negatives drafted alongside a new
+    // destination campaign stay locked until that campaign exists on Amazon,
+    // so the search term is never blocked in every campaign at once.
+    const dependsOnChangeSetId = set.metadata.dependsOnChangeSetId;
+    if (typeof dependsOnChangeSetId === "string") {
+      const dependency = await changes.getChangeSetForWorkspace(
+        db,
+        auth.workspaceId,
+        dependsOnChangeSetId,
+      );
+      if (!dependency || dependency.status !== "applied") {
+        throw conflict(
+          "DEPENDENCY_NOT_APPLIED",
+          `Apply change set ${dependsOnChangeSetId} first — the new campaign must exist on Amazon before these negatives go live`,
+        );
+      }
     }
 
     const profile = await profiles.getProfile(db, set.profileId);
@@ -979,11 +1363,18 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
         : null;
       let translated: TranslatedAction[];
       try {
-        translated = await translateAndCheckBeforeState(
-          actions,
-          snapshot,
-          liveBidControls,
-        );
+        if (set.kind === "campaign_creation") {
+          if (!snapshot) {
+            throw new ApiError(500, "INTERNAL", "Missing structure snapshot");
+          }
+          translated = translateCampaignCreation(actions, snapshot);
+        } else {
+          translated = await translateAndCheckBeforeState(
+            actions,
+            snapshot,
+            liveBidControls,
+          );
+        }
         translatedForFailure = translated;
       } catch (error) {
         if (error instanceof ApiError && error.code === "STALE_BEFORE_STATE") {
@@ -1126,6 +1517,24 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
           );
           verified =
             rule !== undefined && !isActiveOptimizationRule(rule.status);
+        } else if (isCreationActionType(t.action.actionType) && verification) {
+          // A created entity must show up in the post-write structure read.
+          const entityId = current.amazonEntityId;
+          verified =
+            entityId !== null &&
+            (t.action.actionType === "create_campaign"
+              ? verification.campaigns.some(
+                  (item) => item.campaignId === entityId,
+                )
+              : t.action.actionType === "create_ad_group"
+                ? verification.adGroups.some(
+                    (item) => item.adGroupId === entityId,
+                  )
+                : t.action.actionType === "create_product_ad"
+                  ? verification.ads.some((item) => item.adId === entityId)
+                  : verification.keywords.some(
+                      (item) => item.keywordId === entityId,
+                    ));
         } else if (
           t.action.actionType === "remove_negative_exact" &&
           t.amazonTargetId &&
@@ -1180,6 +1589,14 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
           set.metadata.campaignPk,
           finalStatus === "applied" ? "active" : "drifted",
         );
+      }
+      if (
+        set.kind === "campaign_creation" &&
+        (finalStatus === "applied" || finalStatus === "partially_applied")
+      ) {
+        // Pull the new structure into the local mirror right away so the
+        // dashboard and future change sets see the created entities.
+        await enqueue(db, "structure_sync", { profileId: set.profileId });
       }
       await recordAudit(auth, meta, "change_set.apply", set.id, {
         total: finalActions.length,
@@ -1473,58 +1890,10 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
       destinationCampaignId,
       meta,
     ) {
-      const rec = await recommendations.getRecommendationForWorkspace(
-        db,
-        auth.workspaceId,
-        recommendationId,
-      );
-      if (!rec) throw notFound("Unknown recommendation");
-      if (rec.type !== "cannibalization_conflict") {
-        throw conflict(
-          "INVALID_RECOMMENDATION_TYPE",
-          "Only cannibalization findings can create this resolution",
-        );
-      }
-      if (rec.state !== "pending" && rec.state !== "approved") {
-        throw conflict(
-          "INVALID_STATE",
-          `Recommendation ${rec.id} is '${rec.state}' and cannot enter a change set`,
-        );
-      }
-      if (new Date(rec.expiresAt) <= now()) {
-        throw conflict(
-          "RECOMMENDATION_EXPIRED",
-          `Recommendation ${rec.id} has expired`,
-        );
-      }
-      const evidence = cannibalizationEvidenceSchema.safeParse(
-        await recommendations.getRecommendationEvidence(db, rec.id),
-      );
-      if (!evidence.success) {
-        throw conflict(
-          "INCOMPLETE_EVIDENCE",
-          "This finding does not contain the campaign evidence needed for a safe resolution",
-        );
-      }
-      const campaignRows = await Promise.all(
-        evidence.data.campaigns.map(async (entry) => ({
-          entry,
-          campaign: await structure.getCampaign(db, entry.campaignId),
-        })),
-      );
-      if (
-        campaignRows.some(
-          ({ campaign }) =>
-            campaign === null || campaign.profileId !== rec.profileId,
-        )
-      ) {
-        throw conflict(
-          "INCOMPLETE_EVIDENCE",
-          "An affected campaign is missing or no longer belongs to this profile; re-sync before resolving",
-        );
-      }
-      const destination = campaignRows.find(
-        ({ campaign }) => campaign!.amazonCampaignId === destinationCampaignId,
+      const { rec, searchTerm, campaigns } =
+        await loadCannibalizationResolution(auth, recommendationId);
+      const destination = campaigns.find(
+        (campaign) => campaign.amazonCampaignId === destinationCampaignId,
       );
       if (!destination) {
         throw new ApiError(
@@ -1533,95 +1902,231 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
           "Destination must be one of the campaigns in this finding",
         );
       }
-      const sourceCampaigns = campaignRows.filter(
-        ({ campaign }) => campaign!.amazonCampaignId !== destinationCampaignId,
+      const sourceCampaigns = campaigns.filter(
+        (campaign) => campaign.amazonCampaignId !== destinationCampaignId,
       );
-      const specs = sourceCampaigns.map(({ campaign }) => ({
-        recommendationId: rec.id,
-        actionType: "add_negative_exact" as const,
-        campaignId: campaign!.id,
-        adGroupId: null,
-        targetId: null,
-        searchTerm: evidence.data.searchTerm,
-        beforeValue: null,
-        afterValue: null,
-        entityName: campaign!.name,
-        beforeState: {
-          scope: "campaign",
-          matchType: "NEGATIVE_EXACT",
-          present: false,
+      const specs = cannibalizationNegativeSpecs(
+        rec.id,
+        searchTerm,
+        sourceCampaigns,
+      );
+      const changeSet = await createCannibalizationNegativesSet(auth, meta, {
+        rec,
+        searchTerm,
+        specs,
+        fingerprintHead: {
+          kind: "cannibalization_resolution",
+          recommendationId: rec.id,
+          destinationCampaignId,
         },
-        afterState: {
-          scope: "campaign",
-          matchType: "NEGATIVE_EXACT",
-          present: true,
-        },
-      }));
-      const setFingerprint = buildChangeSetFingerprint({
-        profileId: rec.profileId,
-        creatorUserId: auth.userId,
-        actions: [
-          {
-            kind: "cannibalization_resolution",
-            recommendationId: rec.id,
-            destinationCampaignId,
-          },
-          ...specs,
-        ],
-      });
-      const created = await changes.createChangeSet(pool, {
-        profileId: rec.profileId,
-        creatorUserId: auth.userId,
-        fingerprint: setFingerprint,
-        kind: "recommendation",
         metadata: {
           strategy: "route_with_negative_exact",
           recommendationId: rec.id,
           destinationCampaignId,
-          destinationCampaignName: destination.campaign!.name,
-          searchTerm: evidence.data.searchTerm,
+          destinationCampaignName: destination.name,
+          searchTerm,
         },
-        actions: specs.map((spec) => ({
-          ...spec,
-          fingerprint: buildChangeActionFingerprint({
-            changeSetId: setFingerprint,
-            actionType: spec.actionType,
-            targetId: spec.targetId,
-            campaignId: spec.campaignId,
-            adGroupId: spec.adGroupId,
-            searchTerm: spec.searchTerm,
-            beforeValue: spec.beforeValue,
-            afterValue: spec.afterValue,
-            beforeState: spec.beforeState,
-            afterState: spec.afterState,
-          }),
-        })),
-      });
-      if (created.created) {
-        await recommendations.transitionRecommendationState(
-          db,
-          rec.id,
-          "pending",
-          "approved",
-        );
-      }
-      await recordAudit(
-        auth,
-        meta,
-        "cannibalization.change_set.create",
-        created.changeSet.id,
-        {
-          recommendationId: rec.id,
+        auditDetails: {
           destinationCampaignId,
           negativeExactCampaignIds: sourceCampaigns.map(
-            ({ campaign }) => campaign!.amazonCampaignId,
+            (campaign) => campaign.amazonCampaignId,
           ),
-          actionCount: created.actions.length,
-          replayed: !created.created,
         },
-      );
-      const loaded = await loadSet(auth, created.changeSet.id);
+      });
+      const loaded = await loadSet(auth, changeSet.id);
       return toResult(loaded.set, loaded.actions);
+    },
+
+    async createCampaignCreationChangeSets(auth, input, meta) {
+      if (config.killSwitch) {
+        throw forbidden(
+          "WRITES_DISABLED",
+          "The global kill switch is enabled; all writes are disabled",
+        );
+      }
+      const book = await books.getBook(db, input.bookId);
+      if (!book || book.workspaceId !== auth.workspaceId) {
+        throw notFound("Unknown book");
+      }
+      const profileIds = [...new Set(input.profileIds)];
+
+      // Cannibalization link: validate the finding before creating anything,
+      // and require the new campaign to cover the conflict's market so the
+      // term is never blocked without a destination.
+      let cannibalization: Awaited<
+        ReturnType<typeof loadCannibalizationResolution>
+      > | null = null;
+      if (input.cannibalization) {
+        cannibalization = await loadCannibalizationResolution(
+          auth,
+          input.cannibalization.recommendationId,
+        );
+        if (!profileIds.includes(cannibalization.rec.amazonProfileId)) {
+          throw new ApiError(
+            400,
+            "BAD_REQUEST",
+            `Create the new campaign in profile ${cannibalization.rec.amazonProfileId} — that is where the conflict was found`,
+          );
+        }
+      }
+
+      const changeSets: ContractChangeSet[] = [];
+      const creationSetIdByProfilePk = new Map<string, string>();
+      for (const amazonProfileId of profileIds) {
+        const profile = await profiles.findProfileByAmazonId(
+          db,
+          auth.workspaceId,
+          amazonProfileId,
+        );
+        if (!profile) throw notFound(`Unknown profile ${amazonProfileId}`);
+        const marketplace = book.marketplaceAsins.find(
+          (entry) => entry.profileId === amazonProfileId,
+        );
+        if (!marketplace) {
+          throw conflict(
+            "BOOK_PROFILE_NOT_LINKED",
+            `Link the book to profile ${amazonProfileId} before creating a campaign for it there`,
+          );
+        }
+
+        const spec = {
+          campaign: input.campaign,
+          adGroup: input.adGroup,
+          asin: marketplace.asin,
+          keywords: input.keywords,
+        };
+        const specs: changes.ChangeActionInsert[] = [
+          {
+            actionType: "create_campaign",
+            afterValue: input.campaign.dailyBudget,
+            entityName: input.campaign.name,
+            afterState: spec.campaign,
+            fingerprint: "",
+          },
+          {
+            actionType: "create_ad_group",
+            afterValue: input.adGroup.defaultBid,
+            entityName: input.adGroup.name,
+            afterState: spec.adGroup,
+            fingerprint: "",
+          },
+          {
+            actionType: "create_product_ad",
+            entityName: book.title,
+            afterState: {
+              asin: marketplace.asin,
+              state: input.campaign.state,
+            },
+            fingerprint: "",
+          },
+          ...input.keywords.map((keyword): changes.ChangeActionInsert => ({
+            actionType: "create_keyword",
+            searchTerm: keyword.text,
+            afterValue: keyword.bid,
+            entityName: keyword.text,
+            afterState: {
+              keywordText: keyword.text,
+              matchType: keyword.matchType,
+              bid: keyword.bid,
+              state: input.campaign.state,
+            },
+            fingerprint: "",
+          })),
+        ];
+        const setFingerprint = buildChangeSetFingerprint({
+          profileId: profile.id,
+          creatorUserId: auth.userId,
+          actions: [
+            {
+              kind: "campaign_creation",
+              bookId: book.id,
+              ...spec,
+            },
+            ...specs.map(({ fingerprint: _, ...rest }) => rest),
+          ],
+        });
+        const created = await changes.createChangeSet(pool, {
+          profileId: profile.id,
+          creatorUserId: auth.userId,
+          fingerprint: setFingerprint,
+          kind: "campaign_creation",
+          metadata: {
+            bookId: book.id,
+            ...spec,
+          },
+          actions: specs.map((spec) => ({
+            ...spec,
+            fingerprint: buildChangeActionFingerprint({
+              changeSetId: setFingerprint,
+              actionType: spec.actionType,
+              searchTerm: spec.searchTerm ?? null,
+              afterValue: spec.afterValue ?? null,
+              afterState: spec.afterState,
+            }),
+          })),
+        });
+        await recordAudit(
+          auth,
+          meta,
+          "campaign.creation.change_set.create",
+          created.changeSet.id,
+          {
+            profileId: amazonProfileId,
+            bookId: book.id,
+            asin: marketplace.asin,
+            actionCount: created.actions.length,
+            replayed: !created.created,
+          },
+        );
+        const loaded = await loadSet(auth, created.changeSet.id);
+        creationSetIdByProfilePk.set(profile.id, loaded.set.id);
+        changeSets.push(toContractChangeSet(loaded.set));
+      }
+
+      // Draft the negative-exact set for every conflicting campaign, locked
+      // behind the creation set: it can only be applied once the new campaign
+      // exists on Amazon (see the dependsOnChangeSetId gate in applyLoadedSet).
+      if (cannibalization) {
+        const { rec, searchTerm, campaigns } = cannibalization;
+        const creationSetId = creationSetIdByProfilePk.get(rec.profileId);
+        if (!creationSetId) {
+          throw new ApiError(
+            500,
+            "INTERNAL",
+            "Campaign-creation change set for the conflict profile missing",
+          );
+        }
+        const negativesSet = await createCannibalizationNegativesSet(
+          auth,
+          meta,
+          {
+            rec,
+            searchTerm,
+            specs: cannibalizationNegativeSpecs(rec.id, searchTerm, campaigns),
+            fingerprintHead: {
+              kind: "cannibalization_resolution",
+              recommendationId: rec.id,
+              strategy: "route_to_new_campaign",
+              dependsOnChangeSetId: creationSetId,
+            },
+            metadata: {
+              strategy: "route_to_new_campaign",
+              recommendationId: rec.id,
+              searchTerm,
+              dependsOnChangeSetId: creationSetId,
+            },
+            auditDetails: {
+              strategy: "route_to_new_campaign",
+              dependsOnChangeSetId: creationSetId,
+              negativeExactCampaignIds: campaigns.map(
+                (campaign) => campaign.amazonCampaignId,
+              ),
+            },
+          },
+        );
+        changeSets.push(negativesSet);
+      }
+      return { changeSets };
     },
 
     async previewChangeSet(auth, changeSetId, meta) {

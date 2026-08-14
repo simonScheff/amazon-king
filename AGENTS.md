@@ -87,11 +87,25 @@ Established so far (run from the repo root unless noted):
 TanStack Router (code-based routes) and Query, Tailwind CSS v4 via
 `@tailwindcss/vite`, Recharts. Country flags use bundled `flag-icons` SVGs via
 the `Flag` component (`src/components/flag.tsx`) instead of Unicode flag emoji,
-which do not render on all platforms. Commands: `dev` (Vite dev server, proxies
+which do not render on all platforms. Production builds expose a root-scoped
+web app manifest and network-only service worker from `public/`, allowing an
+HTTPS deployment to be installed in standalone display mode without caching
+Amazon data; development builds do not register the worker. Commands: `dev` (Vite dev server, proxies
 `/api` to `http://localhost:3000`), `build` (`vite build`), `typecheck`
 (`tsc -p tsconfig.json`), `test` (`vitest run --passWithNoTests`, jsdom +
 Testing Library). It imports `@amazon-king/contracts` (workspace link) for API
 types and validates responses with the Zod schemas at the fetch boundary.
+`src/routes/campaign-new.tsx` is the multi-step "new campaign" wizard
+(entry: "+ New campaign" on `/campaigns`): pick markets (enabled profiles),
+campaign/ad-group settings, a book with per-market ASINs, and keywords, then
+submit one draft change set per market via
+`POST /api/campaign-creation-change-sets`. The cannibalization resolution
+screen (`src/components/cannibalization-resolution.tsx`) also offers "Create a
+new campaign" as the destination: it links here with
+`recommendationId`/`searchTerm`/`country` search params (validated in
+`src/router.tsx`), which prefill the market, campaign name, MANUAL targeting,
+and the term as an EXACT keyword, and are submitted as
+`cannibalization.recommendationId` on the payload.
 
 `packages/database` (`@amazon-king/database`) is implemented: plain SQL
 migrations under `migrations/` (numbered `NNNN_name.sql`, applied by
@@ -99,6 +113,8 @@ migrations under `migrations/` (numbered `NNNN_name.sql`, applied by
 `schema_migrations`), a thin `pg` pool wrapper (`src/pool.ts`), explicit
 repository modules under `src/repositories/` with parameterized SQL only, and
 the PostgreSQL job queue in `src/queue.ts` (`FOR UPDATE SKIP LOCKED` + leases).
+Migration `0005_campaign_creation.sql` adds the `campaign_creation` change-set
+kind and the four `create_*` action types.
 Commands: `typecheck`, `test` (vitest). Integration tests in
 `src/integration.test.ts` run only when `TEST_DATABASE_URL` points at a
 scratch Postgres database; otherwise they are skipped.
@@ -131,7 +147,20 @@ cors, rate-limit. All §11 routes plus the frontend's contract extensions
 (`GET /api/change-sets`, cannibalization comparison + campaign-level
 negative-exact draft creation, `csrfToken` on the session response, dashboard
 `daily` series + `writesDisabled`, and the cross-campaign search-term
-screens: `GET /api/search-terms` + `GET /api/search-terms/:term`). Passwordless email login (magic link is **logged in
+screens: `GET /api/search-terms` + `GET /api/search-terms/:term`), and
+`POST /api/campaign-creation-change-sets` (human-approved campaign creation:
+one `campaign_creation` change set per profile holding create_campaign →
+create_ad_group → create_product_ad/create_keyword actions; apply resolves the
+creation chain, treats an existing same-name campaign as already satisfied,
+verifies created ids against a fresh structure read, then enqueues a
+structure_sync; creation sets are not rollbackable). When the payload carries
+`cannibalization.recommendationId`, the service additionally validates the
+finding (it must cover the conflict's profile) and drafts one
+`recommendation`-kind change set adding the term as a campaign-level negative
+exact in every conflicting campaign, with `metadata.dependsOnChangeSetId`
+pointing at the creation set; `applyLoadedSet` rejects such a set with
+`DEPENDENCY_NOT_APPLIED` until the referenced set is `applied`, so the term is
+never blocked in all campaigns at once. Passwordless email login (magic link is **logged in
 dev only**), stateless HMAC CSRF per session, single-use OAuth state marked used
 before code exchange, refresh tokens envelope-encrypted via
 `@amazon-king/crypto`, recent-auth (15 min) required for apply/rollback, and the
@@ -156,7 +185,10 @@ client, `TokenManager` (serialized per-connection refresh, 5-min early skew,
 circuit breaker → `reconnect_required`), regional transport honoring
 `Retry-After` + full-jitter backoff, the §6 `AmazonAdsGateway` (profiles,
 Reporting v3 request/poll/stream-download, SP v3 structure lists, keyword bid
-updates + negative keywords with per-item 207 mapping), and strict zod
+updates + negative keywords with per-item 207 mapping, and SP entity creation
+(campaigns, ad groups, product ads, keywords) applied as an ordered chain in
+`applyActions` — created ids from each phase are substituted into dependent
+actions, and orphans fail with `PARENT_FAILED`), and strict zod
 validation at the boundary. Contract fixtures live in `test/fixtures/`; tests
 use injected fetch — no network.
 

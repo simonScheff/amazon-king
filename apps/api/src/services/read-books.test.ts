@@ -111,6 +111,10 @@ describe("read service book mapping", () => {
       status: "active",
       coverImageUrl: null,
       profileIds: ["profile-us", "profile-ca"],
+      marketplaceAsins: [
+        { profileId: "profile-us", asin: "B012345678" },
+        { profileId: "profile-ca", asin: "B012345678" },
+      ],
       economics: [],
     });
 
@@ -139,6 +143,10 @@ describe("read service book mapping", () => {
               status: "active",
               cover_json: null,
               profile_ids: ["profile-ca", "profile-us"],
+              marketplace_asins: [
+                { profileId: "profile-ca", asin: "B012345678" },
+                { profileId: "profile-us", asin: "B012345678" },
+              ],
               created_at: "2026-08-13T00:00:00Z",
             },
           ],
@@ -186,6 +194,10 @@ describe("read service book mapping", () => {
         status: "active",
         coverImageUrl: null,
         profileIds: ["profile-ca", "profile-us"],
+        marketplaceAsins: [
+          { profileId: "profile-ca", asin: "B012345678" },
+          { profileId: "profile-us", asin: "B012345678" },
+        ],
         economics: [
           {
             profileId: "profile-ca",
@@ -207,7 +219,7 @@ describe("read service book mapping", () => {
 
   it("rejects economics for a profile that is not linked to the book", async () => {
     const query = vi.fn(async (sql: string, params: unknown[] = []) => {
-      if (sql.includes("select * from books where id = $1")) {
+      if (sql.includes("from books b")) {
         return {
           rows: [
             {
@@ -259,7 +271,7 @@ describe("read service book mapping", () => {
   it("sets and clears the cover image and audits the change", async () => {
     const updatedCovers: (string | null)[] = [];
     const query = vi.fn(async (sql: string, params: unknown[] = []) => {
-      if (sql.includes("select * from books where id = $1")) {
+      if (sql.includes("from books b")) {
         return {
           rows: [
             {
@@ -335,7 +347,7 @@ describe("read service book mapping", () => {
 
   it("rejects cover updates for a book outside the workspace", async () => {
     const query = vi.fn(async (sql: string) => {
-      if (sql.includes("select * from books where id = $1")) {
+      if (sql.includes("from books b")) {
         return { rows: [], rowCount: 0 };
       }
       throw new Error(`Unexpected SQL: ${sql}`);

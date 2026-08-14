@@ -1,0 +1,14 @@
+{
+  "keywords": [
+    {
+      "keywordId": 601122340,
+      "code": "SUCCESS",
+      "index": 0
+    },
+    {
+      "code": "INVALID_VALUE",
+      "index": 1,
+      "message": "Keyword text contains unsupported characters"
+    }
+  ]
+}

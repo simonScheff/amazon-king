@@ -1,5 +1,10 @@
 import "flag-icons/css/flag-icons.min.css";
 
+const flagCodeAliases: Readonly<Record<string, string>> = {
+  // Amazon data can use UK, while flag-icons follows ISO 3166-1 and names it GB.
+  uk: "gb",
+};
+
 /**
  * Renders a country flag as a bundled SVG background image.
  *
@@ -16,9 +21,10 @@ export function Flag({
 }) {
   const normalized = countryCode.toLowerCase();
   if (!/^[a-z]{2}$/.test(normalized)) return null;
+  const flagCode = flagCodeAliases[normalized] ?? normalized;
   return (
     <span
-      className={`fi fi-${normalized} rounded-[2px] ${className}`}
+      className={`fi fi-${flagCode} rounded-[2px] ${className}`}
       role="img"
       aria-label={countryCode.toUpperCase()}
     />

@@ -757,6 +757,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         status: row.status,
         coverImageUrl: coverImageUrlOf(row.coverJson),
         profileIds: row.profileIds,
+        marketplaceAsins: row.marketplaceAsins,
         economics: (economicsByBook.get(row.id) ?? []).map((economics) => ({
           profileId: economics.amazonProfileId,
           effectiveFrom: isoDate(economics.effectiveFrom),
@@ -824,6 +825,10 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         status: mapped.status,
         coverImageUrl: coverImageUrlOf(mapped.coverJson),
         profileIds: input.profileIds,
+        marketplaceAsins: input.profileIds.map((profileId) => ({
+          profileId,
+          asin: input.asin,
+        })),
         economics: [],
       };
     },

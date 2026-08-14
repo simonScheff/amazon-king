@@ -17,8 +17,12 @@ import {
 } from "./adapters/sp-campaigns.js";
 import { listCampaignOptimizationRules } from "./adapters/sp-rules.js";
 import {
+  createAdGroups,
+  createCampaigns,
+  createKeywords,
   createNegativeKeywords,
   createCampaignNegativeKeywords,
+  createProductAds,
   deleteCampaignNegativeKeywords,
   deleteNegativeKeywords,
   disableOptimizationRules,
@@ -26,6 +30,9 @@ import {
   updateCampaignBidding,
   updateKeywordBids,
   updateTargetBids,
+  type ResolvedCreateAdGroupAction,
+  type ResolvedCreateKeywordAction,
+  type ResolvedCreateProductAdAction,
 } from "./adapters/sp-writes.js";
 import type {
   ActionResult,
@@ -216,6 +223,10 @@ export function createAmazonAdsGateway(
         adProducts: ["SPONSORED_PRODUCTS"],
         reportTypes: SUPPORTED_REPORT_TYPES,
         writeOperations: [
+          "create_campaign",
+          "create_ad_group",
+          "create_product_ad",
+          "create_keyword",
           "update_bid",
           "update_ad_group_default_bid",
           "update_campaign_bidding",
@@ -264,7 +275,114 @@ export function createAmazonAdsGateway(
       const campaignNegativeRemovalActions = negativeRemovalActions.filter(
         (action) => action.scope === "campaign",
       );
+      const createCampaignActions = changeSet.actions.filter(
+        (action) => action.kind === "create_campaign",
+      );
+      const createAdGroupActions = changeSet.actions.filter(
+        (action) => action.kind === "create_ad_group",
+      );
+      const createProductAdActions = changeSet.actions.filter(
+        (action) => action.kind === "create_product_ad",
+      );
+      const createKeywordActions = changeSet.actions.filter(
+        (action) => action.kind === "create_keyword",
+      );
       const results: ActionResult[] = [];
+      const parentFailed = (action: { actionId: string }): ActionResult => ({
+        actionId: action.actionId,
+        status: "failed",
+        code: "PARENT_FAILED",
+        message: "Parent entity was not created in this change set",
+      });
+      // Creation phases run before updates, in dependency order. Children
+      // reference their parent by the parent's actionId; the Amazon id is
+      // only known after the parent phase completes.
+      const campaignIdsByActionId = new Map<string, string>();
+      if (createCampaignActions.length > 0) {
+        const campaignResults = await createCampaigns(
+          http,
+          context,
+          createCampaignActions,
+        );
+        for (const result of campaignResults) {
+          if (result.status === "applied" && result.amazonEntityId) {
+            campaignIdsByActionId.set(result.actionId, result.amazonEntityId);
+          }
+        }
+        results.push(...campaignResults);
+      }
+      const adGroupsByActionId = new Map<
+        string,
+        { adGroupId: string; campaignId: string }
+      >();
+      if (createAdGroupActions.length > 0) {
+        const resolved: ResolvedCreateAdGroupAction[] = [];
+        for (const action of createAdGroupActions) {
+          const campaignId = campaignIdsByActionId.get(action.campaignActionId);
+          if (campaignId) {
+            resolved.push({ ...action, resolvedCampaignId: campaignId });
+          } else {
+            results.push(parentFailed(action));
+          }
+        }
+        if (resolved.length > 0) {
+          const adGroupResults = await createAdGroups(http, context, resolved);
+          for (const result of adGroupResults) {
+            const parent = resolved.find(
+              (action) => action.actionId === result.actionId,
+            );
+            if (
+              result.status === "applied" &&
+              result.amazonEntityId &&
+              parent
+            ) {
+              adGroupsByActionId.set(result.actionId, {
+                adGroupId: result.amazonEntityId,
+                campaignId: parent.resolvedCampaignId,
+              });
+            }
+          }
+          results.push(...adGroupResults);
+        }
+      }
+      if (createProductAdActions.length > 0) {
+        const resolved: ResolvedCreateProductAdAction[] = [];
+        for (const action of createProductAdActions) {
+          // The product ad also needs campaignId; derive it from the
+          // resolved ad group's parent campaign.
+          const parent = adGroupsByActionId.get(action.adGroupActionId);
+          if (parent) {
+            resolved.push({
+              ...action,
+              resolvedCampaignId: parent.campaignId,
+              resolvedAdGroupId: parent.adGroupId,
+            });
+          } else {
+            results.push(parentFailed(action));
+          }
+        }
+        if (resolved.length > 0) {
+          results.push(...(await createProductAds(http, context, resolved)));
+        }
+      }
+      if (createKeywordActions.length > 0) {
+        const resolved: ResolvedCreateKeywordAction[] = [];
+        for (const action of createKeywordActions) {
+          const parent = adGroupsByActionId.get(action.adGroupActionId);
+          if (parent) {
+            resolved.push({
+              ...action,
+              resolvedCampaignId: parent.campaignId,
+              resolvedAdGroupId: parent.adGroupId,
+            });
+          } else {
+            results.push(parentFailed(action));
+          }
+        }
+        if (resolved.length > 0) {
+          results.push(...(await createKeywords(http, context, resolved)));
+        }
+      }
       if (keywordBidActions.length > 0) {
         results.push(
           ...(await updateKeywordBids(http, context, keywordBidActions)),

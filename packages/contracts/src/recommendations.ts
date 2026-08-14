@@ -123,7 +123,15 @@ export const changeSetSchema = z.object({
   profileId: z.string(),
   status: changeSetStatusSchema,
   createdAt: isoDateTimeSchema,
-  kind: z.enum(["recommendation", "max_cpc", "rollback"]).optional(),
+  kind: z
+    .enum(["recommendation", "max_cpc", "rollback", "campaign_creation"])
+    .optional(),
+  /**
+   * When set, this change set may only be applied after the referenced change
+   * set has reached `applied` (used to lock cannibalization negatives until
+   * their new destination campaign exists on Amazon).
+   */
+  dependsOnChangeSetId: z.string().nullable().optional(),
 });
 export type ChangeSet = z.infer<typeof changeSetSchema>;
 
@@ -134,6 +142,10 @@ export const changeActionTypeSchema = z.enum([
   "update_optimization_rule",
   "add_negative_exact",
   "remove_negative_exact",
+  "create_campaign",
+  "create_ad_group",
+  "create_product_ad",
+  "create_keyword",
 ]);
 export type ChangeActionType = z.infer<typeof changeActionTypeSchema>;
 

@@ -6,6 +6,10 @@ import { defineConfig } from "vite";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
+    host: true,
+    // Allow cloudflared quick-tunnel subdomains so the dev server can be
+    // reached over HTTPS (needed for PWA install testing on phones).
+    allowedHosts: [".trycloudflare.com"],
     proxy: {
       "/api": {
         target: "http://localhost:3000",

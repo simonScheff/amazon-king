@@ -14,6 +14,7 @@ import { OverviewPage } from "./routes/overview";
 import { RecommendationsPage } from "./routes/recommendations";
 import { RecommendationDetailPage } from "./routes/recommendation-detail";
 import { CampaignsPage } from "./routes/campaigns";
+import { CampaignNewPage } from "./routes/campaign-new";
 import { CampaignDetailPage } from "./routes/campaign-detail";
 import { SearchTermsPage } from "./routes/search-terms";
 import { SearchTermDetailPage } from "./routes/search-term-detail";
@@ -79,6 +80,34 @@ const campaignsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/campaigns",
   component: CampaignsPage,
+});
+
+const campaignNewRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/campaigns/new",
+  // Optional prefill from the cannibalization resolution screen: the term to
+  // advertise, its market, and the finding the new campaign resolves.
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { recommendationId?: string; searchTerm?: string; country?: string } => {
+    const country =
+      typeof search.country === "string"
+        ? search.country.trim().toUpperCase()
+        : undefined;
+    return {
+      ...(typeof search.recommendationId === "string" &&
+      search.recommendationId !== ""
+        ? { recommendationId: search.recommendationId }
+        : {}),
+      ...(typeof search.searchTerm === "string" && search.searchTerm !== ""
+        ? { searchTerm: search.searchTerm }
+        : {}),
+      ...(country !== undefined && /^[A-Z]{2}$/.test(country)
+        ? { country }
+        : {}),
+    };
+  },
+  component: CampaignNewPage,
 });
 
 const campaignDetailRoute = createRoute({
@@ -153,6 +182,7 @@ const routeTree = rootRoute.addChildren([
     recommendationsRoute,
     recommendationDetailRoute,
     campaignsRoute,
+    campaignNewRoute,
     campaignDetailRoute,
     searchTermsRoute,
     searchTermDetailRoute,

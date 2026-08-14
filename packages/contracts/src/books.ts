@@ -38,6 +38,9 @@ export const bookSchema = z.object({
   status: z.string(),
   coverImageUrl: coverImageUrlSchema.nullable().default(null),
   profileIds: z.array(z.string()).default([]),
+  marketplaceAsins: z.array(
+    z.object({ profileId: z.string(), asin: z.string() }),
+  ),
   economics: z.array(bookEconomicsSchema).default([]),
 });
 export type Book = z.infer<typeof bookSchema>;

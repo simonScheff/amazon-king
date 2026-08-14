@@ -29,6 +29,8 @@ export interface FakeTables {
   syncRuns: FakeRow[];
   jobQueue: FakeRow[];
   auditEvents: FakeRow[];
+  books: FakeRow[];
+  bookProfileLinks: FakeRow[];
 }
 
 function emptyTables(): FakeTables {
@@ -52,6 +54,8 @@ function emptyTables(): FakeTables {
     syncRuns: [],
     jobQueue: [],
     auditEvents: [],
+    books: [],
+    bookProfileLinks: [],
   };
 }
 
@@ -250,6 +254,35 @@ export class FakeDb {
       ...overrides,
     };
     this.tables.campaigns.push(row);
+    return row;
+  }
+
+  seedBook(overrides: Partial<FakeRow> = {}): FakeRow {
+    const row = {
+      id: nextId(),
+      workspace_id: "1",
+      asin: "B012345678",
+      title: "Book",
+      format: "paperback",
+      status: "active",
+      cover_json: null,
+      created_at: new Date(),
+      ...overrides,
+    };
+    this.tables.books.push(row);
+    return row;
+  }
+
+  seedBookProfileLink(overrides: Partial<FakeRow> = {}): FakeRow {
+    const row = {
+      id: nextId(),
+      book_id: "1",
+      profile_id: "1",
+      marketplace_asin: "B012345678",
+      enabled: true,
+      ...overrides,
+    };
+    this.tables.bookProfileLinks.push(row);
     return row;
   }
 
@@ -959,6 +992,32 @@ export class FakeDb {
       {
         match: "from targets where id = $1",
         handle: (p) => this.ok(t.targets.filter((r) => r.id === p[0])),
+      },
+
+      // -- books -----------------------------------------------------------------
+      {
+        match: "from books b",
+        handle: (p) =>
+          this.ok(
+            t.books
+              .filter((b) => b.id === p[0])
+              .map((b) => ({
+                ...b,
+                marketplace_asins: t.bookProfileLinks
+                  .filter((l) => l.book_id === b.id && l.enabled === true)
+                  .map((l) => ({
+                    profileId: t.amazonProfiles.find(
+                      (ap) => ap.id === l.profile_id,
+                    )?.profile_id,
+                    asin: l.marketplace_asin,
+                  }))
+                  .sort((left, right) =>
+                    String(left.profileId).localeCompare(
+                      String(right.profileId),
+                    ),
+                  ),
+              })),
+          ),
       },
     ];
   }

@@ -1,0 +1,9 @@
+{
+  "campaigns": [
+    {
+      "code": "INVALID_VALUE",
+      "index": 0,
+      "message": "Daily budget is below the minimum allowed for this marketplace"
+    }
+  ]
+}

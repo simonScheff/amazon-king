@@ -1,0 +1,14 @@
+{
+  "productAds": [
+    {
+      "adId": 512345678901234,
+      "code": "SUCCESS",
+      "index": 0,
+      "customMessage": "Created",
+      "unexpectedFutureField": {
+        "anything": true
+      }
+    }
+  ],
+  "requestId": "AMZN-REQUEST-0001"
+}

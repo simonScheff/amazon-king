@@ -80,12 +80,15 @@ export function toContractRecommendation(
 export function toContractChangeSet(
   row: changes.ChangeSetWithProfile,
 ): ChangeSet {
+  const dependsOnChangeSetId = row.metadata.dependsOnChangeSetId;
   return {
     id: row.id,
     profileId: row.amazonProfileId,
     status: row.status,
     createdAt: isoDateTime(row.createdAt),
     kind: row.kind,
+    dependsOnChangeSetId:
+      typeof dependsOnChangeSetId === "string" ? dependsOnChangeSetId : null,
   };
 }
 
@@ -128,7 +131,15 @@ export function toContractChangeAction(
             ? "Current strategy and bid adjustments"
             : row.actionType === "update_optimization_rule"
               ? "Rule enabled"
-              : null,
+              : row.actionType === "create_campaign"
+                ? "No campaign"
+                : row.actionType === "create_ad_group"
+                  ? "No ad group"
+                  : row.actionType === "create_product_ad"
+                    ? "No product ad"
+                    : row.actionType === "create_keyword"
+                      ? "No keyword"
+                      : null,
     afterDetail:
       row.actionType === "add_negative_exact"
         ? "Campaign-level negative exact enabled"
@@ -138,7 +149,15 @@ export function toContractChangeAction(
             ? "Down only; placement and audience adjustments removed"
             : row.actionType === "update_optimization_rule"
               ? "Rule disabled"
-              : null,
+              : row.actionType === "create_campaign"
+                ? "Campaign created"
+                : row.actionType === "create_ad_group"
+                  ? "Ad group created"
+                  : row.actionType === "create_product_ad"
+                    ? "Product ad created"
+                    : row.actionType === "create_keyword"
+                      ? "Keyword created"
+                      : null,
     rollbackAvailable:
       (row.actionType === "update_bid" && row.beforeValue !== null) ||
       (row.actionType === "add_negative_exact" && row.amazonEntityId !== null),

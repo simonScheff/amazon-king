@@ -129,6 +129,7 @@ describe("contracts smoke test", () => {
       format: "paperback",
       status: "active",
       profileIds: ["profile-ca"],
+      marketplaceAsins: [{ profileId: "profile-ca", asin: "B012345678" }],
       economics: [
         {
           profileId: "profile-ca",

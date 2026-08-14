@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   useCannibalizationResolutionContext,
   useCreateCannibalizationChangeSet,
+  useProfiles,
   useRejectRecommendation,
 } from "../api/endpoints";
 import { formatDate, formatDateTime, formatMoney } from "../lib/format";
@@ -61,6 +62,9 @@ function campaignDetailDays(start: string, end: string): 7 | 14 | 30 | 60 {
   return days === 7 || days === 14 || days === 60 ? days : 30;
 }
 
+/** Sentinel destinationId for "route the term to a campaign created next". */
+const NEW_CAMPAIGN_DESTINATION = "new";
+
 export function CannibalizationResolution({
   recommendation,
 }: {
@@ -69,6 +73,7 @@ export function CannibalizationResolution({
   const context = useCannibalizationResolutionContext(recommendation.id);
   const createDraft = useCreateCannibalizationChangeSet(recommendation.id);
   const dismiss = useRejectRecommendation(recommendation.id);
+  const profiles = useProfiles();
   const toast = useToast();
   const [destinationId, setDestinationId] = useState<string | null>(null);
   const [createdChangeSetId, setCreatedChangeSetId] = useState<string | null>(
@@ -84,18 +89,28 @@ export function CannibalizationResolution({
     data.evidenceWindow.start,
     data.evidenceWindow.end,
   );
-  const destination = data.campaigns.find(
-    (campaign) => campaign.campaignId === destinationId,
-  );
-  const sourceCampaigns = destination
-    ? data.campaigns.filter(
-        (campaign) => campaign.campaignId !== destination.campaignId,
-      )
-    : [];
+  const isNewCampaign = destinationId === NEW_CAMPAIGN_DESTINATION;
+  const destination = isNewCampaign
+    ? undefined
+    : data.campaigns.find((campaign) => campaign.campaignId === destinationId);
+  // Campaigns that will receive the negative exact: every current campaign
+  // when the destination is a new campaign, otherwise all but the destination.
+  const negativeTargets = isNewCampaign
+    ? data.campaigns
+    : destination
+      ? data.campaigns.filter(
+          (campaign) => campaign.campaignId !== destination.campaignId,
+        )
+      : [];
+  const countryCode = profiles.data?.find(
+    (profile) => profile.profileId === data.profileId,
+  )?.countryCode;
   const canCreate =
     destination !== undefined &&
     recommendation.state === "pending" &&
     createdChangeSetId === null;
+  const canCreateNewCampaign =
+    recommendation.state === "pending" && createdChangeSetId === null;
 
   return (
     <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-5">
@@ -256,6 +271,33 @@ export function CannibalizationResolution({
                   })}
                 </tbody>
               </table>
+              <div className="border-t border-zinc-800 px-4 py-3">
+                <label className="inline-flex cursor-pointer items-start gap-2 text-zinc-200">
+                  <input
+                    type="radio"
+                    name="destination-campaign"
+                    aria-label="Create a new campaign as destination"
+                    value={NEW_CAMPAIGN_DESTINATION}
+                    checked={isNewCampaign}
+                    disabled={createdChangeSetId !== null}
+                    onChange={() => setDestinationId(NEW_CAMPAIGN_DESTINATION)}
+                    className="mt-0.5 h-4 w-4 accent-sky-500"
+                  />
+                  <span>
+                    <span className="font-medium">
+                      {isNewCampaign
+                        ? "Destination: new campaign"
+                        : "Create a new campaign"}
+                    </span>
+                    <span className="block text-xs leading-5 text-zinc-500">
+                      Set up a dedicated campaign for “{data.searchTerm}” in the
+                      campaign wizard, prefilled with this term. The negative
+                      exact for every current campaign is drafted with it and
+                      stays locked until the new campaign is live on Amazon.
+                    </span>
+                  </span>
+                </label>
+              </div>
               <p className="border-t border-zinc-800 bg-zinc-900/40 px-4 py-2.5 text-xs text-zinc-500">
                 ACoS is not present in the version 1 rule evidence, so this
                 screen does not automatically suggest a winner.
@@ -271,14 +313,31 @@ export function CannibalizationResolution({
               <div className="flex items-start gap-3">
                 <span className="mt-1 h-3 w-3 shrink-0 rounded-full border-4 border-sky-400" />
                 <div>
-                  <p className="font-medium text-zinc-100">
-                    Route to one campaign with negative exact
-                  </p>
-                  <p className="mt-1 text-sm leading-6 text-zinc-300">
-                    Add “{data.searchTerm}” as a campaign-level negative exact
-                    in every other campaign. Those campaigns keep running for
-                    all other shopper queries.
-                  </p>
+                  {isNewCampaign ? (
+                    <>
+                      <p className="font-medium text-zinc-100">
+                        Route to a new campaign with negative exact
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-zinc-300">
+                        Create a dedicated campaign for “{data.searchTerm}”,
+                        then add the term as a campaign-level negative exact in
+                        every current campaign. The negatives are drafted with
+                        the new campaign but can only be applied after it is
+                        live on Amazon — the term is never blocked everywhere.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-medium text-zinc-100">
+                        Route to one campaign with negative exact
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-zinc-300">
+                        Add “{data.searchTerm}” as a campaign-level negative
+                        exact in every other campaign. Those campaigns keep
+                        running for all other shopper queries.
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -331,12 +390,12 @@ export function CannibalizationResolution({
             <div className="flex gap-3">
               <span
                 className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-                  destination
+                  destination || isNewCampaign
                     ? "bg-sky-500 text-zinc-950"
                     : "bg-sky-400 text-zinc-950"
                 }`}
               >
-                {destination ? "✓" : "1"}
+                {destination || isNewCampaign ? "✓" : "1"}
               </span>
               <div>
                 <p className="font-medium text-zinc-100">
@@ -345,7 +404,9 @@ export function CannibalizationResolution({
                 <p className="mt-1 text-sm text-zinc-400">
                   {destination
                     ? `${destination.name} selected by you`
-                    : "Select which campaign should win this term."}
+                    : isNewCampaign
+                      ? "A new campaign, created next by you"
+                      : "Select which campaign should win this term."}
                 </p>
               </div>
             </div>
@@ -355,7 +416,7 @@ export function CannibalizationResolution({
             <div className="flex gap-3">
               <span
                 className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-                  destination
+                  destination || isNewCampaign
                     ? "bg-sky-400 text-zinc-950"
                     : "bg-zinc-700 text-zinc-400"
                 }`}
@@ -364,10 +425,14 @@ export function CannibalizationResolution({
               </span>
               <div className="min-w-0 flex-1">
                 <p className="font-medium text-zinc-100">
-                  Review exact Amazon action
+                  {isNewCampaign
+                    ? "Set up the new campaign"
+                    : "Review exact Amazon action"}
                 </p>
                 <p className="mt-1 text-sm text-zinc-400">
-                  Preview the change that will be drafted.
+                  {isNewCampaign
+                    ? "The wizard opens prefilled with this term; the negatives draft is created with it."
+                    : "Preview the change that will be drafted."}
                 </p>
               </div>
             </div>
@@ -377,12 +442,14 @@ export function CannibalizationResolution({
               <p className="mt-1 font-medium text-zinc-100">
                 {destination
                   ? `${destination.name} · no change`
-                  : "Not selected"}
+                  : isNewCampaign
+                    ? "New campaign · created in the wizard next"
+                    : "Not selected"}
               </p>
               <p className="mt-4 text-zinc-500">Amazon action</p>
-              {sourceCampaigns.length > 0 ? (
+              {negativeTargets.length > 0 ? (
                 <ul className="mt-1 space-y-1 font-medium text-zinc-100">
-                  {sourceCampaigns.map((campaign) => (
+                  {negativeTargets.map((campaign) => (
                     <li key={campaign.campaignId}>
                       {campaign.name} · add campaign-level negative exact
                     </li>
@@ -393,11 +460,17 @@ export function CannibalizationResolution({
                   Other campaign · add negative exact
                 </p>
               )}
+              {isNewCampaign ? (
+                <p className="mt-2 text-xs leading-5 text-zinc-500">
+                  Locked until the new campaign change set is applied to Amazon
+                  — the term is never unavailable everywhere.
+                </p>
+              ) : null}
               <p className="mt-4 text-zinc-500">Search term</p>
               <p className="mt-1 font-medium text-zinc-100">
                 {data.searchTerm}
               </p>
-              {destination ? (
+              {destination || isNewCampaign ? (
                 <div className="mt-4 grid grid-cols-2 gap-3 border-t border-zinc-800 pt-4">
                   <div>
                     <p className="text-zinc-500">Before</p>
@@ -422,6 +495,23 @@ export function CannibalizationResolution({
                 className="mt-4 flex w-full items-center justify-center rounded-md bg-sky-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-sky-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400"
               >
                 Review draft {createdChangeSetId} in Change center
+              </Link>
+            ) : isNewCampaign ? (
+              <Link
+                to="/campaigns/new"
+                search={{
+                  recommendationId: recommendation.id,
+                  searchTerm: data.searchTerm,
+                  ...(countryCode ? { country: countryCode } : {}),
+                }}
+                aria-disabled={!canCreateNewCampaign}
+                className={`mt-4 flex w-full items-center justify-center rounded-md px-4 py-2.5 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400 ${
+                  canCreateNewCampaign
+                    ? "bg-sky-600 text-white hover:bg-sky-500"
+                    : "pointer-events-none bg-zinc-700 text-zinc-400"
+                }`}
+              >
+                Set up the new campaign
               </Link>
             ) : (
               <Button

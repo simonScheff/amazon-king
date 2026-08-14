@@ -32,12 +32,27 @@ const statusTone: Record<
   not_applied: "danger",
 };
 
-function ChangeSetDetail({ changeSet }: { changeSet: ChangeSet }) {
+function ChangeSetDetail({
+  changeSet,
+  allChangeSets,
+}: {
+  changeSet: ChangeSet;
+  allChangeSets: ChangeSet[];
+}) {
   const preview = useChangeSetPreview(changeSet.id);
   const apply = useApplyChangeSet(changeSet.id);
   const rollback = useRollbackChangeAction();
   const toast = useToast();
   const [confirmApply, setConfirmApply] = useState(false);
+
+  // Cross-set dependency (e.g. cannibalization negatives locked until their
+  // new destination campaign exists on Amazon). The API enforces the same
+  // gate; this only explains it and hides the Apply button.
+  const dependency = changeSet.dependsOnChangeSetId
+    ? allChangeSets.find((cs) => cs.id === changeSet.dependsOnChangeSetId)
+    : undefined;
+  const dependencyLocked =
+    changeSet.dependsOnChangeSetId != null && dependency?.status !== "applied";
 
   return (
     <Card>
@@ -160,15 +175,25 @@ function ChangeSetDetail({ changeSet }: { changeSet: ChangeSet }) {
           )}
           {(changeSet.status === "draft" ||
             changeSet.status === "previewed" ||
-            changeSet.status === "failed") && (
-            <div className="flex justify-end px-4 pb-3">
-              <Button variant="primary" onClick={() => setConfirmApply(true)}>
-                {changeSet.status === "failed"
-                  ? "Retry apply to Amazon…"
-                  : "Apply to Amazon…"}
-              </Button>
-            </div>
-          )}
+            changeSet.status === "failed") &&
+            (dependencyLocked ? (
+              <div className="mx-4 mb-3 rounded-md border border-sky-800 bg-sky-950/20 px-3 py-2 text-xs leading-5 text-sky-200">
+                Locked until change set{" "}
+                <span className="font-mono">
+                  {changeSet.dependsOnChangeSetId}
+                </span>{" "}
+                is applied — the new campaign must exist on Amazon before these
+                negatives go live.
+              </div>
+            ) : (
+              <div className="flex justify-end px-4 pb-3">
+                <Button variant="primary" onClick={() => setConfirmApply(true)}>
+                  {changeSet.status === "failed"
+                    ? "Retry apply to Amazon…"
+                    : "Apply to Amazon…"}
+                </Button>
+              </div>
+            ))}
         </CardBody>
       )}
 
@@ -229,7 +254,11 @@ export function ChangesPage() {
         </Card>
       ) : (
         changeSets.data.map((cs) => (
-          <ChangeSetDetail key={cs.id} changeSet={cs} />
+          <ChangeSetDetail
+            key={cs.id}
+            changeSet={cs}
+            allChangeSets={changeSets.data}
+          />
         ))
       )}
     </div>

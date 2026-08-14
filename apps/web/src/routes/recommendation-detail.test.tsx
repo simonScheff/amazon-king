@@ -1,7 +1,7 @@
 import type { Recommendation } from "@amazon-king/contracts";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RecommendationDetailPage } from "./recommendation-detail";
 
 const mocks = vi.hoisted(() => ({
@@ -22,13 +22,17 @@ vi.mock("@tanstack/react-router", () => ({
     children: ReactNode;
     to: string;
     params?: { id?: string };
-    search?: { days?: number };
+    search?: Record<string, unknown>;
     [key: string]: unknown;
   }) => {
     const path = params?.id ? to.replace("$id", params.id) : to;
-    const href = search?.days ? `${path}?days=${search.days}` : path;
+    const query = search
+      ? Object.entries(search)
+          .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`)
+          .join("&")
+      : "";
     return (
-      <a href={href} {...props}>
+      <a href={query ? `${path}?${query}` : path} {...props}>
         {children}
       </a>
     );
@@ -113,9 +117,25 @@ vi.mock("../api/endpoints", () => ({
     isPending: false,
     mutate: mocks.createChangeSet,
   }),
+  useProfiles: () => ({
+    isPending: false,
+    error: null,
+    data: [
+      {
+        profileId: "1665213640406890",
+        region: "EU",
+        countryCode: "GB",
+        currencyCode: "GBP",
+        enabled: true,
+        writeEnabled: true,
+      },
+    ],
+  }),
 }));
 
 describe("RecommendationDetailPage", () => {
+  afterEach(() => cleanup());
+
   beforeEach(() => {
     mocks.createChangeSet.mockReset();
     mocks.createCannibalizationChangeSet.mockReset();
@@ -153,5 +173,41 @@ describe("RecommendationDetailPage", () => {
       expect.any(Object),
     );
     expect(mocks.createChangeSet).not.toHaveBeenCalled();
+  });
+
+  it("offers a new campaign as destination, prefilled with the search term", () => {
+    render(<RecommendationDetailPage />);
+
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Create a new campaign as destination",
+      }),
+    );
+
+    // The CTA becomes a wizard link carrying the finding, term, and market.
+    const wizardLink = screen.getByRole("link", {
+      name: "Set up the new campaign",
+    });
+    expect(wizardLink).toHaveAttribute(
+      "href",
+      "/campaigns/new?recommendationId=rec-1&searchTerm=tractor%20colouring%20book&country=GB",
+    );
+
+    // Every current campaign is listed as a negative-exact target, and the
+    // lock note explains the ordering guarantee.
+    expect(
+      screen.getByText("Campaign 1 · add campaign-level negative exact"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Campaign 2 · add campaign-level negative exact"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/never unavailable everywhere/),
+    ).toBeInTheDocument();
+
+    // The classic draft path is not used for this destination.
+    expect(
+      screen.queryByRole("button", { name: "Create draft change set" }),
+    ).not.toBeInTheDocument();
   });
 });

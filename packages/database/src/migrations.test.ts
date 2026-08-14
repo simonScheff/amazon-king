@@ -58,8 +58,24 @@ describe("migration files", () => {
 
   it("adds storage for synced negative keywords", async () => {
     const migrations = await loadMigrations();
-    expect(migrations.at(-1)?.filename).toBe("0004_negative_keywords.sql");
-    expect(migrations.at(-1)?.sql).toContain("create table negative_keywords");
+    const migration = migrations.find(
+      (file) => file.filename === "0004_negative_keywords.sql",
+    );
+    expect(migration?.sql).toContain("create table negative_keywords");
+  });
+
+  it("allows campaign-creation change sets and create actions", async () => {
+    const migrations = await loadMigrations();
+    expect(migrations.at(-1)?.filename).toBe("0005_campaign_creation.sql");
+    expect(migrations.at(-1)?.sql).toContain("'campaign_creation'");
+    for (const actionType of [
+      "create_campaign",
+      "create_ad_group",
+      "create_product_ad",
+      "create_keyword",
+    ]) {
+      expect(migrations.at(-1)?.sql).toContain(`'${actionType}'`);
+    }
   });
 
   const tempDirs: string[] = [];

@@ -141,6 +141,10 @@ describe("gateway.previewCapabilities", () => {
         "spAdvertisedProduct",
       ],
       writeOperations: [
+        "create_campaign",
+        "create_ad_group",
+        "create_product_ad",
+        "create_keyword",
         "update_bid",
         "update_ad_group_default_bid",
         "update_campaign_bidding",
@@ -252,5 +256,302 @@ describe("gateway.applyActions", () => {
       actionId: "remove-1",
       status: "applied",
     });
+  });
+});
+
+describe("gateway.applyActions entity creation", () => {
+  function createHandler(): Parameters<typeof makeGateway>[0] {
+    return (request) => {
+      if (request.url.endsWith("/sp/campaigns")) {
+        return jsonResponse(fixture("sp-campaigns-create-207.json"), {
+          status: 207,
+        });
+      }
+      if (request.url.endsWith("/sp/adGroups")) {
+        return jsonResponse(fixture("sp-adGroups-create-207.json"), {
+          status: 207,
+        });
+      }
+      if (request.url.endsWith("/sp/productAds")) {
+        return jsonResponse(fixture("sp-productAds-create-207.json"), {
+          status: 207,
+        });
+      }
+      if (request.url.endsWith("/sp/keywords")) {
+        return jsonResponse(fixture("sp-keywords-create-207.json"), {
+          status: 207,
+        });
+      }
+      throw new Error(`unexpected call: ${request.url}`);
+    };
+  }
+
+  it("chains campaign → ad group → product ad + keyword with id substitution", async () => {
+    const { gateway, calls } = makeGateway(createHandler());
+    const results = await gateway.applyActions({
+      changeSetId: "cs-create-1",
+      profileId: "1111111111",
+      actions: [
+        {
+          actionId: "c1",
+          kind: "create_campaign",
+          name: "Book One - Auto",
+          dailyBudget: "5.00",
+          targetingType: "AUTO",
+          startDate: "2024-06-01",
+          state: "enabled",
+        },
+        {
+          actionId: "g1",
+          kind: "create_ad_group",
+          campaignActionId: "c1",
+          name: "Book One - Ad Group",
+          defaultBid: "0.45",
+        },
+        {
+          actionId: "p1",
+          kind: "create_product_ad",
+          adGroupActionId: "g1",
+          asin: "B0CXYZ1234",
+          state: "enabled",
+        },
+        {
+          actionId: "k1",
+          kind: "create_keyword",
+          adGroupActionId: "g1",
+          keywordText: "dragon fantasy book",
+          matchType: "EXACT",
+          bid: "0.60",
+          state: "enabled",
+        },
+      ],
+    });
+    // One call per creation phase, in dependency order.
+    expect(
+      calls.map((call) => [call.method, new URL(call.url).pathname]),
+    ).toEqual([
+      ["POST", "/sp/campaigns"],
+      ["POST", "/sp/adGroups"],
+      ["POST", "/sp/productAds"],
+      ["POST", "/sp/keywords"],
+    ]);
+    // The ad group references the Amazon campaign id from phase 1.
+    expect(JSON.parse(calls[1].body as string)).toEqual({
+      adGroups: [
+        {
+          campaignId: "4567890123",
+          name: "Book One - Ad Group",
+          state: "ENABLED",
+          defaultBid: 0.45,
+        },
+      ],
+    });
+    // Product ad and keyword reference the resolved ad group id plus the
+    // campaign id derived from the ad group's parent.
+    expect(JSON.parse(calls[2].body as string)).toEqual({
+      productAds: [
+        {
+          campaignId: "4567890123",
+          adGroupId: "3456789012",
+          asin: "B0CXYZ1234",
+          state: "ENABLED",
+        },
+      ],
+    });
+    expect(JSON.parse(calls[3].body as string)).toEqual({
+      keywords: [
+        {
+          campaignId: "4567890123",
+          adGroupId: "3456789012",
+          keywordText: "dragon fantasy book",
+          matchType: "EXACT",
+          bid: 0.6,
+          state: "ENABLED",
+        },
+      ],
+    });
+    expect(
+      results.map((r) => [r.actionId, r.status, r.amazonEntityId]),
+    ).toEqual([
+      ["c1", "applied", "4567890123"],
+      ["g1", "applied", "3456789012"],
+      ["p1", "applied", "512345678901234"],
+      ["k1", "applied", "601122340"],
+    ]);
+  });
+
+  it("runs creation phases before update groups in a mixed change set", async () => {
+    const { gateway, calls } = makeGateway((request) => {
+      if (request.url.endsWith("/sp/campaigns")) {
+        return jsonResponse(fixture("sp-campaigns-create-207.json"), {
+          status: 207,
+        });
+      }
+      if (request.url.endsWith("/sp/keywords")) {
+        return jsonResponse(fixture("sp-keywords-write-207.json"), {
+          status: 207,
+        });
+      }
+      throw new Error(`unexpected call: ${request.url}`);
+    });
+    const results = await gateway.applyActions({
+      changeSetId: "cs-mixed-1",
+      profileId: "1111111111",
+      actions: [
+        {
+          actionId: "a1",
+          kind: "update_bid",
+          keywordId: "601122334",
+          bid: "0.55",
+        },
+        {
+          actionId: "c1",
+          kind: "create_campaign",
+          name: "Book One - Manual",
+          dailyBudget: "3.00",
+          targetingType: "MANUAL",
+          startDate: "2024-06-01",
+          state: "paused",
+        },
+      ],
+    });
+    expect(calls.map((call) => call.method)).toEqual(["POST", "PUT"]);
+    expect(new URL(calls[0].url).pathname).toBe("/sp/campaigns");
+    expect(new URL(calls[1].url).pathname).toBe("/sp/keywords");
+    expect(results.map((r) => [r.actionId, r.status])).toEqual([
+      ["c1", "applied"],
+      ["a1", "applied"],
+    ]);
+  });
+
+  it("fails dependents with PARENT_FAILED without sending them when the parent fails", async () => {
+    const { gateway, calls } = makeGateway((request) => {
+      if (request.url.endsWith("/sp/campaigns")) {
+        return jsonResponse(fixture("sp-campaigns-create-failed-207.json"), {
+          status: 207,
+        });
+      }
+      throw new Error(`unexpected call: ${request.url}`);
+    });
+    const results = await gateway.applyActions({
+      changeSetId: "cs-create-failed",
+      profileId: "1111111111",
+      actions: [
+        {
+          actionId: "c1",
+          kind: "create_campaign",
+          name: "Book One - Auto",
+          dailyBudget: "0.01",
+          targetingType: "AUTO",
+          startDate: "2024-06-01",
+          state: "enabled",
+        },
+        {
+          actionId: "g1",
+          kind: "create_ad_group",
+          campaignActionId: "c1",
+          name: "Book One - Ad Group",
+          defaultBid: "0.45",
+        },
+        {
+          actionId: "k1",
+          kind: "create_keyword",
+          adGroupActionId: "g1",
+          keywordText: "dragon fantasy book",
+          matchType: "EXACT",
+          bid: "0.60",
+          state: "enabled",
+        },
+      ],
+    });
+    // Only the campaign create call was made; dependents were never sent.
+    expect(calls).toHaveLength(1);
+    expect(results.map((r) => [r.actionId, r.status, r.code])).toEqual([
+      ["c1", "failed", "INVALID_VALUE"],
+      ["g1", "failed", "PARENT_FAILED"],
+      ["k1", "failed", "PARENT_FAILED"],
+    ]);
+  });
+
+  it("fails children whose parent actionId is unknown without sending them", async () => {
+    const { gateway, calls } = makeGateway(() => {
+      throw new Error("no Amazon calls expected");
+    });
+    const results = await gateway.applyActions({
+      changeSetId: "cs-orphan",
+      profileId: "1111111111",
+      actions: [
+        {
+          actionId: "g1",
+          kind: "create_ad_group",
+          campaignActionId: "c-missing",
+          name: "Orphan Ad Group",
+          defaultBid: "0.45",
+        },
+        {
+          actionId: "p1",
+          kind: "create_product_ad",
+          adGroupActionId: "g1",
+          asin: "B0CXYZ1234",
+          state: "enabled",
+        },
+      ],
+    });
+    expect(calls).toHaveLength(0);
+    expect(results.map((r) => [r.actionId, r.code])).toEqual([
+      ["g1", "PARENT_FAILED"],
+      ["p1", "PARENT_FAILED"],
+    ]);
+  });
+
+  it("maps per-item 207 partial failures on keyword creation", async () => {
+    const { gateway, calls } = makeGateway(createHandler());
+    const results = await gateway.applyActions({
+      changeSetId: "cs-create-partial",
+      profileId: "1111111111",
+      actions: [
+        {
+          actionId: "c1",
+          kind: "create_campaign",
+          name: "Book One - Manual",
+          dailyBudget: "5.00",
+          targetingType: "MANUAL",
+          startDate: "2024-06-01",
+          state: "enabled",
+        },
+        {
+          actionId: "g1",
+          kind: "create_ad_group",
+          campaignActionId: "c1",
+          name: "Book One - Ad Group",
+          defaultBid: "0.45",
+        },
+        {
+          actionId: "k1",
+          kind: "create_keyword",
+          adGroupActionId: "g1",
+          keywordText: "dragon fantasy book",
+          matchType: "EXACT",
+          bid: "0.60",
+          state: "enabled",
+        },
+        {
+          actionId: "k2",
+          kind: "create_keyword",
+          adGroupActionId: "g1",
+          keywordText: "bad@@@keyword",
+          matchType: "BROAD",
+          bid: "0.40",
+          state: "enabled",
+        },
+      ],
+    });
+    expect(calls).toHaveLength(3);
+    const keywordResults = results.filter((r) => r.actionId.startsWith("k"));
+    expect(keywordResults.map((r) => [r.actionId, r.status, r.code])).toEqual([
+      ["k1", "applied", "SUCCESS"],
+      ["k2", "failed", "INVALID_VALUE"],
+    ]);
+    expect(keywordResults[1].message).toContain("unsupported characters");
   });
 });

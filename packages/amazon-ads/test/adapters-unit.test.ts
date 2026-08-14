@@ -17,11 +17,15 @@ import {
 import { listCampaignOptimizationRules } from "../src/adapters/sp-rules.js";
 import {
   buildAdGroupBidUpdateBody,
+  buildAdGroupCreateBody,
   buildCampaignBiddingUpdateBody,
+  buildCampaignCreateBody,
   buildCampaignNegativeKeywordCreateBody,
   buildKeywordBidUpdateBody,
+  buildKeywordCreateBody,
   buildNegativeKeywordCreateBody,
   buildOptimizationRuleUpdateBody,
+  buildProductAdCreateBody,
   buildTargetBidUpdateBody,
   deleteCampaignNegativeKeywords,
   disableOptimizationRules,
@@ -324,6 +328,112 @@ describe("report download", () => {
         logger: captureLogs().logger,
       }),
     ).rejects.toBeInstanceOf(AmazonApiError);
+  });
+});
+
+describe("SP create request bodies", () => {
+  it("builds the SP v3 campaign create body with Amazon state enums", () => {
+    expect(
+      buildCampaignCreateBody([
+        {
+          actionId: "c1",
+          kind: "create_campaign",
+          name: "Book One - Auto",
+          dailyBudget: "5.00",
+          targetingType: "AUTO",
+          startDate: "2024-06-01",
+          state: "paused",
+        },
+      ]),
+    ).toEqual({
+      campaigns: [
+        {
+          name: "Book One - Auto",
+          targetingType: "AUTO",
+          state: "PAUSED",
+          dailyBudget: 5,
+          startDate: "2024-06-01",
+        },
+      ],
+    });
+  });
+
+  it("builds the SP v3 ad group create body from resolved parent ids", () => {
+    expect(
+      buildAdGroupCreateBody([
+        {
+          actionId: "g1",
+          kind: "create_ad_group",
+          campaignActionId: "c1",
+          name: "Book One - Ad Group",
+          defaultBid: "0.45",
+          resolvedCampaignId: "4567890123",
+        },
+      ]),
+    ).toEqual({
+      adGroups: [
+        {
+          campaignId: "4567890123",
+          name: "Book One - Ad Group",
+          state: "ENABLED",
+          defaultBid: 0.45,
+        },
+      ],
+    });
+  });
+
+  it("builds the SP v3 product ad create body with campaign and ad group ids", () => {
+    expect(
+      buildProductAdCreateBody([
+        {
+          actionId: "p1",
+          kind: "create_product_ad",
+          adGroupActionId: "g1",
+          asin: "B0CXYZ1234",
+          state: "enabled",
+          resolvedCampaignId: "4567890123",
+          resolvedAdGroupId: "3456789012",
+        },
+      ]),
+    ).toEqual({
+      productAds: [
+        {
+          campaignId: "4567890123",
+          adGroupId: "3456789012",
+          asin: "B0CXYZ1234",
+          state: "ENABLED",
+        },
+      ],
+    });
+  });
+
+  it("builds the SP v3 keyword create body with match type and bid", () => {
+    expect(
+      buildKeywordCreateBody([
+        {
+          actionId: "k1",
+          kind: "create_keyword",
+          adGroupActionId: "g1",
+          keywordText: "dragon fantasy book",
+          matchType: "EXACT",
+          bid: "0.60",
+          state: "paused",
+          resolvedCampaignId: "4567890123",
+          resolvedAdGroupId: "3456789012",
+        },
+      ]),
+    ).toEqual({
+      keywords: [
+        {
+          campaignId: "4567890123",
+          adGroupId: "3456789012",
+          keywordText: "dragon fantasy book",
+          matchType: "EXACT",
+          bid: 0.6,
+          state: "PAUSED",
+        },
+      ],
+    });
   });
 });
 

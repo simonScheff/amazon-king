@@ -9,6 +9,13 @@ describe("Flag", () => {
     expect(screen.getByRole("img", { name: "GB" })).toHaveClass("fi", "fi-gb");
   });
 
+  it("maps Amazon's UK marketplace code to the bundled GB flag", () => {
+    render(<Flag countryCode="UK" />);
+
+    expect(screen.getByRole("img", { name: "UK" })).toHaveClass("fi", "fi-gb");
+    expect(screen.getByRole("img", { name: "UK" })).not.toHaveClass("fi-uk");
+  });
+
   it("renders nothing for a malformed country code", () => {
     const { container } = render(<Flag countryCode="g1" />);
 

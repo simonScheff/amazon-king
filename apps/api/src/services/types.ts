@@ -7,6 +7,8 @@ import type {
   BookCoverInput,
   BookEconomicsInput,
   BookMappingInput,
+  CampaignCreationCreate,
+  CampaignCreationResult,
   CampaignDetail,
   CampaignListRow,
   CampaignMaxCpc,
@@ -234,6 +236,16 @@ export interface ChangeService {
     destinationCampaignId: string,
     meta: RequestMeta,
   ): Promise<ChangeSetWithActions>;
+  /**
+   * Create one guarded `campaign_creation` change set per requested profile
+   * (campaign + ad group + product ad + keywords). Fingerprinted per profile:
+   * re-submitting the identical spec replays the existing sets.
+   */
+  createCampaignCreationChangeSets(
+    auth: AuthContext,
+    input: CampaignCreationCreate,
+    meta: RequestMeta,
+  ): Promise<CampaignCreationResult>;
   /** Fresh guardrail evaluation; moves draft → previewed (plan §10). */
   previewChangeSet(
     auth: AuthContext,

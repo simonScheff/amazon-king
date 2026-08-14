@@ -3,6 +3,13 @@ import type { Db } from "../db.js";
 
 /** KDP books and user-entered royalty economics (plan §7). */
 
+/** One enabled marketplace link of a book: Amazon profile id + the ASIN
+ * Amazon Ads reports for it in that profile (book_profile_links). */
+export interface BookMarketplaceAsin {
+  profileId: string;
+  asin: string;
+}
+
 export interface Book {
   id: string;
   workspaceId: string;
@@ -12,6 +19,7 @@ export interface Book {
   status: string;
   coverJson: unknown | null;
   profileIds: string[];
+  marketplaceAsins: BookMarketplaceAsin[];
   createdAt: string;
 }
 
@@ -24,6 +32,7 @@ interface BookRow {
   status: string;
   cover_json: unknown | null;
   profile_ids?: string[];
+  marketplace_asins?: BookMarketplaceAsin[];
   created_at: string;
 }
 
@@ -37,6 +46,7 @@ function toBook(row: BookRow): Book {
     status: row.status,
     coverJson: row.cover_json,
     profileIds: row.profile_ids ?? [],
+    marketplaceAsins: row.marketplace_asins ?? [],
     createdAt: row.created_at,
   };
 }
@@ -69,9 +79,22 @@ export async function createBook(
 }
 
 export async function getBook(db: Db, bookId: string): Promise<Book | null> {
-  const result = await db.query<BookRow>(`select * from books where id = $1`, [
-    bookId,
-  ]);
+  const result = await db.query<BookRow>(
+    `select b.*,
+            coalesce(
+              jsonb_agg(
+                jsonb_build_object('profileId', p.profile_id, 'asin', bpl.marketplace_asin)
+                order by p.profile_id
+              ) filter (where bpl.enabled = true),
+              '[]'::jsonb
+            ) as marketplace_asins
+     from books b
+     left join book_profile_links bpl on bpl.book_id = b.id
+     left join amazon_profiles p on p.id = bpl.profile_id
+     where b.id = $1
+     group by b.id`,
+    [bookId],
+  );
   return result.rows[0] ? toBook(result.rows[0]) : null;
 }
 
@@ -82,7 +105,14 @@ export async function listBooks(db: Db, workspaceId: string): Promise<Book[]> {
               array_agg(p.profile_id order by p.profile_id)
                 filter (where bpl.enabled = true),
               '{}'::text[]
-            ) as profile_ids
+            ) as profile_ids,
+            coalesce(
+              jsonb_agg(
+                jsonb_build_object('profileId', p.profile_id, 'asin', bpl.marketplace_asin)
+                order by p.profile_id
+              ) filter (where bpl.enabled = true),
+              '[]'::jsonb
+            ) as marketplace_asins
      from books b
      left join book_profile_links bpl on bpl.book_id = b.id
      left join amazon_profiles p on p.id = bpl.profile_id

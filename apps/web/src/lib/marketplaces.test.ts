@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AmazonProfile } from "@amazon-king/contracts";
-import {
-  flagForCountry,
-  marketplaceOptions,
-  resolveCountry,
-} from "./marketplaces";
+import { marketplaceOptions, resolveCountry } from "./marketplaces";
 
 function profile(
   countryCode: string,
@@ -26,11 +22,6 @@ function profile(
 }
 
 describe("marketplace country choices", () => {
-  it("creates the correct country flag from an ISO country code", () => {
-    expect(flagForCountry("US")).toBe("🇺🇸");
-    expect(flagForCountry("gb")).toBe("🇬🇧");
-  });
-
   it("groups enabled profiles and puts the USA first", () => {
     const options = marketplaceOptions([
       profile("GB", "GBP"),
@@ -40,7 +31,6 @@ describe("marketplace country choices", () => {
     ]);
 
     expect(options.map((option) => option.countryCode)).toEqual(["US", "GB"]);
-    expect(options.map((option) => option.flag)).toEqual(["🇺🇸", "🇬🇧"]);
     expect(options[1]?.profileIds).toEqual(["GB-GBP", "GB-second"]);
   });
 

@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { ApiError } from "../api/client";
 import { useDashboardSummary, useLogout, useSession } from "../api/endpoints";
 import { ToastProvider, useToast } from "./toast";
+import { InstallBanner } from "./install-banner";
 import { Loading } from "./states";
 
 const navItems = [
@@ -143,6 +144,7 @@ export function AppLayout() {
               </div>
             </main>
           </div>
+          <InstallBanner />
         </div>
       </SessionGate>
     </ToastProvider>

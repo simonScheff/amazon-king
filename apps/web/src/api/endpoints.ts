@@ -11,6 +11,7 @@ import {
   advertisedBookCandidateSchema,
   auditEventSchema,
   bookSchema,
+  campaignCreationResultSchema,
   campaignDetailSchema,
   campaignListRowSchema,
   campaignMaxCpcSchema,
@@ -28,6 +29,7 @@ import {
   type BookMappingInput,
   type BookEconomicsInput,
   type BookCoverInput,
+  type CampaignCreationCreate,
   type ChangeSetCreate,
   type LoginRequest,
   type ProfileUpdate,
@@ -262,6 +264,24 @@ export function useSetCampaignMaxCpc(campaignId: string) {
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["campaign-max-cpc", campaignId] }),
         qc.invalidateQueries({ queryKey: ["change-sets"] }),
+      ]);
+    },
+  });
+}
+
+export function useCreateCampaignDrafts() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CampaignCreationCreate) =>
+      apiFetch("/api/campaign-creation-change-sets", {
+        method: "POST",
+        body,
+        schema: campaignCreationResultSchema,
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["change-sets"] }),
+        qc.invalidateQueries({ queryKey: ["campaigns"] }),
       ]);
     },
   });

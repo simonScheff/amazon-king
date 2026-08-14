@@ -6,6 +6,8 @@ import {
   bookEconomicsInputSchema,
   bookCoverInputSchema,
   bookMappingInputSchema,
+  campaignCreationCreateSchema,
+  campaignCreationResultSchema,
   cannibalizationResolutionCreateSchema,
   changeSetCreateSchema,
   loginRequestSchema,
@@ -550,6 +552,22 @@ export async function buildServer(
         body.maxCpc,
         meta(request),
       );
+    },
+  );
+
+  app.post(
+    "/api/campaign-creation-change-sets",
+    { config: { rateLimit: WRITE_RATE } },
+    async (request) => {
+      const auth = await authenticate(request);
+      requireRecentAuth(auth);
+      const body = parse(campaignCreationCreateSchema, request.body);
+      const result = await services.changes.createCampaignCreationChangeSets(
+        auth,
+        body,
+        meta(request),
+      );
+      return parse(campaignCreationResultSchema, result);
     },
   );
 

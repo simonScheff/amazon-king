@@ -244,13 +244,64 @@ export interface RemoveNegativeExactAction {
   scope: "campaign" | "ad_group";
 }
 
+/** Create a new Sponsored Products campaign (human-approved creation). */
+export interface CreateCampaignAction {
+  actionId: string;
+  kind: "create_campaign";
+  name: string;
+  /** Daily budget as a string-encoded decimal in the profile's currency. */
+  dailyBudget: string;
+  targetingType: "AUTO" | "MANUAL";
+  /** YYYY-MM-DD. */
+  startDate: string;
+  state: "enabled" | "paused";
+}
+
+/** Create an ad group under a campaign created earlier in the same call. */
+export interface CreateAdGroupAction {
+  actionId: string;
+  kind: "create_ad_group";
+  /** actionId of a create_campaign action in the same change set. */
+  campaignActionId: string;
+  name: string;
+  /** Default bid as a string-encoded decimal. */
+  defaultBid: string;
+}
+
+/** Create a product ad under an ad group created earlier in the same call. */
+export interface CreateProductAdAction {
+  actionId: string;
+  kind: "create_product_ad";
+  /** actionId of a create_ad_group action in the same change set. */
+  adGroupActionId: string;
+  asin: string;
+  state: "enabled" | "paused";
+}
+
+/** Create a keyword under an ad group created earlier in the same call. */
+export interface CreateKeywordAction {
+  actionId: string;
+  kind: "create_keyword";
+  /** actionId of a create_ad_group action in the same change set. */
+  adGroupActionId: string;
+  keywordText: string;
+  matchType: "EXACT" | "PHRASE" | "BROAD";
+  /** Bid as a string-encoded decimal. */
+  bid: string;
+  state: "enabled" | "paused";
+}
+
 export type ChangeAction =
   | UpdateBidAction
   | UpdateAdGroupDefaultBidAction
   | UpdateCampaignBiddingAction
   | UpdateOptimizationRuleAction
   | AddNegativeExactAction
-  | RemoveNegativeExactAction;
+  | RemoveNegativeExactAction
+  | CreateCampaignAction
+  | CreateAdGroupAction
+  | CreateProductAdAction
+  | CreateKeywordAction;
 
 /** Immutable, human-approved set of changes to apply. */
 export interface ChangeSet {

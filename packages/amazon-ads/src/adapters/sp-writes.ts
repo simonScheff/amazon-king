@@ -4,6 +4,10 @@ import type { AdsHttpClient, AdsRequestContext } from "../http.js";
 import type {
   ActionResult,
   AddNegativeExactAction,
+  CreateAdGroupAction,
+  CreateCampaignAction,
+  CreateKeywordAction,
+  CreateProductAdAction,
   RemoveNegativeExactAction,
   UpdateAdGroupDefaultBidAction,
   UpdateBidAction,
@@ -136,6 +140,87 @@ export function buildCampaignNegativeKeywordCreateBody(
   };
 }
 
+/** Creation actions carry lowercase states; Amazon expects SP v3 enums. */
+function asAmazonState(state: "enabled" | "paused"): "ENABLED" | "PAUSED" {
+  return state === "enabled" ? "ENABLED" : "PAUSED";
+}
+
+/** A create_ad_group action whose parent campaign id has been resolved. */
+export interface ResolvedCreateAdGroupAction extends CreateAdGroupAction {
+  resolvedCampaignId: string;
+}
+
+/** A create_product_ad action whose parent ids have been resolved. */
+export interface ResolvedCreateProductAdAction extends CreateProductAdAction {
+  resolvedCampaignId: string;
+  resolvedAdGroupId: string;
+}
+
+/** A create_keyword action whose parent ids have been resolved. */
+export interface ResolvedCreateKeywordAction extends CreateKeywordAction {
+  resolvedCampaignId: string;
+  resolvedAdGroupId: string;
+}
+
+/** POST /sp/campaigns body for campaign creation. */
+export function buildCampaignCreateBody(
+  actions: CreateCampaignAction[],
+): Record<string, unknown> {
+  return {
+    campaigns: actions.map((action) => ({
+      name: action.name,
+      targetingType: action.targetingType,
+      state: asAmazonState(action.state),
+      dailyBudget: Number(action.dailyBudget),
+      startDate: action.startDate,
+    })),
+  };
+}
+
+/** POST /sp/adGroups body for ad group creation. */
+export function buildAdGroupCreateBody(
+  actions: ResolvedCreateAdGroupAction[],
+): Record<string, unknown> {
+  return {
+    adGroups: actions.map((action) => ({
+      campaignId: asSpV3Id(action.resolvedCampaignId),
+      name: action.name,
+      state: "ENABLED",
+      defaultBid: Number(action.defaultBid),
+    })),
+  };
+}
+
+/** POST /sp/productAds body for product ad creation. */
+export function buildProductAdCreateBody(
+  actions: ResolvedCreateProductAdAction[],
+): Record<string, unknown> {
+  return {
+    productAds: actions.map((action) => ({
+      campaignId: asSpV3Id(action.resolvedCampaignId),
+      adGroupId: asSpV3Id(action.resolvedAdGroupId),
+      asin: action.asin,
+      state: asAmazonState(action.state),
+    })),
+  };
+}
+
+/** POST /sp/keywords body for keyword creation. */
+export function buildKeywordCreateBody(
+  actions: ResolvedCreateKeywordAction[],
+): Record<string, unknown> {
+  return {
+    keywords: actions.map((action) => ({
+      campaignId: asSpV3Id(action.resolvedCampaignId),
+      adGroupId: asSpV3Id(action.resolvedAdGroupId),
+      keywordText: action.keywordText,
+      matchType: action.matchType,
+      bid: Number(action.bid),
+      state: asAmazonState(action.state),
+    })),
+  };
+}
+
 const writeResultItemSchema = z.looseObject({
   code: z.string().optional(),
   errorCode: z.string().optional(),
@@ -145,6 +230,7 @@ const writeResultItemSchema = z.looseObject({
   negativeKeywordId: z.union([z.number(), z.string()]).optional(),
   campaignNegativeKeywordId: z.union([z.number(), z.string()]).optional(),
   targetId: z.union([z.number(), z.string()]).optional(),
+  adId: z.union([z.number(), z.string()]).optional(),
   adGroupId: z.union([z.number(), z.string()]).optional(),
   campaignId: z.union([z.number(), z.string()]).optional(),
   optimizationRuleId: z.union([z.number(), z.string()]).optional(),
@@ -175,6 +261,9 @@ const targetWriteResponseSchema = z.looseObject({
 });
 const adGroupWriteResponseSchema = z.looseObject({
   adGroups: writeResultCollectionSchema,
+});
+const productAdWriteResponseSchema = z.looseObject({
+  productAds: writeResultCollectionSchema,
 });
 const campaignWriteResponseSchema = z.looseObject({
   campaigns: writeResultCollectionSchema,
@@ -231,6 +320,7 @@ export function mapWriteResults(
       item.negativeKeywordId ??
       item.campaignNegativeKeywordId ??
       item.targetId ??
+      item.adId ??
       item.adGroupId ??
       item.campaignId ??
       item.optimizationRuleId;
@@ -485,4 +575,108 @@ export async function deleteCampaignNegativeKeywords(
     actions,
     flattenWriteResults(data.campaignNegativeKeywords),
   );
+}
+
+/** POST /sp/campaigns — create campaigns, returning per-item results. */
+export async function createCampaigns(
+  http: AdsHttpClient,
+  context: AdsRequestContext,
+  actions: CreateCampaignAction[],
+): Promise<ActionResult[]> {
+  if (actions.length === 0) {
+    return [];
+  }
+  return inBatches(actions, async (batch) => {
+    const response = await http.request({
+      method: "POST",
+      path: "/sp/campaigns",
+      context,
+      mediaType: SP_MEDIA_TYPES.campaigns,
+      body: buildCampaignCreateBody(batch),
+    });
+    const data = parseWith(
+      campaignWriteResponseSchema,
+      response.data,
+      "POST /sp/campaigns",
+    );
+    return mapWriteResults(batch, flattenWriteResults(data.campaigns));
+  });
+}
+
+/** POST /sp/adGroups — create ad groups, returning per-item results. */
+export async function createAdGroups(
+  http: AdsHttpClient,
+  context: AdsRequestContext,
+  actions: ResolvedCreateAdGroupAction[],
+): Promise<ActionResult[]> {
+  if (actions.length === 0) {
+    return [];
+  }
+  return inBatches(actions, async (batch) => {
+    const response = await http.request({
+      method: "POST",
+      path: "/sp/adGroups",
+      context,
+      mediaType: SP_MEDIA_TYPES.adGroups,
+      body: buildAdGroupCreateBody(batch),
+    });
+    const data = parseWith(
+      adGroupWriteResponseSchema,
+      response.data,
+      "POST /sp/adGroups",
+    );
+    return mapWriteResults(batch, flattenWriteResults(data.adGroups));
+  });
+}
+
+/** POST /sp/productAds — create product ads, returning per-item results. */
+export async function createProductAds(
+  http: AdsHttpClient,
+  context: AdsRequestContext,
+  actions: ResolvedCreateProductAdAction[],
+): Promise<ActionResult[]> {
+  if (actions.length === 0) {
+    return [];
+  }
+  return inBatches(actions, async (batch) => {
+    const response = await http.request({
+      method: "POST",
+      path: "/sp/productAds",
+      context,
+      mediaType: SP_MEDIA_TYPES.productAds,
+      body: buildProductAdCreateBody(batch),
+    });
+    const data = parseWith(
+      productAdWriteResponseSchema,
+      response.data,
+      "POST /sp/productAds",
+    );
+    return mapWriteResults(batch, flattenWriteResults(data.productAds));
+  });
+}
+
+/** POST /sp/keywords — create keywords, returning per-item results. */
+export async function createKeywords(
+  http: AdsHttpClient,
+  context: AdsRequestContext,
+  actions: ResolvedCreateKeywordAction[],
+): Promise<ActionResult[]> {
+  if (actions.length === 0) {
+    return [];
+  }
+  return inBatches(actions, async (batch) => {
+    const response = await http.request({
+      method: "POST",
+      path: "/sp/keywords",
+      context,
+      mediaType: SP_MEDIA_TYPES.keywords,
+      body: buildKeywordCreateBody(batch),
+    });
+    const data = parseWith(
+      keywordWriteResponseSchema,
+      response.data,
+      "POST /sp/keywords",
+    );
+    return mapWriteResults(batch, flattenWriteResults(data.keywords));
+  });
 }

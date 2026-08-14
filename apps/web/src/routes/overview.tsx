@@ -6,13 +6,13 @@ import {
   useProfiles,
   useRecommendations,
 } from "../api/endpoints";
+import { CountrySelect } from "../components/country-select";
 import { Flag } from "../components/flag";
 import { KpiCard } from "../components/kpi-card";
 import { PerformanceTrendChart } from "../components/performance-trend-chart";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardBody, CardHeader } from "../components/ui/card";
-import { Select } from "../components/ui/input";
 import { EmptyState, ErrorState, Loading } from "../components/states";
 import {
   formatAcos,
@@ -22,11 +22,7 @@ import {
   formatMoney,
   labelize,
 } from "../lib/format";
-import {
-  flagForCountry,
-  marketplaceOptions,
-  resolveCountry,
-} from "../lib/marketplaces";
+import { marketplaceOptions, resolveCountry } from "../lib/marketplaces";
 
 const DAY_OPTIONS = [7, 14, 30, 60] as const;
 
@@ -74,35 +70,18 @@ export function OverviewPage() {
         <div className="ml-auto flex flex-wrap items-center gap-3">
           <label className="flex items-center gap-2 text-sm text-zinc-400">
             <span>Country</span>
-            <Select
-              aria-label="Country"
+            <CountrySelect
               value={country}
+              options={marketplaces}
               disabled={profiles.isPending || marketplaces.length === 0}
-              onChange={(event) =>
+              onChange={(countryCode) =>
                 navigate({
                   to: "/",
-                  search: { days, country: event.currentTarget.value },
+                  search: { days, country: countryCode },
                   replace: true,
                 })
               }
-            >
-              {marketplaces.length === 0 ? (
-                <option value={country}>
-                  {flagForCountry(country)}{" "}
-                  {country === "US" ? "United States" : country}
-                </option>
-              ) : (
-                marketplaces.map((marketplace) => (
-                  <option
-                    key={marketplace.countryCode}
-                    value={marketplace.countryCode}
-                  >
-                    {marketplace.flag} {marketplace.countryName} (
-                    {marketplace.currencyCodes.join(", ")})
-                  </option>
-                ))
-              )}
-            </Select>
+            />
           </label>
           <div role="group" aria-label="Date range" className="flex gap-1">
             {DAY_OPTIONS.map((d) => (

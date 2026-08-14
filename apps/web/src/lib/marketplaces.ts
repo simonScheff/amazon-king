@@ -3,7 +3,6 @@ import type { AmazonProfile } from "@amazon-king/contracts";
 export interface MarketplaceOption {
   countryCode: string;
   countryName: string;
-  flag: string;
   currencyCodes: string[];
   profileIds: string[];
 }
@@ -12,15 +11,6 @@ const regionNames = new Intl.DisplayNames(["en"], { type: "region" });
 
 export function countryNameForCode(countryCode: string): string {
   return regionNames.of(countryCode) ?? countryCode;
-}
-
-/** Convert an ISO alpha-2 country code into its Unicode flag sequence. */
-export function flagForCountry(countryCode: string): string {
-  const normalized = countryCode.toUpperCase();
-  if (!/^[A-Z]{2}$/.test(normalized)) return "🏳️";
-  return String.fromCodePoint(
-    ...[...normalized].map((letter) => letter.charCodeAt(0) + 127397),
-  );
 }
 
 /** Group enabled Amazon profiles into country choices for dashboard filtering. */
@@ -47,7 +37,6 @@ export function marketplaceOptions(
     .map(([countryCode, value]) => ({
       countryCode,
       countryName: countryNameForCode(countryCode),
-      flag: flagForCountry(countryCode),
       currencyCodes: [...value.currencyCodes].sort(),
       profileIds: value.profileIds,
     }))
