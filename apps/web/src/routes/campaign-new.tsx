@@ -19,6 +19,7 @@ import { Card, CardBody, CardHeader } from "../components/ui/card";
 import { Input, Select } from "../components/ui/input";
 import { EmptyState, ErrorState, Loading } from "../components/states";
 import { Flag } from "../components/flag";
+import { isAsin } from "../lib/asin";
 import { marketplaceOptions } from "../lib/marketplaces";
 
 const STEPS = [
@@ -36,7 +37,7 @@ const STEP_TITLES: Record<Step, string> = {
   campaign: "Campaign",
   adgroup: "Ad group",
   book: "Book",
-  keywords: "Keywords",
+  keywords: "Keywords & targets",
   review: "Review",
 };
 
@@ -58,10 +59,22 @@ interface KeywordRow {
   bid: string;
 }
 
+interface TargetRow {
+  id: number;
+  asin: string;
+  /** Empty means "use the ad group default bid". */
+  bid: string;
+}
+
 let nextKeywordId = 1;
+let nextTargetId = 1;
 
 function emptyKeywordRow(): KeywordRow {
   return { id: nextKeywordId++, text: "", matchType: "EXACT", bid: "" };
+}
+
+function emptyTargetRow(): TargetRow {
+  return { id: nextTargetId++, asin: "", bid: "" };
 }
 
 function Field({
@@ -98,6 +111,8 @@ export function CampaignNewPage() {
     country?: string;
   };
   const prefillTerm = prefill.searchTerm?.trim() ?? "";
+  // An ASIN shopper term becomes a product target, not an EXACT keyword.
+  const prefillIsAsin = isAsin(prefillTerm);
 
   const [stepIndex, setStepIndex] = useState(0);
   const [selectedCountries, setSelectedCountries] = useState<string[]>(() =>
@@ -115,7 +130,7 @@ export function CampaignNewPage() {
   const [defaultBid, setDefaultBid] = useState("");
   const [bookId, setBookId] = useState("");
   const [keywords, setKeywords] = useState<KeywordRow[]>(() => [
-    ...(prefillTerm
+    ...(prefillTerm && !prefillIsAsin
       ? [
           {
             id: nextKeywordId++,
@@ -129,6 +144,11 @@ export function CampaignNewPage() {
     emptyKeywordRow(),
     emptyKeywordRow(),
   ]);
+  const [targets, setTargets] = useState<TargetRow[]>(() =>
+    prefillTerm && prefillIsAsin
+      ? [{ id: nextTargetId++, asin: prefillTerm.toUpperCase(), bid: "" }]
+      : [],
+  );
 
   const step: Step = STEPS[stepIndex] ?? "markets";
   const options = useMemo(
@@ -169,6 +189,12 @@ export function CampaignNewPage() {
       matchType: row.matchType,
       bid: row.bid.trim() || defaultBid.trim(),
     }));
+  const effectiveTargets = targets
+    .filter((row) => row.asin.trim() !== "")
+    .map((row) => ({
+      asin: row.asin.trim().toUpperCase(),
+      bid: row.bid.trim() || defaultBid.trim(),
+    }));
 
   const stepValid: Record<Step, boolean> = {
     markets: selectedOptions.length >= 1,
@@ -179,8 +205,12 @@ export function CampaignNewPage() {
     adgroup: effectiveAdGroupName !== "" && DECIMAL_RE.test(defaultBid.trim()),
     book: selectedBook !== undefined,
     keywords:
-      effectiveKeywords.length >= 1 &&
-      effectiveKeywords.every((k) => DECIMAL_RE.test(k.bid)),
+      (effectiveKeywords.length >= 1 &&
+        effectiveKeywords.every((k) => DECIMAL_RE.test(k.bid))) ||
+      (effectiveTargets.length >= 1 &&
+        effectiveTargets.every(
+          (t) => isAsin(t.asin) && DECIMAL_RE.test(t.bid),
+        )),
     review: true,
   };
 
@@ -197,6 +227,7 @@ export function CampaignNewPage() {
       adGroup: { name: effectiveAdGroupName, defaultBid: defaultBid.trim() },
       bookId,
       keywords: effectiveKeywords,
+      ...(effectiveTargets.length > 0 ? { targets: effectiveTargets } : {}),
       ...(prefill.recommendationId
         ? { cannibalization: { recommendationId: prefill.recommendationId } }
         : {}),
@@ -215,6 +246,12 @@ export function CampaignNewPage() {
 
   function updateKeyword(id: number, patch: Partial<Omit<KeywordRow, "id">>) {
     setKeywords((rows) =>
+      rows.map((row) => (row.id === id ? { ...row, ...patch } : row)),
+    );
+  }
+
+  function updateTarget(id: number, patch: Partial<Omit<TargetRow, "id">>) {
+    setTargets((rows) =>
       rows.map((row) => (row.id === id ? { ...row, ...patch } : row)),
     );
   }
@@ -287,9 +324,10 @@ export function CampaignNewPage() {
               for “<span className="font-medium">{prefillTerm}</span>”
             </>
           ) : null}
-          . When you finish, the app also drafts this term as a negative exact
-          in the conflicting campaigns — locked until this new campaign is
-          applied to Amazon, so the term is never blocked everywhere.
+          . When you finish, the app also drafts this term as a{" "}
+          {prefillIsAsin ? "negative ASIN target" : "negative exact"} in the
+          conflicting campaigns — locked until this new campaign is applied to
+          Amazon, so the term is never blocked everywhere.
         </div>
       ) : null}
 
@@ -505,6 +543,74 @@ export function CampaignNewPage() {
                 Rows without a bid use the ad group default bid. Empty rows are
                 ignored.
               </p>
+              <div className="border-t border-zinc-800 pt-4">
+                <p className="text-sm font-medium text-zinc-200">
+                  Product targets (ASINs)
+                </p>
+                <p className="mt-1 text-xs leading-5 text-zinc-500">
+                  Product targets show the book on those products&apos; detail
+                  pages instead of matching shopper queries. ASINs start with
+                  B0 and are 10 characters; bids work like keyword bids.
+                </p>
+                {targets.map((row, index) => {
+                  const asinInvalid =
+                    row.asin.trim() !== "" && !isAsin(row.asin);
+                  return (
+                    <div
+                      key={row.id}
+                      className="mt-2 flex flex-wrap items-center gap-2"
+                    >
+                      <Input
+                        className="min-w-40 flex-1"
+                        aria-label={`Product target ${index + 1} ASIN`}
+                        placeholder="B0XXXXXXXX"
+                        value={row.asin}
+                        onChange={(e) =>
+                          updateTarget(row.id, { asin: e.target.value })
+                        }
+                      />
+                      <Input
+                        className="w-28"
+                        aria-label={`Product target ${index + 1} bid`}
+                        inputMode="decimal"
+                        placeholder={defaultBid.trim() || "Bid"}
+                        value={row.bid}
+                        onChange={(e) =>
+                          updateTarget(row.id, { bid: e.target.value })
+                        }
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={`Remove product target ${index + 1}`}
+                        onClick={() =>
+                          setTargets((rows) =>
+                            rows.filter((r) => r.id !== row.id),
+                          )
+                        }
+                      >
+                        Remove
+                      </Button>
+                      {asinInvalid ? (
+                        <p role="alert" className="w-full text-xs text-red-400">
+                          Expected a 10-character ASIN starting with B0
+                        </p>
+                      ) : null}
+                    </div>
+                  );
+                })}
+                <div className="mt-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() =>
+                      setTargets((rows) => [...rows, emptyTargetRow()])
+                    }
+                  >
+                    Add product target
+                  </Button>
+                </div>
+              </div>
             </>
           )}
 

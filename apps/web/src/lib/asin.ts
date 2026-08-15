@@ -1,14 +1,10 @@
 /**
  * Search-term reports put ASINs in the same column as text queries when an
- * auto or product target matched a product detail page; Amazon provides no
- * explicit flag. ASINs are 10 uppercase alphanumeric characters and KDP
- * products always start with "B0", so the shape is a reliable heuristic.
+ * auto or product target matched a product detail page; the shared detection
+ * heuristic lives in `@amazon-king/contracts` so the API and web agree.
+ * `amazonProductUrl` below stays web-only URL building.
  */
-const ASIN_PATTERN = /^B0[A-Z0-9]{8}$/;
-
-export function isAsin(term: string): boolean {
-  return ASIN_PATTERN.test(term.trim().toUpperCase());
-}
+export { isAsin } from "@amazon-king/contracts";
 
 /** Retail domains by profile country; unknown countries fall back to .com. */
 const marketplaceDomains: Readonly<Record<string, string>> = {

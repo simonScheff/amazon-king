@@ -101,6 +101,12 @@ export interface Keyword {
   raw: unknown;
 }
 
+/** One targeting expression predicate, e.g. { type: "ASIN_SAME_AS", value: "B0…" }. */
+export interface TargetExpression {
+  type: string;
+  value: string;
+}
+
 export interface Target {
   targetId: string;
   campaignId: string;
@@ -108,6 +114,18 @@ export interface Target {
   state: string;
   bid: number | null;
   expressionType: string | null;
+  /** Parsed expression predicates (resolvedExpression preferred over expression). */
+  expression?: TargetExpression[];
+  raw: unknown;
+}
+
+/** A campaign-level negative product target (e.g. an ASIN_SAME_AS exclusion). */
+export interface NegativeTarget {
+  negativeTargetId: string;
+  campaignId: string;
+  state: string;
+  /** Parsed expression predicates (resolvedExpression preferred over expression). */
+  expression: TargetExpression[];
   raw: unknown;
 }
 
@@ -132,6 +150,11 @@ export interface StructureSnapshot {
   keywords: Keyword[];
   targets: Target[];
   negativeKeywords: NegativeKeyword[];
+  /**
+   * Campaign-level negative product targets. Optional so snapshots assembled
+   * before this read existed remain valid; the gateway always populates it.
+   */
+  negativeTargets?: NegativeTarget[];
 }
 
 /** Internal report request; translated to a Reporting v3 body at the boundary. */
@@ -244,6 +267,18 @@ export interface RemoveNegativeExactAction {
   scope: "campaign" | "ad_group";
 }
 
+/**
+ * Add a campaign-level negative ASIN target — the only way to block
+ * product-page placements for a shopper term that is an ASIN.
+ */
+export interface AddNegativeTargetAction {
+  actionId: string;
+  kind: "add_negative_target";
+  campaignId: string;
+  /** ASIN blocked via an ASIN_SAME_AS expression. */
+  expressionAsin: string;
+}
+
 /** Create a new Sponsored Products campaign (human-approved creation). */
 export interface CreateCampaignAction {
   actionId: string;
@@ -291,6 +326,19 @@ export interface CreateKeywordAction {
   state: "enabled" | "paused";
 }
 
+/** Create an ASIN product target under an ad group created earlier in the same call. */
+export interface CreateTargetAction {
+  actionId: string;
+  kind: "create_target";
+  /** actionId of a create_ad_group action in the same change set. */
+  adGroupActionId: string;
+  /** ASIN targeted via an ASIN_SAME_AS expression. */
+  expressionAsin: string;
+  /** Bid as a string-encoded decimal; omitted targets inherit the ad group default bid. */
+  bid?: string;
+  state: "enabled" | "paused";
+}
+
 export type ChangeAction =
   | UpdateBidAction
   | UpdateAdGroupDefaultBidAction
@@ -298,10 +346,12 @@ export type ChangeAction =
   | UpdateOptimizationRuleAction
   | AddNegativeExactAction
   | RemoveNegativeExactAction
+  | AddNegativeTargetAction
   | CreateCampaignAction
   | CreateAdGroupAction
   | CreateProductAdAction
-  | CreateKeywordAction;
+  | CreateKeywordAction
+  | CreateTargetAction;
 
 /** Immutable, human-approved set of changes to apply. */
 export interface ChangeSet {

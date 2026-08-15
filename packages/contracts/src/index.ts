@@ -1,6 +1,7 @@
 export * from "./common.js";
 export * from "./auth.js";
 export * from "./amazon.js";
+export * from "./asin.js";
 export * from "./books.js";
 export * from "./metrics.js";
 export * from "./recommendations.js";

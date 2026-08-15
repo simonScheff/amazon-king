@@ -1,5 +1,6 @@
 import {
   recommendationChangeActionType,
+  type ChangeActionType,
   type Recommendation,
   type RecommendationType,
 } from "@amazon-king/contracts";
@@ -37,7 +38,11 @@ const advisoryNextSteps: Record<RecommendationType, string> = {
 export function getRecommendationActionDetails(
   recommendation: Recommendation,
 ): RecommendationActionDetails {
-  const actionType = recommendationChangeActionType[recommendation.type];
+  // The shared map is a subset of ChangeActionType; widen so presentation
+  // copy below can also cover action types no recommendation maps to yet
+  // (currently `add_negative_target`).
+  const actionType: ChangeActionType | null =
+    recommendationChangeActionType[recommendation.type];
 
   if (actionType === "update_bid") {
     return {
@@ -70,6 +75,25 @@ export function getRecommendationActionDetails(
         `in campaign ${recommendation.campaignId ?? "—"}.`,
       approvalEffect:
         "Approval creates an immutable draft change set for review. It does not contact Amazon or block the term yet.",
+      nextStep:
+        "In Change center, preview the draft and separately choose “Apply to Amazon.” The app will first re-read the campaign and re-check guardrails.",
+      exclusions: [
+        "No campaign will be created, paused, or closed.",
+        "No keyword, target, or bid will be changed.",
+      ],
+    };
+  }
+
+  if (actionType === "add_negative_target") {
+    return {
+      actionable: true,
+      label: "Draft change",
+      title: "Add one negative ASIN target",
+      summary:
+        `Add “${recommendation.searchTerm ?? "—"}” as a negative ASIN target ` +
+        `in campaign ${recommendation.campaignId ?? "—"}.`,
+      approvalEffect:
+        "Approval creates an immutable draft change set for review. It does not contact Amazon or block the ASIN yet.",
       nextStep:
         "In Change center, preview the draft and separately choose “Apply to Amazon.” The app will first re-read the campaign and re-check guardrails.",
       exclusions: [

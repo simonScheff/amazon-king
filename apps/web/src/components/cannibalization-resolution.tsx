@@ -1,6 +1,7 @@
 import type { Recommendation } from "@amazon-king/contracts";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
+import { isAsin } from "../lib/asin";
 import {
   useCannibalizationResolutionContext,
   useCreateCannibalizationChangeSet,
@@ -86,6 +87,13 @@ export function CannibalizationResolution({
   if (!context.data) return null;
 
   const data = context.data;
+  // ASIN shopper terms are product targets, not keywords: they are blocked
+  // with a campaign-level negative ASIN target instead of a negative exact.
+  const negativeLabel = isAsin(data.searchTerm)
+    ? "negative ASIN target"
+    : "negative exact";
+  const NegativeLabel =
+    negativeLabel.charAt(0).toUpperCase() + negativeLabel.slice(1);
   const detailDays = campaignDetailDays(
     data.evidenceWindow.start,
     data.evidenceWindow.end,
@@ -94,7 +102,7 @@ export function CannibalizationResolution({
   const destination = isNewCampaign
     ? undefined
     : data.campaigns.find((campaign) => campaign.campaignId === destinationId);
-  // Campaigns that will receive the negative exact: every current campaign
+  // Campaigns that will receive the negative: every current campaign
   // when the destination is a new campaign, otherwise all but the destination.
   const negativeTargets = isNewCampaign
     ? data.campaigns
@@ -297,9 +305,11 @@ export function CannibalizationResolution({
                     </span>
                     <span className="block text-xs leading-5 text-zinc-500">
                       Set up a dedicated campaign for “{data.searchTerm}” in the
-                      campaign wizard, prefilled with this term. The negative
-                      exact for every current campaign is drafted with it and
-                      stays locked until the new campaign is live on Amazon.
+                      campaign wizard, prefilled with this term
+                      {isAsin(data.searchTerm) ? " as a product target" : ""}.
+                      The {negativeLabel} for every current campaign is drafted
+                      with it and stays locked until the new campaign is live on
+                      Amazon.
                     </span>
                   </span>
                 </label>
@@ -322,11 +332,11 @@ export function CannibalizationResolution({
                   {isNewCampaign ? (
                     <>
                       <p className="font-medium text-zinc-100">
-                        Route to a new campaign with negative exact
+                        Route to a new campaign with {negativeLabel}
                       </p>
                       <p className="mt-1 text-sm leading-6 text-zinc-300">
                         Create a dedicated campaign for “{data.searchTerm}”,
-                        then add the term as a campaign-level negative exact in
+                        then add the term as a campaign-level {negativeLabel} in
                         every current campaign. The negatives are drafted with
                         the new campaign but can only be applied after it is
                         live on Amazon — the term is never blocked everywhere.
@@ -335,12 +345,12 @@ export function CannibalizationResolution({
                   ) : (
                     <>
                       <p className="font-medium text-zinc-100">
-                        Route to one campaign with negative exact
+                        Route to one campaign with {negativeLabel}
                       </p>
                       <p className="mt-1 text-sm leading-6 text-zinc-300">
-                        Add “{data.searchTerm}” as a campaign-level negative
-                        exact in every other campaign. Those campaigns keep
-                        running for all other shopper queries.
+                        Add “{data.searchTerm}” as a campaign-level{" "}
+                        {negativeLabel} in every other campaign. Those campaigns
+                        keep running for all other shopper queries.
                       </p>
                     </>
                   )}
@@ -457,13 +467,13 @@ export function CannibalizationResolution({
                 <ul className="mt-1 space-y-1 font-medium text-zinc-100">
                   {negativeTargets.map((campaign) => (
                     <li key={campaign.campaignId}>
-                      {campaign.name} · add campaign-level negative exact
+                      {campaign.name} · add campaign-level {negativeLabel}
                     </li>
                   ))}
                 </ul>
               ) : (
                 <p className="mt-1 font-medium text-zinc-100">
-                  Other campaign · add negative exact
+                  Other campaign · add {negativeLabel}
                 </p>
               )}
               {isNewCampaign ? (
@@ -481,7 +491,7 @@ export function CannibalizationResolution({
                   <div>
                     <p className="text-zinc-500">Before</p>
                     <p className="mt-1 text-zinc-300">
-                      No matching negative exact
+                      No matching {negativeLabel}
                     </p>
                     <p className="mt-1 text-xs italic text-zinc-500">
                       Confirm during preview
@@ -489,7 +499,7 @@ export function CannibalizationResolution({
                   </div>
                   <div>
                     <p className="text-zinc-500">After</p>
-                    <p className="mt-1 text-zinc-300">Negative exact enabled</p>
+                    <p className="mt-1 text-zinc-300">{NegativeLabel} enabled</p>
                   </div>
                 </div>
               ) : null}

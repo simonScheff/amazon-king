@@ -3,6 +3,7 @@ import {
   Legend,
   Line,
   LineChart,
+  ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -46,6 +47,23 @@ export function PerformanceTrendChart({
   const hasProfitData =
     showProfit && data.some((point) => point.profit !== null);
 
+  // Shade days where estimated royalties exceed spend. A day band runs from
+  // its own tick to the next day's tick; the final day borrows the previous
+  // interval so it stays visible.
+  const profitableBands: Array<{ x1: string; x2: string }> = [];
+  if (hasRoyaltyData) {
+    data.forEach((point, index) => {
+      if (point.royalty === null || point.royalty <= point.spend) return;
+      const next = data[index + 1];
+      const previous = data[index - 1];
+      if (next) {
+        profitableBands.push({ x1: point.date, x2: next.date });
+      } else if (previous) {
+        profitableBands.push({ x1: previous.date, x2: point.date });
+      }
+    });
+  }
+
   return (
     <div className="h-64" aria-label="Daily performance trend">
       <ResponsiveContainer width="100%" height="100%">
@@ -69,6 +87,16 @@ export function PerformanceTrendChart({
             ]}
           />
           <Legend />
+          {profitableBands.map((band) => (
+            <ReferenceArea
+              key={`${band.x1}-${band.x2}`}
+              x1={band.x1}
+              x2={band.x2}
+              fill="#34d399"
+              fillOpacity={0.08}
+              strokeOpacity={0}
+            />
+          ))}
           {hasProfitData ? <ReferenceLine y={0} stroke="#4b5568" /> : null}
           <Line
             type="monotone"

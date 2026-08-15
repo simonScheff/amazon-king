@@ -146,6 +146,8 @@ export const changeActionTypeSchema = z.enum([
   "create_ad_group",
   "create_product_ad",
   "create_keyword",
+  "create_target",
+  "add_negative_target",
 ]);
 export type ChangeActionType = z.infer<typeof changeActionTypeSchema>;
 

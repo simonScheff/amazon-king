@@ -7,6 +7,7 @@ import type {
   Campaign,
   Keyword,
   NegativeKeyword,
+  NegativeTarget,
   ProductAd,
   Target,
 } from "../types.js";
@@ -87,6 +88,13 @@ const spKeywordSchema = z.looseObject({
   bid: z.number().optional(),
 });
 
+const spExpressionSchema = z.array(
+  z.looseObject({
+    type: z.string(),
+    value: z.string(),
+  }),
+);
+
 const spTargetSchema = z.looseObject({
   targetId: idField,
   campaignId: idField,
@@ -94,6 +102,16 @@ const spTargetSchema = z.looseObject({
   state: z.string(),
   bid: z.number().optional(),
   expressionType: z.string().optional(),
+  expression: spExpressionSchema.optional(),
+  resolvedExpression: spExpressionSchema.optional(),
+});
+
+const spNegativeTargetSchema = z.looseObject({
+  negativeTargetId: idField,
+  campaignId: idField,
+  state: z.string(),
+  expression: spExpressionSchema.optional(),
+  resolvedExpression: spExpressionSchema.optional(),
 });
 
 const spNegativeKeywordSchema = z
@@ -293,6 +311,30 @@ export async function listTargets(
     state: raw.state,
     bid: raw.bid ?? null,
     expressionType: raw.expressionType ?? null,
+    // resolvedExpression is the fully-resolved form Amazon recommends reading.
+    expression: raw.resolvedExpression ?? raw.expression,
+    raw,
+  }));
+}
+
+/** List campaign-level negative product targets (ASIN_SAME_AS exclusions). */
+export async function listNegativeTargets(
+  http: AdsHttpClient,
+  context: AdsRequestContext,
+): Promise<NegativeTarget[]> {
+  const rows = await listAllPages(http, context, {
+    path: "/sp/negativeTargets/list",
+    // The SP v3 negative-targeting endpoint uses this envelope name even
+    // though the resource path and our internal model call them negative targets.
+    key: "negativeTargetingClauses",
+    mediaType: SP_MEDIA_TYPES.negativeTargets,
+    itemSchema: spNegativeTargetSchema,
+  });
+  return rows.map((raw) => ({
+    negativeTargetId: raw.negativeTargetId,
+    campaignId: raw.campaignId,
+    state: raw.state,
+    expression: raw.resolvedExpression ?? raw.expression ?? [],
     raw,
   }));
 }
