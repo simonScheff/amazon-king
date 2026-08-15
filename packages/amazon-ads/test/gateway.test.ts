@@ -73,6 +73,7 @@ describe("gateway.syncCampaignStructure", () => {
       "/sp/campaignNegativeKeywords/list": fixture(
         "sp-campaignNegativeKeywords-list.json",
       ),
+      "/sp/negativeTargets/list": fixture("sp-negativeTargets-list.json"),
     };
     const { gateway } = makeGateway((request) => {
       const path = new URL(request.url).pathname;
@@ -93,6 +94,10 @@ describe("gateway.syncCampaignStructure", () => {
     expect(snapshot.keywords).toHaveLength(2);
     expect(snapshot.targets).toHaveLength(1);
     expect(snapshot.negativeKeywords).toHaveLength(2);
+    expect(snapshot.negativeTargets).toHaveLength(1);
+    expect(snapshot.negativeTargets?.[0]?.expression).toEqual([
+      { type: "ASIN_SAME_AS", value: "B0COMPET01" },
+    ]);
   });
 });
 
@@ -145,12 +150,14 @@ describe("gateway.previewCapabilities", () => {
         "create_ad_group",
         "create_product_ad",
         "create_keyword",
+        "create_target",
         "update_bid",
         "update_ad_group_default_bid",
         "update_campaign_bidding",
         "update_optimization_rule",
         "add_negative_exact",
         "remove_negative_exact",
+        "add_negative_target",
       ],
     });
   });
@@ -279,6 +286,11 @@ describe("gateway.applyActions entity creation", () => {
       }
       if (request.url.endsWith("/sp/keywords")) {
         return jsonResponse(fixture("sp-keywords-create-207.json"), {
+          status: 207,
+        });
+      }
+      if (request.url.endsWith("/sp/targets")) {
+        return jsonResponse(fixture("sp-targets-create-207.json"), {
           status: 207,
         });
       }
@@ -553,5 +565,131 @@ describe("gateway.applyActions entity creation", () => {
       ["k2", "failed", "INVALID_VALUE"],
     ]);
     expect(keywordResults[1].message).toContain("unsupported characters");
+  });
+
+  it("resolves create_target against the ad group created in the same set", async () => {
+    const { gateway, calls } = makeGateway(createHandler());
+    const results = await gateway.applyActions({
+      changeSetId: "cs-create-target",
+      profileId: "1111111111",
+      actions: [
+        {
+          actionId: "c1",
+          kind: "create_campaign",
+          name: "Book One - Manual",
+          dailyBudget: "5.00",
+          targetingType: "MANUAL",
+          startDate: "2024-06-01",
+          state: "enabled",
+        },
+        {
+          actionId: "g1",
+          kind: "create_ad_group",
+          campaignActionId: "c1",
+          name: "Book One - Ad Group",
+          defaultBid: "0.45",
+        },
+        {
+          actionId: "t1",
+          kind: "create_target",
+          adGroupActionId: "g1",
+          expressionAsin: "B0CXYZ1234",
+          bid: "0.50",
+          state: "enabled",
+        },
+      ],
+    });
+    expect(
+      calls.map((call) => [call.method, new URL(call.url).pathname]),
+    ).toEqual([
+      ["POST", "/sp/campaigns"],
+      ["POST", "/sp/adGroups"],
+      ["POST", "/sp/targets"],
+    ]);
+    // The target references the Amazon ids resolved from the parent phases.
+    expect(JSON.parse(calls[2].body as string)).toEqual({
+      targetingClauses: [
+        {
+          campaignId: "4567890123",
+          adGroupId: "3456789012",
+          expression: [{ type: "ASIN_SAME_AS", value: "B0CXYZ1234" }],
+          bid: 0.5,
+          state: "ENABLED",
+        },
+      ],
+    });
+    expect(
+      results.map((r) => [r.actionId, r.status, r.amazonEntityId]),
+    ).toEqual([
+      ["c1", "applied", "4567890123"],
+      ["g1", "applied", "3456789012"],
+      ["t1", "applied", "880123457"],
+    ]);
+  });
+
+  it("fails a create_target orphan with PARENT_FAILED without sending it", async () => {
+    const { gateway, calls } = makeGateway(() => {
+      throw new Error("no Amazon calls expected");
+    });
+    const results = await gateway.applyActions({
+      changeSetId: "cs-orphan-target",
+      profileId: "1111111111",
+      actions: [
+        {
+          actionId: "t1",
+          kind: "create_target",
+          adGroupActionId: "g-missing",
+          expressionAsin: "B0CXYZ1234",
+          state: "enabled",
+        },
+      ],
+    });
+    expect(calls).toHaveLength(0);
+    expect(results).toEqual([
+      {
+        actionId: "t1",
+        status: "failed",
+        code: "PARENT_FAILED",
+        message: "Parent entity was not created in this change set",
+      },
+    ]);
+  });
+
+  it("applies add_negative_target via the negative-targeting resource", async () => {
+    const { gateway, calls } = makeGateway((request) => {
+      if (request.url.endsWith("/sp/negativeTargets")) {
+        return jsonResponse(fixture("sp-negativeTargets-create-207.json"), {
+          status: 207,
+        });
+      }
+      throw new Error(`unexpected call: ${request.url}`);
+    });
+    const results = await gateway.applyActions({
+      changeSetId: "cs-negative-target",
+      profileId: "1111111111",
+      actions: [
+        {
+          actionId: "nt1",
+          kind: "add_negative_target",
+          campaignId: "901234567",
+          expressionAsin: "B0COMPET01",
+        },
+      ],
+    });
+    expect(calls).toHaveLength(1);
+    expect(JSON.parse(calls[0].body as string)).toEqual({
+      negativeTargetingClauses: [
+        {
+          campaignId: "901234567",
+          expression: [{ type: "ASIN_SAME_AS", value: "B0COMPET01" }],
+          state: "ENABLED",
+        },
+      ],
+    });
+    expect(results[0]).toMatchObject({
+      actionId: "nt1",
+      status: "applied",
+      amazonEntityId: "770123456",
+    });
   });
 });

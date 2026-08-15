@@ -10,6 +10,7 @@ import {
   type StructureSnapshot,
 } from "@amazon-king/amazon-ads";
 import {
+  isAsin,
   recommendationChangeActionType,
   type CampaignCreationCreate,
   type CampaignMaxCpc,
@@ -115,27 +116,47 @@ const campaignCreationKeywordStateSchema = z.object({
   state: z.enum(["enabled", "paused"]),
 });
 
-const campaignCreationSpecSchema = z.object({
-  campaign: z.object({
-    name: z.string().min(1),
-    dailyBudget: z.string().min(1),
-    targetingType: z.enum(["AUTO", "MANUAL"]),
-    startDate: z.string().min(1),
-    state: z.enum(["enabled", "paused"]),
-  }),
-  adGroup: z.object({
-    name: z.string().min(1),
-    defaultBid: z.string().min(1),
-  }),
+/** An ASIN product target drafted with a new campaign. */
+const campaignCreationTargetSchema = z.object({
   asin: z.string().min(1),
-  keywords: z.array(campaignCreationKeywordSchema).min(1),
+  bid: z.string().min(1).optional(),
 });
+
+/** Target config as persisted in a create_target action's after_state. */
+const campaignCreationTargetStateSchema = z.object({
+  expressionAsin: z.string().min(1),
+  bid: z.string().min(1).optional(),
+  state: z.enum(["enabled", "paused"]),
+});
+
+const campaignCreationSpecSchema = z
+  .object({
+    campaign: z.object({
+      name: z.string().min(1),
+      dailyBudget: z.string().min(1),
+      targetingType: z.enum(["AUTO", "MANUAL"]),
+      startDate: z.string().min(1),
+      state: z.enum(["enabled", "paused"]),
+    }),
+    adGroup: z.object({
+      name: z.string().min(1),
+      defaultBid: z.string().min(1),
+    }),
+    asin: z.string().min(1),
+    keywords: z.array(campaignCreationKeywordSchema),
+    // Sets persisted before product targets existed carry no `targets` key.
+    targets: z.array(campaignCreationTargetSchema).default([]),
+  })
+  .refine((value) => value.keywords.length + value.targets.length > 0, {
+    message: "Provide at least one keyword or product target",
+  });
 
 const CAMPAIGN_CREATION_TYPES = new Set([
   "create_campaign",
   "create_ad_group",
   "create_product_ad",
   "create_keyword",
+  "create_target",
 ]);
 
 function isCreationActionType(actionType: string): boolean {
@@ -272,10 +293,14 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
           action.actionType === "add_negative_exact" ||
           action.actionType === "remove_negative_exact"
             ? action.actionType
-            : action.actionType === "create_campaign"
-              ? // A new campaign commits a daily budget, not a bid change.
-                "update_budget"
-              : "update_bid",
+            : action.actionType === "add_negative_target"
+              ? // A negative ASIN target excludes spend like a negative exact;
+                // the same protected-term check applies.
+                "add_negative_exact"
+              : action.actionType === "create_campaign"
+                ? // A new campaign commits a daily budget, not a bid change.
+                  "update_budget"
+                : "update_bid",
         targetId: action.targetId ?? action.amazonEntityId,
         campaignId: action.campaignId,
         searchTerm: action.searchTerm,
@@ -475,15 +500,21 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
     };
   }
 
-  /** One campaign-level add_negative_exact spec per campaign for the term. */
+  /**
+   * One campaign-level negative spec per campaign for the term. ASIN terms
+   * (a shopper landed on a product detail page) can only be blocked with a
+   * negative product target; text terms use a negative exact keyword.
+   */
   function cannibalizationNegativeSpecs(
     recommendationId: string,
     searchTerm: string,
     campaigns: readonly structure.CampaignRow[],
   ) {
+    const asinTerm = isAsin(searchTerm);
     return campaigns.map((campaign) => ({
       recommendationId,
-      actionType: "add_negative_exact" as const,
+      actionType: (asinTerm ? "add_negative_target" : "add_negative_exact") as
+        "add_negative_target" | "add_negative_exact",
       campaignId: campaign.id,
       adGroupId: null,
       targetId: null,
@@ -491,16 +522,28 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
       beforeValue: null,
       afterValue: null,
       entityName: campaign.name,
-      beforeState: {
-        scope: "campaign",
-        matchType: "NEGATIVE_EXACT",
-        present: false,
-      },
-      afterState: {
-        scope: "campaign",
-        matchType: "NEGATIVE_EXACT",
-        present: true,
-      },
+      beforeState: asinTerm
+        ? {
+            scope: "campaign",
+            targetType: "ASIN_SAME_AS",
+            present: false,
+          }
+        : {
+            scope: "campaign",
+            matchType: "NEGATIVE_EXACT",
+            present: false,
+          },
+      afterState: asinTerm
+        ? {
+            scope: "campaign",
+            targetType: "ASIN_SAME_AS",
+            present: true,
+          }
+        : {
+            scope: "campaign",
+            matchType: "NEGATIVE_EXACT",
+            present: true,
+          },
     }));
   }
 
@@ -797,6 +840,27 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
   }
 
   /**
+   * Campaign-level negative ASIN targets live only at campaign scope; match on
+   * the parsed ASIN_SAME_AS expression, case-insensitively.
+   */
+  function findNegativeTarget(
+    snapshot: StructureSnapshot,
+    amazonCampaignId: string,
+    asin: string,
+  ) {
+    const needle = asin.trim().toUpperCase();
+    return (snapshot.negativeTargets ?? []).find(
+      (nt) =>
+        nt.campaignId === amazonCampaignId &&
+        nt.expression.some(
+          (entry) =>
+            entry.type === "ASIN_SAME_AS" &&
+            entry.value.trim().toUpperCase() === needle,
+        ),
+    );
+  }
+
+  /**
    * Resolve internal ids to Amazon ids and compare the live state to the
    * stored before snapshot. Throws STALE_BEFORE_STATE on any mismatch.
    */
@@ -1027,6 +1091,44 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
           amazonTargetId: existing?.negativeKeywordId ?? null,
           preSatisfied: existing !== undefined,
         });
+      } else if (action.actionType === "add_negative_target") {
+        if (!snapshot) {
+          throw new ApiError(500, "INTERNAL", "Missing structure snapshot");
+        }
+        if (!action.campaignId || !action.searchTerm) {
+          throw new ApiError(
+            500,
+            "INTERNAL",
+            "Malformed add_negative_target action",
+          );
+        }
+        const campaign = await structure.getCampaign(db, action.campaignId);
+        if (!campaign) {
+          throw conflict(
+            "STALE_BEFORE_STATE",
+            "Campaign no longer exists locally; re-sync before applying",
+          );
+        }
+        const existing = findNegativeTarget(
+          snapshot,
+          campaign.amazonCampaignId,
+          action.searchTerm,
+        );
+        translated.push({
+          action,
+          gatewayAction: {
+            actionId: action.id,
+            kind: "add_negative_target",
+            campaignId: campaign.amazonCampaignId,
+            expressionAsin: action.searchTerm.trim().toUpperCase(),
+          },
+          amazonCampaignId: campaign.amazonCampaignId,
+          amazonAdGroupId: null,
+          // An identical negative already present means the desired end
+          // state is reached; skip resending (idempotent retry safe).
+          amazonTargetId: existing?.negativeTargetId ?? null,
+          preSatisfied: existing !== undefined,
+        });
       } else if (action.actionType === "remove_negative_exact") {
         if (
           !snapshot ||
@@ -1109,12 +1211,15 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
     const keywordActions = actions.filter(
       (a) => a.actionType === "create_keyword",
     );
+    const targetActions = actions.filter(
+      (a) => a.actionType === "create_target",
+    );
     if (
       !campaignAction ||
       !adGroupAction ||
       !productAdAction ||
-      keywordActions.length === 0 ||
-      actions.length !== keywordActions.length + 3
+      (keywordActions.length === 0 && targetActions.length === 0) ||
+      actions.length !== keywordActions.length + targetActions.length + 3
     ) {
       throw new ApiError(
         500,
@@ -1131,6 +1236,13 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
         return {
           text: state.keywordText,
           matchType: state.matchType,
+          bid: state.bid,
+        };
+      }),
+      targets: targetActions.map((a) => {
+        const state = stateRecord(a.afterState);
+        return {
+          asin: state.expressionAsin,
           bid: state.bid,
         };
       }),
@@ -1228,6 +1340,38 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
           state: spec.campaign.state,
         },
         amazonTargetId: existingKeyword?.keywordId ?? null,
+        amazonCampaignId: existingCampaign?.campaignId ?? null,
+        amazonAdGroupId: existingAdGroup?.adGroupId ?? null,
+        preSatisfied,
+      });
+    }
+    for (const action of targetActions) {
+      const targetState = campaignCreationTargetStateSchema.parse(
+        stateRecord(action.afterState),
+      );
+      const expressionAsin = targetState.expressionAsin.trim().toUpperCase();
+      const existingTarget = existingAdGroup
+        ? snapshot.targets.find(
+            (t) =>
+              t.adGroupId === existingAdGroup.adGroupId &&
+              (t.expression ?? []).some(
+                (entry) =>
+                  entry.type === "ASIN_SAME_AS" &&
+                  entry.value.trim().toUpperCase() === expressionAsin,
+              ),
+          )
+        : undefined;
+      translated.push({
+        action,
+        gatewayAction: {
+          actionId: action.id,
+          kind: "create_target",
+          adGroupActionId: adGroupAction.id,
+          expressionAsin,
+          ...(targetState.bid !== undefined ? { bid: targetState.bid } : {}),
+          state: spec.campaign.state,
+        },
+        amazonTargetId: existingTarget?.targetId ?? null,
         amazonCampaignId: existingCampaign?.campaignId ?? null,
         amazonAdGroupId: existingAdGroup?.adGroupId ?? null,
         preSatisfied,
@@ -1439,8 +1583,11 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
                   : "ALREADY_PRESENT",
             },
             amazonEntityId:
-              t.action.actionType === "add_negative_exact"
-                ? null
+              t.action.actionType === "add_negative_exact" ||
+              t.action.actionType === "add_negative_target"
+                ? // A pre-satisfied negative existed before this set — recording
+                  // its id would make it look removable by rollback.
+                  null
                 : t.amazonTargetId,
           });
           continue;
@@ -1532,9 +1679,46 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
                   )
                 : t.action.actionType === "create_product_ad"
                   ? verification.ads.some((item) => item.adId === entityId)
-                  : verification.keywords.some(
-                      (item) => item.keywordId === entityId,
-                    ));
+                  : t.action.actionType === "create_target"
+                    ? verification.targets.some((item) => {
+                        if (item.targetId !== entityId) return false;
+                        // When the snapshot carries a parsed expression, the
+                        // created target must also point at the intended ASIN.
+                        const asin = stateRecord(
+                          t.action.afterState,
+                        ).expressionAsin;
+                        const expression = item.expression ?? [];
+                        return (
+                          typeof asin !== "string" ||
+                          expression.length === 0 ||
+                          expression.some(
+                            (entry) =>
+                              entry.type === "ASIN_SAME_AS" &&
+                              entry.value.trim().toUpperCase() ===
+                                asin.trim().toUpperCase(),
+                          )
+                        );
+                      })
+                    : verification.keywords.some(
+                        (item) => item.keywordId === entityId,
+                      ));
+        } else if (
+          t.action.actionType === "add_negative_target" &&
+          t.amazonCampaignId &&
+          verification
+        ) {
+          const negative = findNegativeTarget(
+            verification,
+            t.amazonCampaignId,
+            t.action.searchTerm ?? "",
+          );
+          verified = negative !== undefined;
+          if (negative && !t.preSatisfied) {
+            await changes.recordChangeActionResult(db, t.action.id, {
+              status: "applied",
+              amazonEntityId: negative.negativeTargetId,
+            });
+          }
         } else if (
           t.action.actionType === "remove_negative_exact" &&
           t.amazonTargetId &&
@@ -1994,6 +2178,7 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
           adGroup: input.adGroup,
           asin: marketplace.asin,
           keywords: input.keywords,
+          targets: input.targets ?? [],
         };
         const specs: changes.ChangeActionInsert[] = [
           {
@@ -2032,6 +2217,20 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
             },
             fingerprint: "",
           })),
+          ...(input.targets ?? []).map(
+            (target): changes.ChangeActionInsert => ({
+              actionType: "create_target",
+              searchTerm: target.asin,
+              afterValue: target.bid ?? null,
+              entityName: target.asin,
+              afterState: {
+                expressionAsin: target.asin.toUpperCase(),
+                ...(target.bid !== undefined ? { bid: target.bid } : {}),
+                state: input.campaign.state,
+              },
+              fingerprint: "",
+            }),
+          ),
         ];
         const setFingerprint = buildChangeSetFingerprint({
           profileId: profile.id,

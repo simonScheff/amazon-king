@@ -311,4 +311,163 @@ describe("CampaignNewPage", () => {
     });
     expect(campaignCreationCreateSchema.safeParse(payload).success).toBe(true);
   });
+
+  it("prefills an ASIN cannibalization term as a product target, not a keyword", () => {
+    mocks.search = {
+      recommendationId: "rec-1",
+      searchTerm: "b0crhvct1t",
+      country: "US",
+    };
+    render(<CampaignNewPage />);
+
+    // The banner names the negative ASIN target drafted with the campaign.
+    expect(screen.getByText(/negative ASIN target/)).toBeInTheDocument();
+
+    expect(screen.getByLabelText("United States market")).toBeChecked();
+    next();
+
+    // Campaign name and manual targeting prefill from the term as before.
+    expect(screen.getByLabelText("Campaign name")).toHaveValue("b0crhvct1t");
+    expect(screen.getByLabelText("Targeting type")).toHaveValue("MANUAL");
+    fireEvent.change(screen.getByLabelText("Daily budget"), {
+      target: { value: "10" },
+    });
+    next();
+
+    fillAdGroupStep();
+    next();
+
+    fireEvent.change(screen.getByLabelText("Book"), {
+      target: { value: "book-1" },
+    });
+    next();
+
+    // The term seeds a product target row (uppercased); keywords stay empty.
+    expect(screen.getByLabelText("Product target 1 ASIN")).toHaveValue(
+      "B0CRHVCT1T",
+    );
+    expect(screen.getByLabelText("Keyword 1 text")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
+    next();
+
+    // Review lists the product target with the ad group default bid.
+    expect(screen.getByText("Product targets:")).toBeInTheDocument();
+    expect(
+      screen.getByText(/B0CRHVCT1T · bid ad group default/),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create draft change sets" }),
+    );
+
+    expect(mocks.mutate).toHaveBeenCalledTimes(1);
+    const [payload] = mocks.mutate.mock.calls[0]!;
+    expect(payload).toMatchObject({
+      keywords: [],
+      targets: [{ asin: "B0CRHVCT1T", bid: "0.50" }],
+      cannibalization: { recommendationId: "rec-1" },
+    });
+    expect(campaignCreationCreateSchema.safeParse(payload).success).toBe(true);
+  });
+
+  it("adds, edits, and removes product target rows with inline ASIN validation", () => {
+    render(<CampaignNewPage />);
+
+    fireEvent.click(screen.getByLabelText("United States market"));
+    next();
+    fillCampaignStep();
+    next();
+    fillAdGroupStep();
+    next();
+    fireEvent.change(screen.getByLabelText("Book"), {
+      target: { value: "book-1" },
+    });
+    next();
+
+    // No target rows initially; empty keywords alone do not unlock Next.
+    expect(screen.queryAllByLabelText(/Product target \d+ ASIN/)).toHaveLength(
+      0,
+    );
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add product target" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add product target" }));
+    expect(screen.getAllByLabelText(/Product target \d+ ASIN/)).toHaveLength(2);
+
+    // An invalid ASIN shows an inline error and does not unlock Next.
+    fireEvent.change(screen.getByLabelText("Product target 1 ASIN"), {
+      target: { value: "not-an-asin" },
+    });
+    expect(
+      screen.getByText(/Expected a 10-character ASIN/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove product target 2" }),
+    );
+    expect(screen.getAllByLabelText(/Product target \d+ ASIN/)).toHaveLength(1);
+
+    // Lowercase, whitespace-padded ASINs are accepted and uppercased on submit.
+    fireEvent.change(screen.getByLabelText("Product target 1 ASIN"), {
+      target: { value: "  b0crhvct1t " },
+    });
+    fireEvent.change(screen.getByLabelText("Product target 1 bid"), {
+      target: { value: "0.75" },
+    });
+    expect(
+      screen.queryByText(/Expected a 10-character ASIN/),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
+    next();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create draft change sets" }),
+    );
+
+    expect(mocks.mutate).toHaveBeenCalledTimes(1);
+    const [payload] = mocks.mutate.mock.calls[0]!;
+    expect(payload).toMatchObject({
+      keywords: [],
+      targets: [{ asin: "B0CRHVCT1T", bid: "0.75" }],
+    });
+    expect(campaignCreationCreateSchema.safeParse(payload).success).toBe(true);
+  });
+
+  it("submits keywords and product targets together in one payload", () => {
+    render(<CampaignNewPage />);
+
+    fireEvent.click(screen.getByLabelText("United States market"));
+    next();
+    fillCampaignStep();
+    next();
+    fillAdGroupStep();
+    next();
+    fireEvent.change(screen.getByLabelText("Book"), {
+      target: { value: "book-1" },
+    });
+    next();
+
+    fireEvent.change(screen.getByLabelText("Keyword 1 text"), {
+      target: { value: "coloring book" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add product target" }));
+    fireEvent.change(screen.getByLabelText("Product target 1 ASIN"), {
+      target: { value: "B0DE000001" },
+    });
+    next();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create draft change sets" }),
+    );
+
+    expect(mocks.mutate).toHaveBeenCalledTimes(1);
+    const [payload] = mocks.mutate.mock.calls[0]!;
+    expect(payload).toMatchObject({
+      keywords: [{ text: "coloring book", matchType: "EXACT", bid: "0.50" }],
+      // A target without a bid inherits the ad group default bid.
+      targets: [{ asin: "B0DE000001", bid: "0.50" }],
+    });
+    expect(campaignCreationCreateSchema.safeParse(payload).success).toBe(true);
+  });
 });

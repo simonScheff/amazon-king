@@ -499,7 +499,9 @@ export function CannibalizationResolution({
                   </div>
                   <div>
                     <p className="text-zinc-500">After</p>
-                    <p className="mt-1 text-zinc-300">{NegativeLabel} enabled</p>
+                    <p className="mt-1 text-zinc-300">
+                      {NegativeLabel} enabled
+                    </p>
                   </div>
                 </div>
               ) : null}

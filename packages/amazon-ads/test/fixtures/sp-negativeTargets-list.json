@@ -1,0 +1,12 @@
+{
+  "totalResults": 1,
+  "negativeTargetingClauses": [
+    {
+      "negativeTargetId": 770123456,
+      "campaignId": 901234567,
+      "state": "ENABLED",
+      "expression": [{ "type": "ASIN_SAME_AS", "value": "B0COMPET01" }],
+      "resolvedExpression": [{ "type": "ASIN_SAME_AS", "value": "B0COMPET01" }]
+    }
+  ]
+}

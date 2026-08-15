@@ -21,6 +21,69 @@ interface PerformancePoint {
   estimatedAdProfit?: string | null;
 }
 
+interface TrendPoint {
+  date: string;
+  spend: number;
+  sales: number;
+  royalty: number | null;
+  profit: number | null;
+}
+
+function TrendTooltip({
+  active,
+  payload,
+  label,
+  currency,
+}: {
+  active?: boolean;
+  payload?: ReadonlyArray<{ payload?: TrendPoint }>;
+  label?: string | number;
+  currency: string;
+}) {
+  const point = payload?.[0]?.payload;
+  if (!active || !point) {
+    return null;
+  }
+  const rows: Array<{ name: string; value: number; color: string }> = [
+    { name: "Spend", value: point.spend, color: "#f59e0b" },
+    { name: "Attributed sales", value: point.sales, color: "#a78bfa" },
+  ];
+  if (point.royalty !== null) {
+    rows.push({
+      name: "Estimated royalties",
+      value: point.royalty,
+      color: "#34d399",
+    });
+  }
+  if (point.profit !== null) {
+    rows.push({
+      name: "Estimated ad profit",
+      value: point.profit,
+      color: point.profit >= 0 ? "#34d399" : "#f87171",
+    });
+  }
+  return (
+    <div
+      style={{
+        backgroundColor: "#1a2030",
+        border: "1px solid #323a4e",
+        borderRadius: 12,
+        boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+        color: "#e3e6ee",
+        fontSize: 12,
+        padding: "8px 12px",
+      }}
+    >
+      <p style={{ margin: 0, marginBottom: 4 }}>{label}</p>
+      {rows.map((row) => (
+        <p key={row.name} style={{ margin: 0, color: row.color }}>
+          {row.name}: {formatMoney(row.value.toFixed(2), currency)}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 export function PerformanceTrendChart({
   daily,
   currency,
@@ -34,15 +97,25 @@ export function PerformanceTrendChart({
     return <EmptyState>No daily trend data available yet.</EmptyState>;
   }
 
-  const data = daily.map((point) => ({
-    date: point.date,
-    spend: Number(point.cost),
-    sales: Number(point.sales),
-    royalty:
-      point.estimatedRoyalty === null ? null : Number(point.estimatedRoyalty),
-    profit:
-      point.estimatedAdProfit == null ? null : Number(point.estimatedAdProfit),
-  }));
+  const data: TrendPoint[] = daily.map((point) => {
+    const royalty =
+      point.estimatedRoyalty === null ? null : Number(point.estimatedRoyalty);
+    const spend = Number(point.cost);
+    return {
+      date: point.date,
+      spend,
+      sales: Number(point.sales),
+      royalty,
+      // The dashboard summary omits per-day profit; derive it (royalty −
+      // spend) so the tooltip can show it without an API change.
+      profit:
+        point.estimatedAdProfit == null
+          ? royalty === null
+            ? null
+            : royalty - spend
+          : Number(point.estimatedAdProfit),
+    };
+  });
   const hasRoyaltyData = data.some((point) => point.royalty !== null);
   const hasProfitData =
     showProfit && data.some((point) => point.profit !== null);
@@ -71,21 +144,7 @@ export function PerformanceTrendChart({
           <CartesianGrid stroke="#242a3a" strokeDasharray="3 3" />
           <XAxis dataKey="date" stroke="#7b8496" fontSize={12} />
           <YAxis stroke="#7b8496" fontSize={12} />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: "#1a2030",
-              border: "1px solid #323a4e",
-              borderRadius: 12,
-              boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
-              color: "#e3e6ee",
-              fontSize: 12,
-            }}
-            formatter={(value) => [
-              typeof value === "number"
-                ? formatMoney(value.toFixed(2), currency)
-                : String(value),
-            ]}
-          />
+          <Tooltip content={<TrendTooltip currency={currency} />} />
           <Legend />
           {profitableBands.map((band) => (
             <ReferenceArea

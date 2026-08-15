@@ -549,8 +549,8 @@ export function CampaignNewPage() {
                 </p>
                 <p className="mt-1 text-xs leading-5 text-zinc-500">
                   Product targets show the book on those products&apos; detail
-                  pages instead of matching shopper queries. ASINs start with
-                  B0 and are 10 characters; bids work like keyword bids.
+                  pages instead of matching shopper queries. ASINs start with B0
+                  and are 10 characters; bids work like keyword bids.
                 </p>
                 {targets.map((row, index) => {
                   const asinInvalid =
@@ -667,6 +667,21 @@ export function CampaignNewPage() {
                         ))}
                       </ul>
                     </div>
+                    {targets.some((row) => row.asin.trim() !== "") ? (
+                      <div>
+                        <span className="text-zinc-500">Product targets: </span>
+                        <ul className="mt-1 list-inside list-disc">
+                          {targets
+                            .filter((row) => row.asin.trim() !== "")
+                            .map((row) => (
+                              <li key={row.id}>
+                                {row.asin.trim().toUpperCase()} · bid{" "}
+                                {row.bid.trim() || "ad group default"}
+                              </li>
+                            ))}
+                        </ul>
+                      </div>
+                    ) : null}
                   </CardBody>
                 </Card>
               ))}

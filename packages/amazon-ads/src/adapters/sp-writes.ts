@@ -4,10 +4,12 @@ import type { AdsHttpClient, AdsRequestContext } from "../http.js";
 import type {
   ActionResult,
   AddNegativeExactAction,
+  AddNegativeTargetAction,
   CreateAdGroupAction,
   CreateCampaignAction,
   CreateKeywordAction,
   CreateProductAdAction,
+  CreateTargetAction,
   RemoveNegativeExactAction,
   UpdateAdGroupDefaultBidAction,
   UpdateBidAction,
@@ -162,6 +164,12 @@ export interface ResolvedCreateKeywordAction extends CreateKeywordAction {
   resolvedAdGroupId: string;
 }
 
+/** A create_target action whose parent ids have been resolved. */
+export interface ResolvedCreateTargetAction extends CreateTargetAction {
+  resolvedCampaignId: string;
+  resolvedAdGroupId: string;
+}
+
 /** POST /sp/campaigns body for campaign creation. */
 export function buildCampaignCreateBody(
   actions: CreateCampaignAction[],
@@ -171,7 +179,9 @@ export function buildCampaignCreateBody(
       name: action.name,
       targetingType: action.targetingType,
       state: asAmazonState(action.state),
-      dailyBudget: Number(action.dailyBudget),
+      // SP v3 create takes a budget object; a bare `dailyBudget` field is
+      // rejected with "Value null at 'campaigns.N.member.budget'".
+      budget: { budget: Number(action.dailyBudget), budgetType: "DAILY" },
       startDate: action.startDate,
     })),
   };
@@ -221,6 +231,35 @@ export function buildKeywordCreateBody(
   };
 }
 
+/** POST /sp/targets body for ASIN product-target creation. */
+export function buildTargetCreateBody(
+  actions: ResolvedCreateTargetAction[],
+): Record<string, unknown> {
+  return {
+    targetingClauses: actions.map((action) => ({
+      campaignId: asSpV3Id(action.resolvedCampaignId),
+      adGroupId: asSpV3Id(action.resolvedAdGroupId),
+      expression: [{ type: "ASIN_SAME_AS", value: action.expressionAsin }],
+      // Without a bid the target inherits the ad group default bid.
+      ...(action.bid !== undefined ? { bid: Number(action.bid) } : {}),
+      state: asAmazonState(action.state),
+    })),
+  };
+}
+
+/** POST /sp/negativeTargets body for campaign-level negative ASIN targets. */
+export function buildNegativeTargetCreateBody(
+  actions: AddNegativeTargetAction[],
+): Record<string, unknown> {
+  return {
+    negativeTargetingClauses: actions.map((action) => ({
+      campaignId: asSpV3Id(action.campaignId),
+      expression: [{ type: "ASIN_SAME_AS", value: action.expressionAsin }],
+      state: "ENABLED",
+    })),
+  };
+}
+
 const writeResultItemSchema = z.looseObject({
   code: z.string().optional(),
   errorCode: z.string().optional(),
@@ -229,6 +268,7 @@ const writeResultItemSchema = z.looseObject({
   keywordId: z.union([z.number(), z.string()]).optional(),
   negativeKeywordId: z.union([z.number(), z.string()]).optional(),
   campaignNegativeKeywordId: z.union([z.number(), z.string()]).optional(),
+  negativeTargetId: z.union([z.number(), z.string()]).optional(),
   targetId: z.union([z.number(), z.string()]).optional(),
   adId: z.union([z.number(), z.string()]).optional(),
   adGroupId: z.union([z.number(), z.string()]).optional(),
@@ -258,6 +298,9 @@ const campaignNegativeKeywordWriteResponseSchema = z.looseObject({
 
 const targetWriteResponseSchema = z.looseObject({
   targetingClauses: writeResultCollectionSchema,
+});
+const negativeTargetWriteResponseSchema = z.looseObject({
+  negativeTargetingClauses: writeResultCollectionSchema,
 });
 const adGroupWriteResponseSchema = z.looseObject({
   adGroups: writeResultCollectionSchema,
@@ -319,6 +362,7 @@ export function mapWriteResults(
       item.keywordId ??
       item.negativeKeywordId ??
       item.campaignNegativeKeywordId ??
+      item.negativeTargetId ??
       item.targetId ??
       item.adId ??
       item.adGroupId ??
@@ -678,5 +722,60 @@ export async function createKeywords(
       "POST /sp/keywords",
     );
     return mapWriteResults(batch, flattenWriteResults(data.keywords));
+  });
+}
+
+/** POST /sp/targets — create ASIN product targets, returning per-item results. */
+export async function createTargets(
+  http: AdsHttpClient,
+  context: AdsRequestContext,
+  actions: ResolvedCreateTargetAction[],
+): Promise<ActionResult[]> {
+  if (actions.length === 0) {
+    return [];
+  }
+  return inBatches(actions, async (batch) => {
+    const response = await http.request({
+      method: "POST",
+      path: "/sp/targets",
+      context,
+      mediaType: SP_MEDIA_TYPES.targets,
+      body: buildTargetCreateBody(batch),
+    });
+    const data = parseWith(
+      targetWriteResponseSchema,
+      response.data,
+      "POST /sp/targets",
+    );
+    return mapWriteResults(batch, flattenWriteResults(data.targetingClauses));
+  });
+}
+
+/** POST /sp/negativeTargets — create campaign-level negative ASIN targets. */
+export async function createNegativeTargets(
+  http: AdsHttpClient,
+  context: AdsRequestContext,
+  actions: AddNegativeTargetAction[],
+): Promise<ActionResult[]> {
+  if (actions.length === 0) {
+    return [];
+  }
+  return inBatches(actions, async (batch) => {
+    const response = await http.request({
+      method: "POST",
+      path: "/sp/negativeTargets",
+      context,
+      mediaType: SP_MEDIA_TYPES.negativeTargets,
+      body: buildNegativeTargetCreateBody(batch),
+    });
+    const data = parseWith(
+      negativeTargetWriteResponseSchema,
+      response.data,
+      "POST /sp/negativeTargets",
+    );
+    return mapWriteResults(
+      batch,
+      flattenWriteResults(data.negativeTargetingClauses),
+    );
   });
 }

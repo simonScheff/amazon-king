@@ -128,6 +128,31 @@ describe("POST /api/campaign-creation-change-sets", () => {
     );
   });
 
+  it("accepts a targets-only payload", async () => {
+    const { changes } = await start();
+
+    const response = await app!.inject({
+      method: "POST",
+      url: "/api/campaign-creation-change-sets",
+      headers: { "x-csrf-token": "csrf", "user-agent": "vitest" },
+      payload: {
+        ...VALID_BODY,
+        keywords: [],
+        targets: [{ asin: "B0ABCDEF12", bid: "0.50" }],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(changes.createCampaignCreationChangeSets).toHaveBeenCalledWith(
+      AUTH,
+      expect.objectContaining({
+        keywords: [],
+        targets: [{ asin: "B0ABCDEF12", bid: "0.50" }],
+      }),
+      expect.anything(),
+    );
+  });
+
   it("rejects an invalid body with 400", async () => {
     const { changes } = await start();
 

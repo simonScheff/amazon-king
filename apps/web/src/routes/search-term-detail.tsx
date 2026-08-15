@@ -6,7 +6,7 @@ import {
   useSearch,
 } from "@tanstack/react-router";
 import type { SearchTermCampaignRow } from "@amazon-king/contracts";
-import { useSearchTerm } from "../api/endpoints";
+import { useProfiles, useSearchTerm } from "../api/endpoints";
 import { KpiCard } from "../components/kpi-card";
 import { AmazonProductLink } from "../components/amazon-product-link";
 import { ProfitabilityResult } from "../components/profitability-result";
@@ -28,7 +28,7 @@ import {
   formatMoney,
 } from "../lib/format";
 import { compareNullable, nextSort, type Sort } from "../lib/sorting";
-import { countryNameForCode } from "../lib/marketplaces";
+import { countryNameForCode, marketplaceOptions } from "../lib/marketplaces";
 
 const DAY_OPTIONS = [7, 14, 30, 60] as const;
 const DEFAULT_DAYS = 7;
@@ -93,6 +93,7 @@ export function SearchTermDetailPage() {
   const book = search.book;
   const navigate = useNavigate();
   const detail = useSearchTerm(term, days, book, search.country);
+  const profiles = useProfiles();
   const [sort, setSort] = useState<Sort<SortKey>>({
     key: "cost",
     direction: "desc",
@@ -120,6 +121,13 @@ export function SearchTermDetailPage() {
       sortValue(b, sort.key),
       sort.direction,
     ),
+  );
+  // Markets the term can be copied to: every enabled market except the one
+  // currently viewed. Picking one opens the campaign wizard prefilled with
+  // this term — as an exact keyword, or as a product target when the term is
+  // an ASIN (the wizard's prefill decides).
+  const copyTargets = marketplaceOptions(profiles.data ?? []).filter(
+    (option) => option.countryCode !== data.countryCode,
   );
 
   return (
@@ -169,6 +177,32 @@ export function SearchTermDetailPage() {
               ))}
             </Select>
           </label>
+          {copyTargets.length > 0 ? (
+            <label className="flex items-center gap-2 text-sm text-zinc-400">
+              <span>Copy to market</span>
+              <Select
+                aria-label="Copy to market"
+                value=""
+                onChange={(event) => {
+                  const country = event.currentTarget.value;
+                  if (country === "") return;
+                  void navigate({
+                    to: "/campaigns/new",
+                    search: { searchTerm: data.searchTerm, country },
+                  });
+                }}
+              >
+                <option value="" disabled>
+                  Choose…
+                </option>
+                {copyTargets.map((option) => (
+                  <option key={option.countryCode} value={option.countryCode}>
+                    {option.countryName} ({option.countryCode})
+                  </option>
+                ))}
+              </Select>
+            </label>
+          ) : null}
           <div className="flex items-center gap-3">
             <span className="text-sm text-zinc-400">Date range</span>
             <div role="group" aria-label="Date range" className="flex gap-1">

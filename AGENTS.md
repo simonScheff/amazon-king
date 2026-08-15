@@ -145,19 +145,23 @@ or real DB).
 `apps/api` (`@amazon-king/api`) is implemented: Fastify 5 + @fastify/cookie,
 cors, rate-limit. All §11 routes plus the frontend's contract extensions
 (`GET /api/change-sets`, cannibalization comparison + campaign-level
-negative-exact draft creation, `csrfToken` on the session response, dashboard
+negative-exact/negative-target draft creation, `csrfToken` on the session
+response, dashboard
 `daily` series + `writesDisabled`, and the cross-campaign search-term
 screens: `GET /api/search-terms` + `GET /api/search-terms/:term`), and
 `POST /api/campaign-creation-change-sets` (human-approved campaign creation:
 one `campaign_creation` change set per profile holding create_campaign →
-create_ad_group → create_product_ad/create_keyword actions; apply resolves the
+create_ad_group → create_product_ad/create_keyword/create_target actions
+(product targets are ASINs via `ASIN_SAME_AS` expressions, bid optional);
+apply resolves the
 creation chain, treats an existing same-name campaign as already satisfied,
 verifies created ids against a fresh structure read, then enqueues a
 structure_sync; creation sets are not rollbackable). When the payload carries
 `cannibalization.recommendationId`, the service additionally validates the
 finding (it must cover the conflict's profile) and drafts one
 `recommendation`-kind change set adding the term as a campaign-level negative
-exact in every conflicting campaign, with `metadata.dependsOnChangeSetId`
+exact keyword — or a negative ASIN target when the term is an ASIN — in every
+conflicting campaign, with `metadata.dependsOnChangeSetId`
 pointing at the creation set; `applyLoadedSet` rejects such a set with
 `DEPENDENCY_NOT_APPLIED` until the referenced set is `applied`, so the term is
 never blocked in all campaigns at once. Passwordless email login (magic link is **logged in
@@ -169,7 +173,8 @@ before code exchange, refresh tokens envelope-encrypted via
 guarded write flow in `src/services/changes.ts` (fingerprint-idempotent create,
 preview → re-read Amazon + before-state compare → guardrails → per-item apply →
 verify; rollback is a compensating action, including verified app-created
-negative exact keywords). Route handlers are thin wrappers
+negative exact keywords; negative ASIN targets are not rollbackable). Route
+handlers are thin wrappers
 over injectable services (`src/services/types.js`); tests use the SQL-matching
 in-memory `FakeDb` (`src/test/fake-db.ts`). Commands: `dev` (`tsx watch
 src/index.ts`), `start`, `typecheck`, `test`.

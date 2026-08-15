@@ -1,0 +1,14 @@
+{
+  "targetingClauses": [
+    {
+      "targetId": 880123457,
+      "code": "SUCCESS",
+      "index": 0
+    },
+    {
+      "code": "INVALID_VALUE",
+      "index": 1,
+      "message": "The expression ASIN is not targetable in this marketplace"
+    }
+  ]
+}

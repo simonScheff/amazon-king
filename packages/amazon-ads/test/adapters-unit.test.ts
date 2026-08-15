@@ -11,6 +11,7 @@ import {
   listCampaigns,
   listKeywords,
   listNegativeKeywords,
+  listNegativeTargets,
   listProductAds,
   listTargets,
 } from "../src/adapters/sp-campaigns.js";
@@ -24,9 +25,13 @@ import {
   buildKeywordBidUpdateBody,
   buildKeywordCreateBody,
   buildNegativeKeywordCreateBody,
+  buildNegativeTargetCreateBody,
   buildOptimizationRuleUpdateBody,
   buildProductAdCreateBody,
   buildTargetBidUpdateBody,
+  buildTargetCreateBody,
+  createNegativeTargets,
+  createTargets,
   deleteCampaignNegativeKeywords,
   disableOptimizationRules,
   updateKeywordBids,
@@ -104,6 +109,12 @@ describe("SP list pagination", () => {
       listNegativeKeywords,
       "negativeKeywords",
       "application/vnd.spnegativeKeyword.v3+json",
+    ],
+    [
+      "negative targets",
+      listNegativeTargets,
+      "negativeTargetingClauses",
+      "application/vnd.spNegativeTargetingClause.v3+json",
     ],
   ] as const)(
     "sends the required SP v3 media type for %s",
@@ -351,7 +362,7 @@ describe("SP create request bodies", () => {
           name: "Book One - Auto",
           targetingType: "AUTO",
           state: "PAUSED",
-          dailyBudget: 5,
+          budget: { budget: 5, budgetType: "DAILY" },
           startDate: "2024-06-01",
         },
       ],
@@ -431,6 +442,70 @@ describe("SP create request bodies", () => {
           matchType: "EXACT",
           bid: 0.6,
           state: "PAUSED",
+        },
+      ],
+    });
+  });
+
+  it("builds the SP v3 target create body with an ASIN_SAME_AS expression", () => {
+    expect(
+      buildTargetCreateBody([
+        {
+          actionId: "t1",
+          kind: "create_target",
+          adGroupActionId: "g1",
+          expressionAsin: "B0CXYZ1234",
+          bid: "0.50",
+          state: "enabled",
+          resolvedCampaignId: "4567890123",
+          resolvedAdGroupId: "3456789012",
+        },
+        {
+          actionId: "t2",
+          kind: "create_target",
+          adGroupActionId: "g1",
+          expressionAsin: "B0ASIN0001",
+          state: "paused",
+          resolvedCampaignId: "4567890123",
+          resolvedAdGroupId: "3456789012",
+        },
+      ]),
+    ).toEqual({
+      targetingClauses: [
+        {
+          campaignId: "4567890123",
+          adGroupId: "3456789012",
+          expression: [{ type: "ASIN_SAME_AS", value: "B0CXYZ1234" }],
+          bid: 0.5,
+          state: "ENABLED",
+        },
+        {
+          campaignId: "4567890123",
+          adGroupId: "3456789012",
+          expression: [{ type: "ASIN_SAME_AS", value: "B0ASIN0001" }],
+          // No bid: the target inherits the ad group default bid.
+          state: "PAUSED",
+        },
+      ],
+    });
+  });
+
+  it("builds the SP v3 negative-target create body at campaign level", () => {
+    expect(
+      buildNegativeTargetCreateBody([
+        {
+          actionId: "nt1",
+          kind: "add_negative_target",
+          campaignId: "901234567",
+          expressionAsin: "B0COMPET01",
+        },
+      ]),
+    ).toEqual({
+      negativeTargetingClauses: [
+        {
+          campaignId: "901234567",
+          expression: [{ type: "ASIN_SAME_AS", value: "B0COMPET01" }],
+          state: "ENABLED",
         },
       ],
     });
@@ -656,5 +731,135 @@ describe("SP write request bodies", () => {
       ],
     });
     expect(results[0]?.status).toBe("applied");
+  });
+});
+
+describe("SP target and negative-target reads", () => {
+  it("parses target expressions, preferring resolvedExpression", async () => {
+    const { http } = makeHttp({
+      handler: () => jsonResponse(fixture("sp-targets-list.json")),
+    });
+    const targets = await listTargets(http, TEST_CONTEXT);
+    expect(targets[0].expression).toEqual([
+      { type: "ASIN_SAME_AS", value: "B0ASIN0001" },
+    ]);
+
+    // resolvedExpression wins when both forms are present and differ.
+    const page = fixture("sp-targets-list.json") as {
+      targetingClauses: Array<Record<string, unknown>>;
+    };
+    page.targetingClauses[0].resolvedExpression = [
+      { type: "ASIN_SAME_AS", value: "B0RESOLVED1" },
+    ];
+    const { http: resolvedHttp } = makeHttp({
+      handler: () => jsonResponse(page),
+    });
+    const resolvedTargets = await listTargets(resolvedHttp, TEST_CONTEXT);
+    expect(resolvedTargets[0].expression).toEqual([
+      { type: "ASIN_SAME_AS", value: "B0RESOLVED1" },
+    ]);
+  });
+
+  it("parses campaign-level negative targets with their ASIN expression", async () => {
+    const { http, calls } = makeHttp({
+      handler: () => jsonResponse(fixture("sp-negativeTargets-list.json")),
+    });
+    const negativeTargets = await listNegativeTargets(http, TEST_CONTEXT);
+    expect(calls[0].url).toContain("/sp/negativeTargets/list");
+    expect(negativeTargets).toHaveLength(1);
+    expect(negativeTargets[0]).toMatchObject({
+      negativeTargetId: "770123456",
+      campaignId: "901234567",
+      state: "ENABLED",
+      expression: [{ type: "ASIN_SAME_AS", value: "B0COMPET01" }],
+    });
+  });
+
+  it("treats a profile without negative targets as an empty list", async () => {
+    const { http } = makeHttp({
+      handler: () => jsonResponse({ negativeTargetingClauses: [] }),
+    });
+    await expect(listNegativeTargets(http, TEST_CONTEXT)).resolves.toEqual([]);
+  });
+});
+
+describe("SP target writes", () => {
+  it("creates targets and maps the per-item 207 results", async () => {
+    const { http, calls } = makeHttp({
+      handler: () =>
+        jsonResponse(fixture("sp-targets-create-207.json"), { status: 207 }),
+    });
+    const results = await createTargets(http, TEST_CONTEXT, [
+      {
+        actionId: "t1",
+        kind: "create_target",
+        adGroupActionId: "g1",
+        expressionAsin: "B0CXYZ1234",
+        bid: "0.50",
+        state: "enabled",
+        resolvedCampaignId: "4567890123",
+        resolvedAdGroupId: "3456789012",
+      },
+      {
+        actionId: "t2",
+        kind: "create_target",
+        adGroupActionId: "g1",
+        expressionAsin: "B0BADASIN1",
+        state: "enabled",
+        resolvedCampaignId: "4567890123",
+        resolvedAdGroupId: "3456789012",
+      },
+    ]);
+    expect(calls[0].method).toBe("POST");
+    expect(calls[0].url).toContain("/sp/targets");
+    expect(results).toEqual([
+      {
+        actionId: "t1",
+        status: "applied",
+        code: "SUCCESS",
+        message: undefined,
+        amazonEntityId: "880123457",
+      },
+      {
+        actionId: "t2",
+        status: "failed",
+        code: "INVALID_VALUE",
+        message: "The expression ASIN is not targetable in this marketplace",
+        amazonEntityId: undefined,
+      },
+    ]);
+  });
+
+  it("creates campaign-level negative targets and extracts negativeTargetId", async () => {
+    const { http, calls } = makeHttp({
+      handler: () =>
+        jsonResponse(fixture("sp-negativeTargets-create-207.json"), {
+          status: 207,
+        }),
+    });
+    const results = await createNegativeTargets(http, TEST_CONTEXT, [
+      {
+        actionId: "nt1",
+        kind: "add_negative_target",
+        campaignId: "901234567",
+        expressionAsin: "B0COMPET01",
+      },
+    ]);
+    expect(calls[0].method).toBe("POST");
+    expect(calls[0].url).toContain("/sp/negativeTargets");
+    expect(JSON.parse(calls[0].body as string)).toEqual({
+      negativeTargetingClauses: [
+        {
+          campaignId: "901234567",
+          expression: [{ type: "ASIN_SAME_AS", value: "B0COMPET01" }],
+          state: "ENABLED",
+        },
+      ],
+    });
+    expect(results[0]).toMatchObject({
+      actionId: "nt1",
+      status: "applied",
+      amazonEntityId: "770123456",
+    });
   });
 });

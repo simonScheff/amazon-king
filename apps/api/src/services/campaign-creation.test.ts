@@ -152,8 +152,23 @@ const AMAZON_IDS_BY_KIND: Record<string, string> = {
   create_product_ad: "ad-new",
 };
 
+/** A product-target row as a post-write structure read should report it. */
+function targetRow(targetId: string, asin: string) {
+  return {
+    targetId,
+    campaignId: "camp-new",
+    adGroupId: "ag-new",
+    state: "PAUSED",
+    bid: 0.5,
+    expressionType: "ASIN_SAME_AS",
+    expression: [{ type: "ASIN_SAME_AS", value: asin }],
+    raw: {},
+  };
+}
+
 function gatewayBase() {
   let keywordCount = 0;
+  let targetCount = 0;
   return {
     syncCampaignStructure: vi.fn(async () => emptySnapshot()),
     getCampaignBidControls: vi.fn(async () => {
@@ -170,7 +185,9 @@ function gatewayBase() {
           amazonEntityId:
             action.kind === "create_keyword"
               ? `kw-new-${++keywordCount}`
-              : AMAZON_IDS_BY_KIND[action.kind],
+              : action.kind === "create_target"
+                ? `tg-new-${++targetCount}`
+                : AMAZON_IDS_BY_KIND[action.kind],
         })),
     ),
   };
@@ -338,6 +355,61 @@ describe("campaign creation change sets", () => {
         META,
       )
       .catch((error) => expectApiError(error, "NOT_FOUND"));
+  });
+
+  it("creates a targets-only change set and replays it identically", async () => {
+    const { db, service, book } = setup();
+    const input: CampaignCreationCreate = {
+      ...creationInput(book.id as string),
+      keywords: [],
+      targets: [{ asin: "B0ABCDEF12", bid: "0.50" }, { asin: "B0GHIJKL34" }],
+    };
+
+    const first = await service.createCampaignCreationChangeSets(
+      authFixture(),
+      input,
+      META,
+    );
+    const second = await service.createCampaignCreationChangeSets(
+      authFixture(),
+      input,
+      META,
+    );
+
+    expect(second.changeSets[0]!.id).toBe(first.changeSets[0]!.id);
+    expect(db.tables.changeSets).toHaveLength(1);
+    expect(db.tables.changeSets[0]!.metadata).toMatchObject({
+      keywords: [],
+      targets: [{ asin: "B0ABCDEF12", bid: "0.50" }, { asin: "B0GHIJKL34" }],
+    });
+    expect(db.tables.changeActions.map((a) => a.action_type)).toEqual([
+      "create_campaign",
+      "create_ad_group",
+      "create_product_ad",
+      "create_target",
+      "create_target",
+    ]);
+    const targetActions = db.tables.changeActions.filter(
+      (a) => a.action_type === "create_target",
+    );
+    expect(targetActions[0]).toMatchObject({
+      search_term: "B0ABCDEF12",
+      after_value: "0.50",
+      entity_name: "B0ABCDEF12",
+      after_state: {
+        expressionAsin: "B0ABCDEF12",
+        bid: "0.50",
+        state: "paused",
+      },
+    });
+    expect(targetActions[1]).toMatchObject({
+      search_term: "B0GHIJKL34",
+      after_value: null,
+      entity_name: "B0GHIJKL34",
+      after_state: { expressionAsin: "B0GHIJKL34", state: "paused" },
+    });
+    // A target without a bid inherits the ad group default — no bid is stored.
+    expect(targetActions[1]!.after_state).not.toHaveProperty("bid");
   });
 });
 
@@ -538,6 +610,184 @@ describe("campaign creation apply", () => {
     expect(orphan.amazon_response).toMatchObject({ code: "PARENT_FAILED" });
   });
 
+  it("applies targets with ad-group parent resolution and verifies the created target", async () => {
+    const setupResult = setup();
+    const { db, service, gateway, book } = setupResult;
+    const input: CampaignCreationCreate = {
+      ...creationInput(book.id as string),
+      targets: [{ asin: "B0ABCDEF12", bid: "0.50" }],
+    };
+    const draft = await service.createCampaignCreationChangeSets(
+      authFixture(),
+      input,
+      META,
+    );
+    const changeSetId = draft.changeSets[0]!.id;
+    gateway.syncCampaignStructure
+      .mockResolvedValueOnce(emptySnapshot())
+      .mockResolvedValueOnce(
+        createdSnapshot({ targets: [targetRow("tg-new-1", "B0ABCDEF12")] }),
+      );
+
+    const applied = await service.applyChangeSet(
+      authFixture(),
+      changeSetId,
+      META,
+    );
+
+    expect(applied.changeSet.status).toBe("applied");
+    expect(applied.actions.map((a) => a.status)).toEqual([
+      "applied",
+      "applied",
+      "applied",
+      "applied",
+      "applied",
+      "applied",
+    ]);
+    const adGroupActionId = db.tables.changeActions.find(
+      (a) => a.action_type === "create_ad_group",
+    )!.id;
+    const targetAction = db.tables.changeActions.find(
+      (a) => a.action_type === "create_target",
+    )!;
+    const sent = gateway.applyActions.mock.calls[0]![0] as {
+      actions: Array<Record<string, unknown>>;
+    };
+    expect(sent.actions).toContainEqual(
+      expect.objectContaining({
+        kind: "create_target",
+        actionId: targetAction.id,
+        adGroupActionId,
+        expressionAsin: "B0ABCDEF12",
+        bid: "0.50",
+        state: "paused",
+      }),
+    );
+    expect(targetAction.amazon_entity_id).toBe("tg-new-1");
+  });
+
+  it("treats an existing ASIN target in the same-name campaign as already satisfied", async () => {
+    const setupResult = setup();
+    const { db, service, gateway, book } = setupResult;
+    const input: CampaignCreationCreate = {
+      ...creationInput(book.id as string),
+      keywords: [],
+      targets: [{ asin: "B0ABCDEF12", bid: "0.50" }],
+    };
+    const draft = await service.createCampaignCreationChangeSets(
+      authFixture(),
+      input,
+      META,
+    );
+    // The campaign already exists with a matching ASIN target; the snapshot
+    // reports the expression value in lowercase to prove the case-insensitive
+    // match.
+    gateway.syncCampaignStructure.mockResolvedValue(
+      createdSnapshot({ targets: [targetRow("tg-existing", "b0abcdef12")] }),
+    );
+
+    const applied = await service.applyChangeSet(
+      authFixture(),
+      draft.changeSets[0]!.id,
+      META,
+    );
+
+    expect(applied.changeSet.status).toBe("applied");
+    expect(gateway.applyActions).not.toHaveBeenCalled();
+    const targetAction = db.tables.changeActions.find(
+      (a) => a.action_type === "create_target",
+    )!;
+    expect(targetAction.status).toBe("applied");
+    expect(targetAction.amazon_response).toMatchObject({
+      code: "ALREADY_PRESENT",
+    });
+    expect(targetAction.amazon_entity_id).toBe("tg-existing");
+  });
+
+  it("marks create_target verification_failed when the target is missing afterwards", async () => {
+    const setupResult = setup();
+    const { db, service, gateway, book } = setupResult;
+    const input: CampaignCreationCreate = {
+      ...creationInput(book.id as string),
+      keywords: [],
+      targets: [{ asin: "B0ABCDEF12", bid: "0.50" }],
+    };
+    const draft = await service.createCampaignCreationChangeSets(
+      authFixture(),
+      input,
+      META,
+    );
+    // The write "succeeds" but the post-write read never shows the target.
+    gateway.syncCampaignStructure
+      .mockResolvedValueOnce(emptySnapshot())
+      .mockResolvedValueOnce(createdSnapshot());
+
+    const applied = await service.applyChangeSet(
+      authFixture(),
+      draft.changeSets[0]!.id,
+      META,
+    );
+
+    expect(applied.changeSet.status).toBe("partially_applied");
+    const targetAction = db.tables.changeActions.find(
+      (a) => a.action_type === "create_target",
+    )!;
+    expect(targetAction.status).toBe("verification_failed");
+  });
+
+  it("propagates PARENT_FAILED to a target whose ad group failed", async () => {
+    const setupResult = setup();
+    const { db, service, gateway, book } = setupResult;
+    const input: CampaignCreationCreate = {
+      ...creationInput(book.id as string),
+      keywords: [],
+      targets: [{ asin: "B0ABCDEF12", bid: "0.50" }],
+    };
+    const draft = await service.createCampaignCreationChangeSets(
+      authFixture(),
+      input,
+      META,
+    );
+    gateway.syncCampaignStructure
+      .mockResolvedValueOnce(emptySnapshot())
+      .mockResolvedValueOnce(
+        createdSnapshot({ adGroups: [], ads: [], keywords: [] }),
+      );
+    gateway.applyActions.mockImplementation(
+      async (set: { actions: { actionId: string; kind: string }[] }) =>
+        set.actions.map((action) =>
+          action.kind === "create_campaign"
+            ? {
+                actionId: action.actionId,
+                status: "applied" as const,
+                code: "SUCCESS",
+                amazonEntityId: "camp-new",
+              }
+            : {
+                actionId: action.actionId,
+                status: "failed" as const,
+                code: "PARENT_FAILED",
+                message: "The parent action failed",
+              },
+        ),
+    );
+
+    const applied = await service.applyChangeSet(
+      authFixture(),
+      draft.changeSets[0]!.id,
+      META,
+    );
+
+    expect(applied.changeSet.status).toBe("partially_applied");
+    const targetAction = db.tables.changeActions.find(
+      (a) => a.action_type === "create_target",
+    )!;
+    expect(targetAction.status).toBe("failed");
+    expect(targetAction.amazon_response).toMatchObject({
+      code: "PARENT_FAILED",
+    });
+  });
+
   it("kill switch blocks apply before any Amazon call", async () => {
     const setupResult = setup({ killSwitch: true });
     const { db, service, gateway, profile } = setupResult;
@@ -604,17 +854,20 @@ describe("campaign creation apply", () => {
 
 describe("cannibalization-linked campaign creation", () => {
   const SEARCH_TERM = "tractor colouring book";
+  const ASIN_TERM = "B0COMPBOOK";
 
-  function setupLinked() {
+  function setupLinked(searchTerm: string = SEARCH_TERM) {
     const base = setup();
     const { db, profile } = base;
     const campaignA = db.seedCampaign({
+      id: "10",
       profile_id: profile.id,
       amazon_campaign_id: "camp-a",
       name: "Exact campaign",
       targeting_type: "manual",
     });
     const campaignB = db.seedCampaign({
+      id: "11",
       profile_id: profile.id,
       amazon_campaign_id: "camp-b",
       name: "Discovery campaign",
@@ -626,7 +879,7 @@ describe("cannibalization-linked campaign creation", () => {
       campaign_id: null,
       ad_group_id: null,
       target_id: null,
-      search_term: SEARCH_TERM,
+      search_term: searchTerm,
       current_value: null,
       proposed_value: null,
       evidence_window_end: new Date(),
@@ -634,7 +887,7 @@ describe("cannibalization-linked campaign creation", () => {
       expires_at: new Date(Date.now() + 86_400_000),
     });
     db.seedRecommendationEvidence(recommendation.id as string, {
-      searchTerm: SEARCH_TERM,
+      searchTerm,
       campaigns: [
         { campaignId: campaignA.id, orders: 3, costMicros: 13_000_000 },
         { campaignId: campaignB.id, orders: 1, costMicros: 8_980_000 },
@@ -660,6 +913,22 @@ describe("cannibalization-linked campaign creation", () => {
         keywordText: SEARCH_TERM,
         matchType: "NEGATIVE_EXACT",
         state: "ENABLED",
+        raw: {},
+      })),
+    };
+  }
+
+  function snapshotWithNegativeTargets(
+    campaignIds: string[],
+    asin: string = ASIN_TERM,
+  ): StructureSnapshot {
+    return {
+      ...emptySnapshot(),
+      negativeTargets: campaignIds.map((campaignId, index) => ({
+        negativeTargetId: `neg-t-${index + 1}`,
+        campaignId,
+        state: "ENABLED",
+        expression: [{ type: "ASIN_SAME_AS", value: asin }],
         raw: {},
       })),
     };
@@ -815,5 +1084,180 @@ describe("cannibalization-linked campaign creation", () => {
       "applied",
       "applied",
     ]);
+  });
+
+  it("drafts negative ASIN targets for an ASIN term, locked behind the creation set", async () => {
+    const { db, service, book, recommendation, campaignA, campaignB } =
+      setupLinked(ASIN_TERM);
+
+    const result = await service.createCampaignCreationChangeSets(
+      authFixture(),
+      linkedInput(book.id as string, recommendation.id as string),
+      META,
+    );
+
+    expect(result.changeSets).toHaveLength(2);
+    const [creationSet, negativesSet] = result.changeSets;
+    expect(negativesSet).toMatchObject({
+      kind: "recommendation",
+      status: "draft",
+      dependsOnChangeSetId: creationSet!.id,
+    });
+    const negativeActions = db.tables.changeActions.filter(
+      (action) => action.action_type === "add_negative_target",
+    );
+    expect(negativeActions).toHaveLength(2);
+    expect(negativeActions.map((action) => action.campaign_id).sort()).toEqual(
+      [campaignA.id, campaignB.id].sort(),
+    );
+    for (const action of negativeActions) {
+      expect(action.search_term).toBe(ASIN_TERM);
+      expect(action.before_state).toEqual({
+        scope: "campaign",
+        targetType: "ASIN_SAME_AS",
+        present: false,
+      });
+      expect(action.after_state).toEqual({
+        scope: "campaign",
+        targetType: "ASIN_SAME_AS",
+        present: true,
+      });
+    }
+    expect(db.tables.recommendations[0]!.state).toBe("approved");
+  });
+
+  it("applies negative ASIN targets with before-state compare and id back-fill", async () => {
+    const { db, service, gateway, book, recommendation } =
+      setupLinked(ASIN_TERM);
+    const result = await service.createCampaignCreationChangeSets(
+      authFixture(),
+      linkedInput(book.id as string, recommendation.id as string),
+      META,
+    );
+    const [creationSet, negativesSet] = result.changeSets;
+
+    // Locked while the new campaign does not exist on Amazon yet.
+    await service
+      .applyChangeSet(authFixture(), negativesSet!.id, META)
+      .catch((error) => expectApiError(error, "DEPENDENCY_NOT_APPLIED"));
+    expect(gateway.applyActions).not.toHaveBeenCalled();
+
+    // Apply the creation set first.
+    gateway.syncCampaignStructure
+      .mockResolvedValueOnce(emptySnapshot())
+      .mockResolvedValueOnce(createdSnapshot());
+    const creationApplied = await service.applyChangeSet(
+      authFixture(),
+      creationSet!.id,
+      META,
+    );
+    expect(creationApplied.changeSet.status).toBe("applied");
+
+    // Now the negative targets apply through the normal guarded pipeline.
+    gateway.syncCampaignStructure
+      .mockResolvedValueOnce(emptySnapshot()) // before-state: no negatives yet
+      .mockResolvedValueOnce(snapshotWithNegativeTargets(["camp-a", "camp-b"]));
+    gateway.applyActions.mockImplementationOnce(
+      async (set: {
+        actions: { actionId: string }[];
+      }): Promise<ActionResult[]> =>
+        set.actions.map((action, index) => ({
+          actionId: action.actionId,
+          status: "applied",
+          code: "SUCCESS",
+          amazonEntityId: `neg-t-${index + 1}`,
+        })),
+    );
+    const negativesApplied = await service.applyChangeSet(
+      authFixture(),
+      negativesSet!.id,
+      META,
+    );
+
+    expect(negativesApplied.changeSet.status).toBe("applied");
+    expect(negativesApplied.actions.map((action) => action.status)).toEqual([
+      "applied",
+      "applied",
+    ]);
+    const sent = gateway.applyActions.mock.calls.at(-1)![0] as {
+      actions: Array<Record<string, unknown>>;
+    };
+    expect(sent.actions).toEqual([
+      expect.objectContaining({
+        kind: "add_negative_target",
+        campaignId: "camp-a",
+        expressionAsin: ASIN_TERM,
+      }),
+      expect.objectContaining({
+        kind: "add_negative_target",
+        campaignId: "camp-b",
+        expressionAsin: ASIN_TERM,
+      }),
+    ]);
+    const negativeActions = db.tables.changeActions.filter(
+      (action) => action.action_type === "add_negative_target",
+    );
+    expect(
+      negativeActions.map((action) => action.amazon_entity_id).sort(),
+    ).toEqual(["neg-t-1", "neg-t-2"]);
+  });
+
+  it("skips sending a negative ASIN target that already exists", async () => {
+    const { db, service, gateway, recommendation } = setupLinked(ASIN_TERM);
+    // Route to the existing camp-a: the negative target only goes to camp-b.
+    const result = await service.createCannibalizationChangeSet(
+      authFixture(),
+      recommendation.id as string,
+      "camp-a",
+      META,
+    );
+    expect(result.changeSet.status).toBe("draft");
+    const negativeAction = db.tables.changeActions.find(
+      (action) => action.action_type === "add_negative_target",
+    )!;
+    expect(negativeAction.search_term).toBe(ASIN_TERM);
+
+    gateway.syncCampaignStructure.mockResolvedValue(
+      snapshotWithNegativeTargets(["camp-b"]),
+    );
+    const applied = await service.applyChangeSet(
+      authFixture(),
+      result.changeSet.id,
+      META,
+    );
+
+    expect(applied.changeSet.status).toBe("applied");
+    expect(gateway.applyActions).not.toHaveBeenCalled();
+    expect(negativeAction.status).toBe("applied");
+    expect(negativeAction.amazon_response).toMatchObject({
+      code: "ALREADY_PRESENT",
+    });
+    // The negative predates this set, so no rollback id is recorded.
+    expect(negativeAction.amazon_entity_id).toBeNull();
+  });
+
+  it("negative ASIN targets are not rollbackable", async () => {
+    const { db, service, profile } = setupLinked(ASIN_TERM);
+    const set = db.seedChangeSet({
+      profile_id: profile.id,
+      status: "applied",
+      kind: "recommendation",
+    });
+    const action = db.seedChangeAction({
+      change_set_id: set.id,
+      action_type: "add_negative_target",
+      campaign_id: null,
+      ad_group_id: null,
+      target_id: null,
+      search_term: ASIN_TERM,
+      before_value: null,
+      after_value: null,
+      status: "applied",
+      amazon_entity_id: "neg-t-1",
+    });
+
+    await service
+      .rollbackAction(authFixture(), action.id as string, META)
+      .catch((error) => expectApiError(error, "NOT_ROLLBACKABLE"));
   });
 });

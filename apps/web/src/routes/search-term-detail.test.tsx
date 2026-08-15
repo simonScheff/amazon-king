@@ -12,6 +12,7 @@ import { SearchTermDetailPage } from "./search-term-detail";
 
 const mocks = vi.hoisted(() => ({
   useSearchTerm: vi.fn(),
+  useProfiles: vi.fn(),
   useSearch: vi.fn(),
   navigate: vi.fn(),
 }));
@@ -25,6 +26,7 @@ vi.mock("@tanstack/react-router", () => ({
 
 vi.mock("../api/endpoints", () => ({
   useSearchTerm: mocks.useSearchTerm,
+  useProfiles: mocks.useProfiles,
 }));
 
 function detail(campaigns: SearchTermDetail["campaigns"]): SearchTermDetail {
@@ -81,6 +83,8 @@ describe("SearchTermDetailPage", () => {
 
   beforeEach(() => {
     mocks.useSearchTerm.mockReset();
+    mocks.useProfiles.mockReset();
+    mocks.useProfiles.mockReturnValue({ isPending: false, data: [] });
     mocks.useSearch.mockReset();
     mocks.useSearch.mockReturnValue({ days: 7 });
     mocks.navigate.mockReset();
@@ -143,6 +147,56 @@ describe("SearchTermDetailPage", () => {
       search: { days: 7, country: "GB" },
       replace: true,
     });
+  });
+
+  it("opens the campaign wizard prefilled when copying to another market", () => {
+    mocks.useProfiles.mockReturnValue({
+      isPending: false,
+      data: [
+        {
+          profileId: "profile-us",
+          countryCode: "US",
+          currencyCode: "USD",
+          enabled: true,
+        },
+        {
+          profileId: "profile-gb",
+          countryCode: "GB",
+          currencyCode: "GBP",
+          enabled: true,
+        },
+        {
+          profileId: "profile-de",
+          countryCode: "DE",
+          currencyCode: "EUR",
+          enabled: false,
+        },
+      ],
+    });
+
+    render(<SearchTermDetailPage />);
+
+    const copy = screen.getByRole("combobox", { name: "Copy to market" });
+    // The current market (US) and disabled profiles (DE) are not offered.
+    expect(
+      within(copy)
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual(["Choose…", "United Kingdom (GB)"]);
+
+    fireEvent.change(copy, { target: { value: "GB" } });
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: "/campaigns/new",
+      search: { searchTerm: "fantasy books", country: "GB" },
+    });
+  });
+
+  it("hides the copy control when no other enabled market exists", () => {
+    render(<SearchTermDetailPage />);
+
+    expect(
+      screen.queryByRole("combobox", { name: "Copy to market" }),
+    ).not.toBeInTheDocument();
   });
 
   it("warns when profit is hidden because economics are missing", () => {

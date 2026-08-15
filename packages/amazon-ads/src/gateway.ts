@@ -12,6 +12,7 @@ import {
   listCampaigns,
   listKeywords,
   listNegativeKeywords,
+  listNegativeTargets,
   listProductAds,
   listTargets,
 } from "./adapters/sp-campaigns.js";
@@ -22,7 +23,9 @@ import {
   createKeywords,
   createNegativeKeywords,
   createCampaignNegativeKeywords,
+  createNegativeTargets,
   createProductAds,
+  createTargets,
   deleteCampaignNegativeKeywords,
   deleteNegativeKeywords,
   disableOptimizationRules,
@@ -33,6 +36,7 @@ import {
   type ResolvedCreateAdGroupAction,
   type ResolvedCreateKeywordAction,
   type ResolvedCreateProductAdAction,
+  type ResolvedCreateTargetAction,
 } from "./adapters/sp-writes.js";
 import type {
   ActionResult,
@@ -131,15 +135,23 @@ export function createAmazonAdsGateway(
 
     async syncCampaignStructure(profileId: string): Promise<StructureSnapshot> {
       const context = await contextFor(profileId);
-      const [campaigns, adGroups, ads, keywords, targets, negativeKeywords] =
-        await Promise.all([
-          listCampaigns(http, context),
-          listAdGroups(http, context),
-          listProductAds(http, context),
-          listKeywords(http, context),
-          listTargets(http, context),
-          listNegativeKeywords(http, context),
-        ]);
+      const [
+        campaigns,
+        adGroups,
+        ads,
+        keywords,
+        targets,
+        negativeKeywords,
+        negativeTargets,
+      ] = await Promise.all([
+        listCampaigns(http, context),
+        listAdGroups(http, context),
+        listProductAds(http, context),
+        listKeywords(http, context),
+        listTargets(http, context),
+        listNegativeKeywords(http, context),
+        listNegativeTargets(http, context),
+      ]);
       logger.info(
         {
           profileId,
@@ -149,6 +161,7 @@ export function createAmazonAdsGateway(
           keywords: keywords.length,
           targets: targets.length,
           negativeKeywords: negativeKeywords.length,
+          negativeTargets: negativeTargets.length,
         },
         "Campaign structure snapshot retrieved",
       );
@@ -161,6 +174,7 @@ export function createAmazonAdsGateway(
         keywords,
         targets,
         negativeKeywords,
+        negativeTargets,
       };
     },
 
@@ -227,12 +241,14 @@ export function createAmazonAdsGateway(
           "create_ad_group",
           "create_product_ad",
           "create_keyword",
+          "create_target",
           "update_bid",
           "update_ad_group_default_bid",
           "update_campaign_bidding",
           "update_optimization_rule",
           "add_negative_exact",
           "remove_negative_exact",
+          "add_negative_target",
         ],
       };
     },
@@ -266,6 +282,9 @@ export function createAmazonAdsGateway(
       const campaignNegativeActions = negativeActions.filter(
         (action) => action.adGroupId === undefined,
       );
+      const negativeTargetActions = changeSet.actions.filter(
+        (action) => action.kind === "add_negative_target",
+      );
       const negativeRemovalActions = changeSet.actions.filter(
         (action) => action.kind === "remove_negative_exact",
       );
@@ -286,6 +305,9 @@ export function createAmazonAdsGateway(
       );
       const createKeywordActions = changeSet.actions.filter(
         (action) => action.kind === "create_keyword",
+      );
+      const createTargetActions = changeSet.actions.filter(
+        (action) => action.kind === "create_target",
       );
       const results: ActionResult[] = [];
       const parentFailed = (action: { actionId: string }): ActionResult => ({
@@ -383,6 +405,24 @@ export function createAmazonAdsGateway(
           results.push(...(await createKeywords(http, context, resolved)));
         }
       }
+      if (createTargetActions.length > 0) {
+        const resolved: ResolvedCreateTargetAction[] = [];
+        for (const action of createTargetActions) {
+          const parent = adGroupsByActionId.get(action.adGroupActionId);
+          if (parent) {
+            resolved.push({
+              ...action,
+              resolvedCampaignId: parent.campaignId,
+              resolvedAdGroupId: parent.adGroupId,
+            });
+          } else {
+            results.push(parentFailed(action));
+          }
+        }
+        if (resolved.length > 0) {
+          results.push(...(await createTargets(http, context, resolved)));
+        }
+      }
       if (keywordBidActions.length > 0) {
         results.push(
           ...(await updateKeywordBids(http, context, keywordBidActions)),
@@ -423,6 +463,15 @@ export function createAmazonAdsGateway(
             http,
             context,
             campaignNegativeActions,
+          )),
+        );
+      }
+      if (negativeTargetActions.length > 0) {
+        results.push(
+          ...(await createNegativeTargets(
+            http,
+            context,
+            negativeTargetActions,
           )),
         );
       }
