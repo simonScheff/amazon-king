@@ -28,9 +28,19 @@ export function LoginPage() {
           <div className="flex items-center gap-2.5">
             <span
               aria-hidden="true"
-              className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-600 text-sm font-bold text-white shadow-sm"
+              className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-600 text-white shadow-[inset_0_0.5px_0_rgba(255,255,255,0.25)]"
             >
-              AK
+              <svg
+                viewBox="0 0 512 512"
+                fill="currentColor"
+                className="h-5 w-5"
+              >
+                <circle cx="112" cy="172" r="20" />
+                <circle cx="256" cy="116" r="20" />
+                <circle cx="400" cy="172" r="20" />
+                <path d="M112 194 88 318q0 18 18 18h300q18 0 18-18l-24-124-64 66-80-122-80 122Z" />
+                <rect x="96" y="356" width="320" height="36" rx="14" />
+              </svg>
             </span>
             <h1 className="text-2xl font-bold tracking-tight text-zinc-100">
               Amazon King

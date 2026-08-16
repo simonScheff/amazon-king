@@ -152,6 +152,17 @@ describe("SearchTermDetailPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders the conversion funnel with CTR and CVR", () => {
+    render(<SearchTermDetailPage />);
+
+    expect(
+      screen.getByRole("heading", { name: "7-day conversion funnel" }),
+    ).toBeInTheDocument();
+    const funnel = screen.getByLabelText("Conversion funnel");
+    expect(within(funnel).getByText("CTR: 10.0%")).toBeInTheDocument();
+    expect(within(funnel).getByText("CVR: 20.0%")).toBeInTheDocument();
+  });
+
   it("switches between only the markets where the term has data", () => {
     const data = detail([campaign("campaign-1", "General")]);
     data.availableCountryCodes = ["US", "GB"];

@@ -11,6 +11,7 @@ import { KpiCard } from "../components/kpi-card";
 import { AmazonProductLink } from "../components/amazon-product-link";
 import { ProfitabilityResult } from "../components/profitability-result";
 import { PerformanceTrendChart } from "../components/performance-trend-chart";
+import { MetricFunnel } from "../components/metric-funnel";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardBody, CardHeader } from "../components/ui/card";
@@ -287,6 +288,19 @@ export function SearchTermDetailPage() {
             daily={data.daily}
             currency={currency}
             visible={["spend", "sales", "royalty", "acos"]}
+          />
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={`${days}-day conversion funnel`} />
+        <CardBody>
+          <MetricFunnel
+            stages={[
+              { label: "Impressions", value: data.totals.impressions },
+              { label: "Clicks", value: data.totals.clicks, rateLabel: "CTR" },
+              { label: "Orders", value: data.totals.orders, rateLabel: "CVR" },
+            ]}
           />
         </CardBody>
       </Card>

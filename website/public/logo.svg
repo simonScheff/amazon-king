@@ -1,11 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Amazon King">
   <defs>
     <linearGradient id="background" x1="56" y1="32" x2="456" y2="480" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#7c3aed" />
-      <stop offset="1" stop-color="#5300b7" />
+      <stop stop-color="#8b5cf6" />
+      <stop offset="1" stop-color="#5516be" />
     </linearGradient>
   </defs>
   <rect width="512" height="512" rx="96" fill="url(#background)" />
-  <path fill="#fff" d="M64 360 149 152h50l85 208h-60l-15-42h-72l-15 42H64Zm90-90h38l-19-56-19 56Z" />
-  <path fill="#fff" d="M278 152h57v80l63-80h70l-84 97 88 111h-72l-57-78-8 8v70h-57V152Z" />
+  <g fill="#fff">
+    <circle cx="112" cy="172" r="20" />
+    <circle cx="256" cy="116" r="20" />
+    <circle cx="400" cy="172" r="20" />
+    <path d="M112 194 88 318q0 18 18 18h300q18 0 18-18l-24-124-64 66-80-122-80 122Z" />
+    <rect x="96" y="356" width="320" height="36" rx="14" />
+  </g>
 </svg>

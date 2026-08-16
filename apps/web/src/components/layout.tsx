@@ -148,9 +148,15 @@ function Sidebar({
       >
         <span
           aria-hidden="true"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-600 font-display text-sm font-bold text-white shadow-[inset_0_0.5px_0_rgba(255,255,255,0.25)]"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-600 text-white shadow-[inset_0_0.5px_0_rgba(255,255,255,0.25)]"
         >
-          AK
+          <svg viewBox="0 0 512 512" fill="currentColor" className="h-5 w-5">
+            <circle cx="112" cy="172" r="20" />
+            <circle cx="256" cy="116" r="20" />
+            <circle cx="400" cy="172" r="20" />
+            <path d="M112 194 88 318q0 18 18 18h300q18 0 18-18l-24-124-64 66-80-122-80 122Z" />
+            <rect x="96" y="356" width="320" height="36" rx="14" />
+          </svg>
         </span>
         <p
           className={`font-display text-base font-bold tracking-tight text-zinc-100 ${isCollapsed ? "md:hidden" : ""}`}
