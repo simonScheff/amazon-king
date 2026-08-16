@@ -24,9 +24,9 @@ export function KpiCard({
   onToggle,
 }: KpiCardProps) {
   const className = [
-    "rounded-xl border px-5 py-4 text-left shadow-[0_4px_12px_rgba(0,0,0,0.35)] transition-all",
+    "rounded-lg border px-5 py-4 text-left shadow-[0_4px_12px_rgba(0,0,0,0.35)] transition-all",
     active
-      ? "border-zinc-800 bg-zinc-900 hover:border-sky-800 hover:shadow-[0_8px_24px_rgba(0,0,0,0.45),0_0_20px_rgba(124,58,237,0.12)]"
+      ? "border-zinc-800 bg-zinc-900 hover:border-sky-800 hover:shadow-[0_8px_24px_rgba(0,0,0,0.45),0_0_20px_rgba(139,92,246,0.12)]"
       : "border-zinc-800/60 bg-zinc-900/50 opacity-55 hover:border-zinc-700 hover:opacity-80",
     onToggle ? "cursor-pointer" : "",
   ].join(" ");
@@ -48,7 +48,7 @@ export function KpiCard({
           — <span className="text-xs">economics missing</span>
         </p>
       ) : (
-        <p className="mt-1.5 text-2xl font-semibold tracking-tight text-zinc-100">
+        <p className="mt-1.5 font-display text-2xl font-semibold tracking-tight text-zinc-100">
           {value}
         </p>
       )}

@@ -148,12 +148,12 @@ function Sidebar({
       >
         <span
           aria-hidden="true"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-600 text-sm font-bold text-white shadow-sm"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-600 font-display text-sm font-bold text-white shadow-[inset_0_0.5px_0_rgba(255,255,255,0.25)]"
         >
           AK
         </span>
         <p
-          className={`text-base font-bold tracking-tight text-zinc-100 ${isCollapsed ? "md:hidden" : ""}`}
+          className={`font-display text-base font-bold tracking-tight text-zinc-100 ${isCollapsed ? "md:hidden" : ""}`}
         >
           Amazon King
         </p>
@@ -168,7 +168,10 @@ function Sidebar({
           className={`group relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 ${
             isCollapsed ? "md:justify-center md:px-0" : ""
           }`}
-          activeProps={{ className: "bg-sky-950 text-sky-300" }}
+          activeProps={{
+            className:
+              "bg-zinc-800/70 text-zinc-100 shadow-[inset_2px_0_0_0_#a078ff]",
+          }}
         >
           <Icon />
           <span className={isCollapsed ? "md:hidden" : undefined}>{label}</span>

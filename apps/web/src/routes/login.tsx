@@ -23,7 +23,7 @@ export function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4">
-      <Card className="w-full max-w-sm shadow-[0_16px_40px_rgba(0,0,0,0.5),0_0_32px_rgba(109,40,217,0.12)]">
+      <Card className="w-full max-w-sm shadow-[0_16px_40px_rgba(0,0,0,0.5),0_0_32px_rgba(109,59,215,0.12)]">
         <CardBody className="p-8">
           <div className="flex items-center gap-2.5">
             <span

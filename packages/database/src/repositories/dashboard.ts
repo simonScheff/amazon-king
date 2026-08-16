@@ -624,6 +624,73 @@ export async function listSearchTermCampaignRows(
   }));
 }
 
+export interface SearchTermDailyPoint {
+  date: string;
+  cost: string;
+  sales: string;
+  orders: number;
+  currency: string;
+  /** Null for a day when orders exist but royalty economics are incomplete. */
+  estimatedRoyalty: string | null;
+}
+
+/**
+ * Per-day cost/sales/orders and estimated KDP royalty for one search term in
+ * one marketplace (trend chart on the search-term detail screen). Royalty is
+ * attributed per ad group exactly like listSearchTermCampaignRows: a day's
+ * royalty is null whenever any ad group with orders that day lacks in-effect
+ * economics — profit is never guessed.
+ */
+export async function searchTermDailySeries(
+  db: Db,
+  workspaceId: string,
+  searchTerm: string,
+  countryCode: string,
+  dateStart: string,
+  dateEnd: string,
+  bookId: string | null = null,
+): Promise<SearchTermDailyPoint[]> {
+  const result = await db.query<{
+    metric_date: string;
+    cost: string;
+    sales: string;
+    orders: string;
+    currency: string;
+    estimated_royalty: string | null;
+  }>(
+    `${SEARCH_TERM_CTES}
+     select d.metric_date::text as metric_date,
+            sum(d.cost)::text as cost,
+            sum(d.sales)::text as sales,
+            sum(d.orders)::text as orders,
+            min(d.currency)::text as currency,
+            case
+              when bool_or(d.orders > 0 and r.ad_group_id is null) then null
+              else coalesce(sum(r.estimated_royalty), 0)::text
+            end as estimated_royalty
+     from st_daily d
+     join amazon_profiles ap on ap.id = d.profile_id
+     left join royalty_daily r
+       on r.profile_id = d.profile_id
+      and r.search_term = d.search_term
+      and r.campaign_id = d.campaign_id
+      and r.ad_group_id = d.ad_group_id
+      and r.metric_date = d.metric_date
+     where ap.country_code = $6
+     group by d.metric_date
+     order by d.metric_date`,
+    [workspaceId, dateStart, dateEnd, searchTerm, bookId, countryCode],
+  );
+  return result.rows.map((row) => ({
+    date: row.metric_date,
+    cost: row.cost,
+    sales: row.sales,
+    orders: Number(row.orders),
+    currency: row.currency,
+    estimatedRoyalty: row.estimated_royalty,
+  }));
+}
+
 export interface CampaignDailyPoint {
   date: string;
   cost: string;

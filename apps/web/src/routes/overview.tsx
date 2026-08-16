@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import {
   useAmazonStatus,
   useDashboardSummary,
@@ -206,119 +206,151 @@ export function OverviewPage() {
             </p>
           )}
 
-          <Card>
-            <CardHeader title="Daily performance — click a metric card to toggle its line" />
-            <CardBody>
-              <PerformanceTrendChart
-                daily={summary.data.daily ?? []}
-                currency={currency}
-                showProfit
-                visible={[...visibleSeries]}
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="flex flex-col gap-6 lg:col-span-2">
+              <Card>
+                <CardHeader title="Daily performance — click a metric card to toggle its line" />
+                <CardBody>
+                  <PerformanceTrendChart
+                    daily={summary.data.daily ?? []}
+                    currency={currency}
+                    showProfit
+                    visible={[...visibleSeries]}
+                  />
+                </CardBody>
+              </Card>
+
+              {!summary.data.economicsMissing && (
+                <Card>
+                  <CardHeader title="Daily profitability" />
+                  <CardBody>
+                    <DailyProfitChart
+                      daily={summary.data.daily ?? []}
+                      currency={currency}
+                    />
+                  </CardBody>
+                </Card>
+              )}
+            </div>
+
+            <Card className="flex flex-col border-zinc-700 bg-zinc-850 shadow-[0_8px_24px_rgba(0,0,0,0.5)]">
+              <CardHeader
+                title="Pending recommendations"
+                action={
+                  visibleRecommendations.length > 0 ? (
+                    <Badge tone="neutral">
+                      {visibleRecommendations.length}
+                    </Badge>
+                  ) : undefined
+                }
               />
-            </CardBody>
-          </Card>
-
-          {!summary.data.economicsMissing && (
-            <Card>
-              <CardHeader title="Daily profitability" />
-              <CardBody>
-                <DailyProfitChart
-                  daily={summary.data.daily ?? []}
-                  currency={currency}
-                />
-              </CardBody>
-            </Card>
-          )}
-
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card>
-              <CardHeader title="Top problems & opportunities" />
               {top.isPending ? (
-                <Loading />
+                <CardBody>
+                  <Loading />
+                </CardBody>
               ) : top.error ? (
-                <ErrorState error={top.error} />
+                <CardBody>
+                  <ErrorState error={top.error} />
+                </CardBody>
               ) : visibleRecommendations.length === 0 ? (
-                <EmptyState>
-                  No pending recommendations for{" "}
-                  {selectedMarketplace?.countryName ?? country}.
-                </EmptyState>
+                <CardBody>
+                  <EmptyState>
+                    No pending recommendations for{" "}
+                    {selectedMarketplace?.countryName ?? country}.
+                  </EmptyState>
+                </CardBody>
               ) : (
-                <ul className="divide-y divide-zinc-800/60">
+                <ul className="flex flex-col gap-3 px-5 py-4">
                   {[...visibleRecommendations]
                     .sort((a, b) => a.priority - b.priority)
                     .slice(0, 5)
                     .map((r) => (
-                      <li key={r.id} className="px-4 py-2.5 text-sm">
+                      <li
+                        key={r.id}
+                        className="relative overflow-hidden rounded-md border border-zinc-800 bg-zinc-900 p-4 pl-5"
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`absolute inset-y-0 left-0 w-1 ${
+                            r.priority <= 2 ? "bg-amber-300" : "bg-sky-400"
+                          }`}
+                        />
                         <div className="flex items-center gap-2">
                           <Badge tone={r.priority <= 2 ? "warning" : "neutral"}>
                             P{r.priority}
                           </Badge>
-                          <span className="text-zinc-400">
+                          <span className="text-xs text-zinc-500">
                             {labelize(r.type)}
                           </span>
                         </div>
-                        <p className="mt-1 line-clamp-2 text-zinc-300">
+                        <p className="mt-1.5 line-clamp-3 text-sm text-zinc-200">
                           {r.rationale}
                         </p>
                       </li>
                     ))}
                 </ul>
               )}
-            </Card>
-
-            <Card>
-              <CardHeader title="Sync & connection health" />
-              <CardBody className="flex flex-col gap-2 text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="text-zinc-500">Amazon connection:</span>
-                  {status.data ? (
-                    <Badge
-                      tone={
-                        status.data.status === "connected"
-                          ? "success"
-                          : status.data.status === "reconnect_required"
-                            ? "warning"
-                            : "danger"
-                      }
-                    >
-                      {status.data.status.replace("_", " ")}
-                    </Badge>
-                  ) : (
-                    <span className="text-zinc-500">—</span>
-                  )}
-                </div>
-                {freshness.isPending ? (
-                  <Loading />
-                ) : freshness.error ? (
-                  <ErrorState error={freshness.error} />
-                ) : visibleFreshness.length === 0 ? (
-                  <p className="text-zinc-500">
-                    No sync runs yet for{" "}
-                    {selectedMarketplace?.countryName ?? country}.
-                  </p>
-                ) : (
-                  <ul className="flex flex-col gap-1.5">
-                    {visibleFreshness.map((f) => (
-                      <li
-                        key={`${f.profileId}-${f.dataset}`}
-                        className="flex flex-wrap items-baseline gap-x-2"
-                      >
-                        <span className="font-mono text-xs text-zinc-400">
-                          {f.profileId}
-                        </span>
-                        <span className="text-zinc-300">{f.dataset}</span>
-                        <span className="ml-auto text-xs text-zinc-500">
-                          {f.completeThrough
-                            ? `complete through ${formatDate(f.completeThrough)}`
-                            : "never completed"}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardBody>
+              <Link
+                to="/recommendations"
+                className="mt-auto block border-t border-zinc-800 px-5 py-3 text-center text-sm text-zinc-400 transition-colors hover:text-sky-300"
+              >
+                View all recommendations →
+              </Link>
             </Card>
           </div>
+
+          <Card>
+            <CardHeader title="Sync & connection health" />
+            <CardBody className="flex flex-col gap-2 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-zinc-500">Amazon connection:</span>
+                {status.data ? (
+                  <Badge
+                    tone={
+                      status.data.status === "connected"
+                        ? "success"
+                        : status.data.status === "reconnect_required"
+                          ? "warning"
+                          : "danger"
+                    }
+                  >
+                    {status.data.status.replace("_", " ")}
+                  </Badge>
+                ) : (
+                  <span className="text-zinc-500">—</span>
+                )}
+              </div>
+              {freshness.isPending ? (
+                <Loading />
+              ) : freshness.error ? (
+                <ErrorState error={freshness.error} />
+              ) : visibleFreshness.length === 0 ? (
+                <p className="text-zinc-500">
+                  No sync runs yet for{" "}
+                  {selectedMarketplace?.countryName ?? country}.
+                </p>
+              ) : (
+                <ul className="flex flex-col gap-1.5">
+                  {visibleFreshness.map((f) => (
+                    <li
+                      key={`${f.profileId}-${f.dataset}`}
+                      className="flex flex-wrap items-baseline gap-x-2"
+                    >
+                      <span className="font-mono text-xs text-zinc-400">
+                        {f.profileId}
+                      </span>
+                      <span className="text-zinc-300">{f.dataset}</span>
+                      <span className="ml-auto text-xs text-zinc-500">
+                        {f.completeThrough
+                          ? `complete through ${formatDate(f.completeThrough)}`
+                          : "never completed"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardBody>
+          </Card>
         </>
       ) : null}
     </div>

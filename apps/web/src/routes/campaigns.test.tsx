@@ -151,6 +151,120 @@ describe("CampaignsPage seven-day profitability", () => {
     expect(markets[0]!.querySelector(".fi.fi-us")).not.toBeNull();
   });
 
+  it("filters campaigns by market", () => {
+    const rowNames = () =>
+      screen
+        .getAllByRole("row")
+        .slice(1)
+        .map((row) => row.querySelector("td a")?.textContent ?? "");
+
+    mocks.useProfiles.mockReturnValue({
+      data: [
+        {
+          profileId: "profile-us",
+          accountId: "account-1",
+          region: "NA",
+          countryCode: "US",
+          currencyCode: "USD",
+          timezone: "America/Los_Angeles",
+          accountType: "seller",
+          enabled: true,
+          writeEnabled: false,
+        },
+        {
+          profileId: "profile-gb",
+          accountId: "account-1",
+          region: "EU",
+          countryCode: "GB",
+          currencyCode: "GBP",
+          timezone: "Europe/London",
+          accountType: "seller",
+          enabled: true,
+          writeEnabled: false,
+        },
+      ],
+    });
+    mocks.useCampaigns.mockReturnValue({
+      isPending: false,
+      error: null,
+      data: [
+        campaign("campaign-us", "US campaign", {}),
+        {
+          ...campaign("campaign-gb", "GB campaign", {}),
+          profileId: "profile-gb",
+        },
+      ],
+    });
+
+    render(<CampaignsPage />);
+    expect(rowNames()).toHaveLength(2);
+
+    const marketFilter = screen.getByRole("button", {
+      name: "Filter by market",
+    });
+    expect(marketFilter).toHaveTextContent("All markets");
+
+    fireEvent.click(marketFilter);
+    fireEvent.click(
+      screen
+        .getByRole("option", { name: /United Kingdom/ })
+        .querySelector("button")!,
+    );
+    expect(rowNames()).toEqual(["GB campaign"]);
+
+    fireEvent.click(marketFilter);
+    fireEvent.click(
+      screen
+        .getByRole("option", { name: /United States/ })
+        .querySelector("button")!,
+    );
+    expect(rowNames()).toEqual(["US campaign"]);
+
+    fireEvent.click(marketFilter);
+    fireEvent.click(
+      screen
+        .getByRole("option", { name: "All markets" })
+        .querySelector("button")!,
+    );
+    expect(rowNames()).toHaveLength(2);
+  });
+
+  it("shows an empty state when the market has no campaigns", () => {
+    mocks.useProfiles.mockReturnValue({
+      data: [
+        {
+          profileId: "profile-us",
+          accountId: "account-1",
+          region: "NA",
+          countryCode: "US",
+          currencyCode: "USD",
+          timezone: "America/Los_Angeles",
+          accountType: "seller",
+          enabled: true,
+          writeEnabled: false,
+        },
+        {
+          profileId: "profile-de",
+          accountId: "account-1",
+          region: "EU",
+          countryCode: "DE",
+          currencyCode: "EUR",
+          timezone: "Europe/Berlin",
+          accountType: "seller",
+          enabled: true,
+          writeEnabled: false,
+        },
+      ],
+    });
+
+    render(<CampaignsPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Filter by market" }));
+    fireEvent.click(
+      screen.getByRole("option", { name: /Germany/ }).querySelector("button")!,
+    );
+    expect(screen.getByText("No campaigns in Germany.")).toBeInTheDocument();
+  });
+
   it("filters campaigns by the search box", () => {
     const rowNames = () =>
       screen

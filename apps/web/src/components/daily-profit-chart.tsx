@@ -69,11 +69,11 @@ function ProfitTooltip({
   return (
     <div
       style={{
-        backgroundColor: "#1a2030",
-        border: "1px solid #323a4e",
-        borderRadius: 12,
+        backgroundColor: "#1c1c1e",
+        border: "1px solid #3f3f46",
+        borderRadius: 8,
         boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
-        color: "#e3e6ee",
+        color: "#e5e2e3",
         fontSize: 12,
         padding: "8px 12px",
       }}
@@ -83,15 +83,15 @@ function ProfitTooltip({
         <p
           style={{
             margin: 0,
-            color: point.profit >= 0 ? "#34d399" : "#f87171",
+            color: point.profit >= 0 ? "#4edea3" : "#f87171",
           }}
         >
           Daily profit: {formatMoney(point.profit.toFixed(2), currency)}
         </p>
       ) : (
-        <p style={{ margin: 0, color: "#7b8496" }}>No economics data</p>
+        <p style={{ margin: 0, color: "#958ea0" }}>No economics data</p>
       )}
-      <p style={{ margin: 0, color: "#a78bfa" }}>
+      <p style={{ margin: 0, color: "#d0bcff" }}>
         Cumulative: {formatMoney(point.cumulative.toFixed(2), currency)}
       </p>
     </div>
@@ -120,12 +120,12 @@ export function DailyProfitChart({
     <div className="h-56" aria-label="Daily profit chart">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={data}>
-          <CartesianGrid stroke="#242a3a" strokeDasharray="3 3" />
-          <XAxis dataKey="date" stroke="#7b8496" fontSize={12} />
-          <YAxis stroke="#7b8496" fontSize={12} />
+          <CartesianGrid stroke="#27272a" strokeDasharray="3 3" />
+          <XAxis dataKey="date" stroke="#958ea0" fontSize={12} />
+          <YAxis stroke="#958ea0" fontSize={12} />
           <Tooltip content={<ProfitTooltip currency={currency} />} />
           <Legend />
-          <ReferenceLine y={0} stroke="#4b5568" />
+          <ReferenceLine y={0} stroke="#52525b" />
           <Bar dataKey="profit" name="Daily profit" radius={[2, 2, 0, 0]}>
             {data.map((point) => (
               <Cell
@@ -134,7 +134,7 @@ export function DailyProfitChart({
                   point.profit === null
                     ? "#3f3f46"
                     : point.profit >= 0
-                      ? "#34d399"
+                      ? "#4edea3"
                       : "#f87171"
                 }
               />
@@ -144,7 +144,7 @@ export function DailyProfitChart({
             type="monotone"
             dataKey="cumulative"
             name="Cumulative profit"
-            stroke="#a78bfa"
+            stroke="#d0bcff"
             strokeWidth={2}
             dot={false}
           />

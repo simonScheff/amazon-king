@@ -56,4 +56,45 @@ describe("CountrySelect", () => {
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it("offers an all-markets option that clears the selection", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <CountrySelect
+        value=""
+        options={options}
+        allLabel="All markets"
+        onChange={onChange}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Country" });
+    expect(trigger).toHaveTextContent("All markets");
+    expect(trigger.querySelector(".fi")).toBeNull();
+
+    fireEvent.click(trigger);
+    fireEvent.click(
+      screen
+        .getByRole("option", { name: /United States/ })
+        .querySelector("button")!,
+    );
+    expect(onChange).toHaveBeenCalledWith("US");
+
+    onChange.mockClear();
+    rerender(
+      <CountrySelect
+        value="US"
+        options={options}
+        allLabel="All markets"
+        onChange={onChange}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Country" }));
+    fireEvent.click(
+      screen
+        .getByRole("option", { name: "All markets" })
+        .querySelector("button")!,
+    );
+    expect(onChange).toHaveBeenCalledWith("");
+  });
 });

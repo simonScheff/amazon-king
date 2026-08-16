@@ -12,12 +12,18 @@ export function CountrySelect({
   options,
   disabled = false,
   onChange,
+  allLabel,
   "aria-label": ariaLabel = "Country",
 }: {
   value: string;
   options: readonly MarketplaceOption[];
   disabled?: boolean;
   onChange: (countryCode: string) => void;
+  /**
+   * When set, prepends an option with an empty value (no flag) that clears
+   * the country selection — used when a filter covers every market.
+   */
+  allLabel?: string;
   "aria-label"?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -46,9 +52,11 @@ export function CountrySelect({
 
   const label = selected
     ? selected.countryName
-    : value === "US"
-      ? "United States"
-      : value;
+    : value === "" && allLabel
+      ? allLabel
+      : value === "US"
+        ? "United States"
+        : value;
 
   return (
     <div ref={rootRef} className="relative">
@@ -68,7 +76,7 @@ export function CountrySelect({
           ▾
         </span>
       </button>
-      {open && options.length > 0 ? (
+      {open && (options.length > 0 || allLabel) ? (
         <ul
           role="listbox"
           aria-label={ariaLabel}
@@ -89,6 +97,22 @@ export function CountrySelect({
           }}
           className="absolute right-0 z-10 mt-1 min-w-full overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950 py-1 shadow-lg shadow-black/40"
         >
+          {allLabel ? (
+            <li role="option" aria-selected={value === ""}>
+              <button
+                type="button"
+                autoFocus={value === ""}
+                onClick={() => {
+                  onChange("");
+                  setOpen(false);
+                  triggerRef.current?.focus();
+                }}
+                className="flex w-full items-center gap-2 whitespace-nowrap px-3 py-2 text-left text-sm text-zinc-100 hover:bg-zinc-800 focus-visible:bg-zinc-800 focus-visible:outline-none"
+              >
+                <span>{allLabel}</span>
+              </button>
+            </li>
+          ) : null}
           {options.map((option) => (
             <li
               key={option.countryCode}

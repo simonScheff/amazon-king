@@ -337,6 +337,7 @@ Response `200` (SearchTermDetail); `404 NOT_FOUND` when the term has no data.
 | countryCode           | string | Marketplace selected for this view               |
 | availableCountryCodes | string[] | Markets with data in the window (min 1)        |
 | dateRange, currency, totals, economicsMissing, dataCurrentThrough | — | As dashboard |
+| daily                 | array  | Per-day `{date, cost, sales, estimatedRoyalty, estimatedAdProfit}` for the trend chart, in the selected market |
 | campaigns             | array  | Per-campaign `{profileId, campaignId, name, state, totals, estimatedRoyalty, estimatedAdProfit, economicsMissing}` |
 
 Errors: `409 MIXED_CURRENCY` when aggregating across currencies.

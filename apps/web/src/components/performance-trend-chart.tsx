@@ -1,8 +1,9 @@
 import {
+  Area,
   CartesianGrid,
+  ComposedChart,
   Legend,
   Line,
-  LineChart,
   ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
@@ -18,11 +19,11 @@ export type TrendSeries =
   "spend" | "sales" | "royalty" | "profit" | "orders" | "acos";
 
 export const TREND_SERIES_COLORS: Record<TrendSeries, string> = {
-  spend: "#f59e0b",
-  sales: "#a78bfa",
-  royalty: "#34d399",
-  profit: "#c4b5fd",
-  orders: "#38bdf8",
+  spend: "#d0bcff",
+  sales: "#4edea3",
+  royalty: "#ffb95f",
+  profit: "#a078ff",
+  orders: "#93c5fd",
   acos: "#f472b6",
 };
 
@@ -89,7 +90,7 @@ function TrendTooltip({
     rows.push({
       name: "Estimated ad profit",
       value: formatMoney(point.profit.toFixed(2), currency),
-      color: point.profit >= 0 ? "#34d399" : "#f87171",
+      color: point.profit >= 0 ? "#4edea3" : "#f87171",
     });
   }
   if (visible.has("orders") && point.orders !== null) {
@@ -109,11 +110,11 @@ function TrendTooltip({
   return (
     <div
       style={{
-        backgroundColor: "#1a2030",
-        border: "1px solid #323a4e",
-        borderRadius: 12,
+        backgroundColor: "#1c1c1e",
+        border: "1px solid #3f3f46",
+        borderRadius: 8,
         boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
-        color: "#e3e6ee",
+        color: "#e5e2e3",
         fontSize: 12,
         padding: "8px 12px",
       }}
@@ -206,15 +207,41 @@ export function PerformanceTrendChart({
   return (
     <div className="h-64" aria-label="Daily performance trend">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data}>
-          <CartesianGrid stroke="#242a3a" strokeDasharray="3 3" />
-          <XAxis dataKey="date" stroke="#7b8496" fontSize={12} />
-          <YAxis yAxisId="left" stroke="#7b8496" fontSize={12} />
+        <ComposedChart data={data}>
+          <defs>
+            <linearGradient id="lumina-glow-spend" x1="0" y1="0" x2="0" y2="1">
+              <stop
+                offset="0%"
+                stopColor={TREND_SERIES_COLORS.spend}
+                stopOpacity={0.2}
+              />
+              <stop
+                offset="100%"
+                stopColor={TREND_SERIES_COLORS.spend}
+                stopOpacity={0}
+              />
+            </linearGradient>
+            <linearGradient id="lumina-glow-sales" x1="0" y1="0" x2="0" y2="1">
+              <stop
+                offset="0%"
+                stopColor={TREND_SERIES_COLORS.sales}
+                stopOpacity={0.2}
+              />
+              <stop
+                offset="100%"
+                stopColor={TREND_SERIES_COLORS.sales}
+                stopOpacity={0}
+              />
+            </linearGradient>
+          </defs>
+          <CartesianGrid stroke="#27272a" strokeDasharray="3 3" />
+          <XAxis dataKey="date" stroke="#958ea0" fontSize={12} />
+          <YAxis yAxisId="left" stroke="#958ea0" fontSize={12} />
           {showRightAxis ? (
             <YAxis
               yAxisId="right"
               orientation="right"
-              stroke="#7b8496"
+              stroke="#958ea0"
               fontSize={12}
             />
           ) : null}
@@ -227,32 +254,36 @@ export function PerformanceTrendChart({
               key={`${band.x1}-${band.x2}`}
               x1={band.x1}
               x2={band.x2}
-              fill="#34d399"
+              fill="#4edea3"
               fillOpacity={0.08}
               strokeOpacity={0}
               yAxisId="left"
             />
           ))}
           {show("profit", hasProfitData) ? (
-            <ReferenceLine y={0} stroke="#4b5568" yAxisId="left" />
+            <ReferenceLine y={0} stroke="#52525b" yAxisId="left" />
           ) : null}
           {show("spend", true) ? (
-            <Line
+            <Area
               yAxisId="left"
               type="monotone"
               dataKey="spend"
               name="Spend"
               stroke={TREND_SERIES_COLORS.spend}
+              strokeWidth={1.5}
+              fill="url(#lumina-glow-spend)"
               dot={false}
             />
           ) : null}
           {show("sales", true) ? (
-            <Line
+            <Area
               yAxisId="left"
               type="monotone"
               dataKey="sales"
               name="Attributed sales"
               stroke={TREND_SERIES_COLORS.sales}
+              strokeWidth={1.5}
+              fill="url(#lumina-glow-sales)"
               dot={false}
             />
           ) : null}
@@ -300,7 +331,7 @@ export function PerformanceTrendChart({
               connectNulls
             />
           ) : null}
-        </LineChart>
+        </ComposedChart>
       </ResponsiveContainer>
     </div>
   );

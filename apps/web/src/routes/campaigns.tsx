@@ -9,13 +9,14 @@ import { SortableTh } from "../components/ui/sortable-th";
 import { Table, Td } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
 import { Flag } from "../components/flag";
+import { CountrySelect } from "../components/country-select";
 import { ProfitabilityResult } from "../components/profitability-result";
 import {
   getCampaignProfitStatus,
   hasCampaignActivity,
 } from "../lib/campaign-profit";
 import { formatAcos, formatCount, formatMoney } from "../lib/format";
-import { countryNameForCode } from "../lib/marketplaces";
+import { countryNameForCode, marketplaceOptions } from "../lib/marketplaces";
 import { compareNullable, nextSort, type Sort } from "../lib/sorting";
 
 const PROFITABILITY_DAYS = 7;
@@ -72,9 +73,16 @@ export function CampaignsPage() {
     direction: "desc",
   });
   const [query, setQuery] = useState("");
+  const [country, setCountry] = useState("");
 
   const countryByProfile = new Map(
     (profiles.data ?? []).map((p) => [p.profileId, p.countryCode]),
+  );
+  const marketplaces = marketplaceOptions(profiles.data ?? []);
+  const marketProfileIds = new Set(
+    country === ""
+      ? []
+      : (marketplaces.find((m) => m.countryCode === country)?.profileIds ?? []),
   );
 
   function onSort(column: SortKey) {
@@ -84,7 +92,8 @@ export function CampaignsPage() {
   const trimmedQuery = query.trim().toLowerCase();
   const filteredRows = (campaigns.data ?? []).filter(
     (row) =>
-      trimmedQuery === "" || row.name.toLowerCase().includes(trimmedQuery),
+      (trimmedQuery === "" || row.name.toLowerCase().includes(trimmedQuery)) &&
+      (country === "" || marketProfileIds.has(row.profileId)),
   );
   const sortedRows = campaigns.data
     ? [...filteredRows].sort((a, b) =>
@@ -103,6 +112,14 @@ export function CampaignsPage() {
           Campaigns
         </h1>
         <div className="flex items-center gap-2">
+          <CountrySelect
+            value={country}
+            options={marketplaces}
+            allLabel="All markets"
+            aria-label="Filter by market"
+            disabled={profiles.isPending}
+            onChange={setCountry}
+          />
           <Input
             type="search"
             aria-label="Filter campaigns"
@@ -113,7 +130,7 @@ export function CampaignsPage() {
           />
           <Link
             to="/campaigns/new"
-            className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-medium text-white shadow-[0_4px_14px_rgba(109,40,217,0.35)] transition-all hover:bg-sky-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400 active:scale-[0.98]"
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-medium text-white shadow-[inset_0_0.5px_0_rgba(255,255,255,0.25),0_4px_14px_rgba(109,59,215,0.35)] transition-all hover:bg-sky-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400 active:scale-[0.98]"
           >
             + New campaign
           </Link>
@@ -128,7 +145,9 @@ export function CampaignsPage() {
           <EmptyState>
             {trimmedQuery !== ""
               ? `No campaigns match “${query.trim()}”.`
-              : "No campaigns imported yet. Connect Amazon Ads and run a sync first."}
+              : country !== ""
+                ? `No campaigns in ${countryNameForCode(country)}.`
+                : "No campaigns imported yet. Connect Amazon Ads and run a sync first."}
           </EmptyState>
         ) : (
           <Table>

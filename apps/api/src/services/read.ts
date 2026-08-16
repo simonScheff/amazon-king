@@ -654,6 +654,16 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         (row) => row.countryCode === selectedCountryCode,
       );
 
+      const dailyRows = await dashboard.searchTermDailySeries(
+        db,
+        workspaceId,
+        searchTerm,
+        selectedCountryCode,
+        start,
+        end,
+        bookPk,
+      );
+
       if (rows.some((row) => row.mixedCurrency)) {
         throw conflict(
           "MIXED_CURRENCY",
@@ -718,6 +728,27 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         },
         economicsMissing,
         dataCurrentThrough,
+        daily: dailyRows.map((point) => {
+          const dayRoyaltyMicros =
+            point.estimatedRoyalty === null
+              ? null
+              : microsFromDecimalString(point.estimatedRoyalty);
+          return {
+            date: point.date,
+            cost: point.cost,
+            sales: point.sales,
+            estimatedRoyalty:
+              dayRoyaltyMicros === null
+                ? null
+                : microsToDecimalString(dayRoyaltyMicros),
+            estimatedAdProfit:
+              dayRoyaltyMicros === null
+                ? null
+                : microsToDecimalString(
+                    dayRoyaltyMicros - microsFromDecimalString(point.cost),
+                  ),
+          };
+        }),
         campaigns: rows.map((row) => {
           const rowCostMicros = microsFromDecimalString(row.totals.cost);
           const rowRoyaltyMicros =

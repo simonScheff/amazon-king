@@ -25,7 +25,7 @@ export function Th({
   return (
     <th
       scope="col"
-      className={`border-b border-zinc-800 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 ${className}`}
+      className={`border-b border-zinc-800 bg-zinc-850 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 ${className}`}
       {...props}
     />
   );

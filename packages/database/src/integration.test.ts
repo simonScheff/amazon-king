@@ -15,6 +15,7 @@ import {
   listNegativeKeywordRows,
   listSearchTermCampaignRows,
   listSearchTermRollupRows,
+  searchTermDailySeries,
 } from "./repositories/dashboard.js";
 import { enqueue, claim, reapExpiredLeases, complete } from "./queue.js";
 import {
@@ -720,6 +721,52 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       book!.id,
     );
     expect(filteredBreakdown).toEqual([]);
+
+    // Daily series aggregates both campaigns of the selected market per day.
+    const daily = await searchTermDailySeries(
+      pool,
+      workspaceId,
+      "fantasy books",
+      "US",
+      "2026-08-13",
+      "2026-08-14",
+    );
+    expect(daily).toEqual([
+      {
+        date: "2026-08-13",
+        cost: "8.0000",
+        sales: "28.0000",
+        orders: 3,
+        currency: "USD",
+        // (2 + 1 orders) × 4.25 royalty per sale.
+        estimatedRoyalty: "12.7500",
+      },
+    ]);
+
+    // A market without data yields no points.
+    await expect(
+      searchTermDailySeries(
+        pool,
+        workspaceId,
+        "fantasy books",
+        "GB",
+        "2026-08-13",
+        "2026-08-14",
+      ),
+    ).resolves.toEqual([]);
+
+    // A day with orders but incomplete economics reports null royalty.
+    const unmappedDaily = await searchTermDailySeries(
+      pool,
+      workspaceId,
+      "unmapped series",
+      "US",
+      "2026-08-13",
+      "2026-08-14",
+    );
+    expect(unmappedDaily).toEqual([
+      expect.objectContaining({ estimatedRoyalty: null }),
+    ]);
   });
 
   it("recommendations store immutable evidence and expire stale rows", async () => {

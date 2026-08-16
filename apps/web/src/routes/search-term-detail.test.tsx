@@ -50,6 +50,22 @@ function detail(campaigns: SearchTermDetail["campaigns"]): SearchTermDetail {
     },
     economicsMissing,
     dataCurrentThrough: "2026-08-13",
+    daily: [
+      {
+        date: "2026-08-12",
+        cost: "3.0000",
+        sales: "8.0000",
+        estimatedRoyalty: economicsMissing ? null : "4.0000",
+        estimatedAdProfit: economicsMissing ? null : "1.0000",
+      },
+      {
+        date: "2026-08-13",
+        cost: "5.0000",
+        sales: "12.0000",
+        estimatedRoyalty: economicsMissing ? null : "6.0000",
+        estimatedAdProfit: economicsMissing ? null : "1.0000",
+      },
+    ],
     campaigns,
   };
 }
@@ -123,6 +139,17 @@ describe("SearchTermDetailPage", () => {
     );
     expect(within(research).getByText("Not profitable")).toBeInTheDocument();
     expect(within(research).getByText("-$1.00")).toBeInTheDocument();
+  });
+
+  it("renders the daily performance trend chart", () => {
+    render(<SearchTermDetailPage />);
+
+    expect(
+      screen.getByRole("heading", { name: "Daily performance" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Daily performance trend"),
+    ).toBeInTheDocument();
   });
 
   it("switches between only the markets where the term has data", () => {

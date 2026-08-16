@@ -158,6 +158,16 @@ export const searchTermDetailSchema = z.object({
   }),
   economicsMissing: z.boolean(),
   dataCurrentThrough: isoDateSchema.nullable(),
+  /** Per-day series for the trend chart, in the selected market. */
+  daily: z.array(
+    z.object({
+      date: isoDateSchema,
+      cost: nonNegativeDecimalStringSchema,
+      sales: nonNegativeDecimalStringSchema,
+      estimatedRoyalty: nonNegativeDecimalStringSchema.nullable(),
+      estimatedAdProfit: decimalStringSchema.nullable(),
+    }),
+  ),
   campaigns: z.array(searchTermCampaignRowSchema),
 });
 export type SearchTermDetail = z.infer<typeof searchTermDetailSchema>;

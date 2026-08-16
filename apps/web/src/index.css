@@ -1,56 +1,63 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap");
 @import "tailwindcss";
 
 /*
- * KDP King Design System — premium dark control-room theme.
+ * KDP King Design System — "Lumina Graphite" dark control-room theme
+ * (from the Stitch design system of the same name).
  * The palette keeps the class-name semantics the app already uses
  * (zinc-950 = app background, zinc-100 = brightest text) but replaces the
- * flat default zinc with refined obsidian surfaces, and sky with the
- * violet brand scale. Emerald/amber/red are retuned to rich dark tints.
+ * flat default zinc with warm void neutrals, and sky with the electric
+ * violet brand scale. Emerald/amber map to the Lumina secondary/tertiary
+ * accents. Space Grotesk is the display face (headings, KPI numerals);
+ * Inter handles body and data.
  */
 @theme {
   --font-sans:
     "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
+  --font-display:
+    "Space Grotesk", "Inter", ui-sans-serif, system-ui, sans-serif;
 
-  /* Obsidian neutral scale */
-  --color-zinc-950: #0b0d13; /* app background */
-  --color-zinc-900: #141824; /* elevated card surface */
-  --color-zinc-800: #242a3a; /* borders / hover */
-  --color-zinc-700: #323a4e; /* stronger border */
-  --color-zinc-600: #4b5568; /* faint / placeholder */
-  --color-zinc-500: #7b8496; /* muted */
-  --color-zinc-400: #9aa3b2; /* secondary text */
-  --color-zinc-300: #c6cbd6; /* body emphasis */
-  --color-zinc-200: #e3e6ee; /* primary body text */
-  --color-zinc-100: #f4f6fb; /* headings */
+  /* Lumina void neutral scale */
+  --color-zinc-950: #0a0a0b; /* app background (void) */
+  --color-zinc-925: #131314; /* Lumina surface / tooltip base */
+  --color-zinc-900: #161618; /* elevated card surface */
+  --color-zinc-850: #1c1b1c; /* raised panel / table header strip */
+  --color-zinc-800: #27272a; /* borders / hover */
+  --color-zinc-700: #3f3f46; /* stronger border */
+  --color-zinc-600: #52525b; /* faint / placeholder */
+  --color-zinc-500: #958ea0; /* muted (Lumina outline) */
+  --color-zinc-400: #cbc3d7; /* secondary text (on-surface-variant) */
+  --color-zinc-300: #d8d4de; /* body emphasis */
+  --color-zinc-200: #e5e2e3; /* primary body text (on-surface) */
+  --color-zinc-100: #f4f2f7; /* headings */
 
-  /* sky → violet brand scale */
-  --color-sky-950: #1a1330; /* deep violet tint surface */
-  --color-sky-900: #2e2350; /* tint border */
-  --color-sky-800: #3d2d68; /* callout border */
-  --color-sky-700: #5300b7; /* darker primary */
-  --color-sky-600: #6d28d9; /* primary fill */
-  --color-sky-500: #7c3aed; /* primary hover */
-  --color-sky-400: #a78bfa; /* links / focus accent */
-  --color-sky-300: #c4b5fd; /* violet text on tints */
-  --color-sky-200: #ddd6fe; /* bright violet emphasis text */
+  /* sky → electric violet brand scale */
+  --color-sky-950: #1b1329; /* deep violet tint surface */
+  --color-sky-900: #2a1d44; /* tint border */
+  --color-sky-800: #3b2a5e; /* callout border */
+  --color-sky-700: #5516be; /* darker primary */
+  --color-sky-600: #6d3bd7; /* primary fill (Lumina inverse-primary) */
+  --color-sky-500: #8b5cf6; /* primary hover */
+  --color-sky-400: #a078ff; /* links / focus accent */
+  --color-sky-300: #d0bcff; /* violet text on tints (Lumina primary) */
+  --color-sky-200: #e9ddff; /* bright violet emphasis text */
 
-  /* success: rich dark green tints */
-  --color-emerald-950: #0c1f1a;
-  --color-emerald-900: #134e3f;
-  --color-emerald-500: #10b981;
-  --color-emerald-400: #34d399;
-  --color-emerald-300: #6ee7b7;
-  --color-emerald-200: #a7f3d0;
+  /* success: Lumina secondary (emerald) */
+  --color-emerald-950: #002113;
+  --color-emerald-900: #005236;
+  --color-emerald-500: #00a572;
+  --color-emerald-400: #4edea3;
+  --color-emerald-300: #6ffbbe;
+  --color-emerald-200: #b5f4d7;
 
-  /* warning: rich dark amber tints */
-  --color-amber-950: #231a0b;
-  --color-amber-900: #7a5410;
-  --color-amber-300: #fcd34d;
-  --color-amber-200: #fde68a;
+  /* warning: Lumina tertiary (amber) */
+  --color-amber-950: #2a1700;
+  --color-amber-900: #653e00;
+  --color-amber-300: #ffb95f;
+  --color-amber-200: #ffddb8;
 
-  /* danger: deep red tints, brand error #ba1a1a */
+  /* danger: deep red tints */
   --color-red-950: #2a1113;
   --color-red-900: #84262a;
   --color-red-700: #ba1a1a;
@@ -66,23 +73,12 @@ body {
 }
 
 body {
-  background-color: #0b0d13;
-  background-image:
-    radial-gradient(
-      55rem 38rem at 100% -10%,
-      rgba(109, 40, 217, 0.14),
-      transparent 60%
-    ),
-    radial-gradient(
-      45rem 32rem at -10% 10%,
-      rgba(16, 185, 129, 0.06),
-      transparent 55%
-    ),
-    radial-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px);
-  background-size:
-    auto,
-    auto,
-    24px 24px;
+  background-color: #0a0a0b;
+  background-image: radial-gradient(
+    55rem 38rem at 100% -10%,
+    rgba(109, 59, 215, 0.12),
+    transparent 60%
+  );
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -92,25 +88,31 @@ body {
 h1,
 h2,
 h3 {
+  font-family: var(--font-display);
   letter-spacing: -0.02em;
 }
 
+/* Align tabular numerals so money columns compare cleanly. */
+table {
+  font-feature-settings: "tnum";
+}
+
 ::selection {
-  background-color: rgba(124, 58, 237, 0.4);
-  color: #f4f6fb;
+  background-color: rgba(139, 92, 246, 0.4);
+  color: #f4f2f7;
 }
 
 :focus-visible {
-  outline: 2px solid #a78bfa;
+  outline: 2px solid #a078ff;
   outline-offset: 2px;
 }
 
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus {
-  -webkit-box-shadow: 0 0 0 1000px #141824 inset;
-  -webkit-text-fill-color: #e3e6ee;
-  caret-color: #e3e6ee;
+  -webkit-box-shadow: 0 0 0 1000px #161618 inset;
+  -webkit-text-fill-color: #e5e2e3;
+  caret-color: #e5e2e3;
   transition: background-color 999999s ease-in-out 0s;
 }
 
@@ -122,12 +124,12 @@ input:-webkit-autofill:focus {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background-color: #323a4e;
-  border: 2px solid #0b0d13;
+  background-color: #3f3f46;
+  border: 2px solid #0a0a0b;
   border-radius: 8px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background-color: #4b5568;
+  background-color: #52525b;
 }
 
 a,
@@ -148,7 +150,7 @@ tbody tr {
   transition: background-color 150ms ease;
 }
 tbody tr:hover {
-  background-color: rgba(124, 58, 237, 0.07);
+  background-color: rgba(160, 120, 255, 0.05);
 }
 
 @keyframes spin {

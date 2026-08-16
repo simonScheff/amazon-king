@@ -10,9 +10,10 @@ import { useProfiles, useSearchTerm } from "../api/endpoints";
 import { KpiCard } from "../components/kpi-card";
 import { AmazonProductLink } from "../components/amazon-product-link";
 import { ProfitabilityResult } from "../components/profitability-result";
+import { PerformanceTrendChart } from "../components/performance-trend-chart";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
-import { Card } from "../components/ui/card";
+import { Card, CardBody, CardHeader } from "../components/ui/card";
 import { Select } from "../components/ui/input";
 import { SortableTh } from "../components/ui/sortable-th";
 import { Table, Td } from "../components/ui/table";
@@ -278,6 +279,17 @@ export function SearchTermDetailPage() {
           those economics applied then.
         </p>
       ) : null}
+
+      <Card>
+        <CardHeader title="Daily performance" />
+        <CardBody>
+          <PerformanceTrendChart
+            daily={data.daily}
+            currency={currency}
+            visible={["spend", "sales", "royalty", "acos"]}
+          />
+        </CardBody>
+      </Card>
 
       <Card>
         {data.campaigns.length === 0 ? (

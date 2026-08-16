@@ -18,6 +18,7 @@ vi.mock("@amazon-king/database", () => ({
   dashboard: {
     listSearchTermRollupRows: vi.fn(),
     listSearchTermCampaignRows: vi.fn(),
+    searchTermDailySeries: vi.fn(),
   },
 }));
 
@@ -63,11 +64,24 @@ const CAMPAIGN_ROW = {
   mixedCurrency: false,
 };
 
+const DAILY_POINT = {
+  date: "2026-08-13",
+  cost: "5.0000",
+  sales: "12.0000",
+  orders: 1,
+  currency: "USD",
+  estimatedRoyalty: "6.0000",
+};
+
 describe("search terms", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(dashboard.listSearchTermRollupRows).mockResolvedValue([
       ROLLUP_ROW,
+    ]);
+    vi.mocked(dashboard.searchTermDailySeries).mockResolvedValue([
+      DAILY_POINT,
+      { ...DAILY_POINT, date: "2026-08-12", estimatedRoyalty: null },
     ]);
     vi.mocked(dashboard.listSearchTermCampaignRows).mockResolvedValue([
       CAMPAIGN_ROW,
@@ -153,6 +167,15 @@ describe("search terms", () => {
       "2026-08-13",
       null,
     );
+    expect(dashboard.searchTermDailySeries).toHaveBeenCalledWith(
+      expect.anything(),
+      "workspace-pk",
+      "fantasy books",
+      "US",
+      "2026-08-07",
+      "2026-08-13",
+      null,
+    );
     expect(result).toMatchObject({
       searchTerm: "fantasy books",
       dateRange: { start: "2026-08-07", end: "2026-08-13" },
@@ -169,6 +192,22 @@ describe("search terms", () => {
       },
       economicsMissing: false,
       dataCurrentThrough: "2026-08-13",
+      daily: [
+        {
+          date: "2026-08-13",
+          cost: "5.0000",
+          sales: "12.0000",
+          estimatedRoyalty: "6.0000",
+          estimatedAdProfit: "1.0000",
+        },
+        {
+          date: "2026-08-12",
+          cost: "5.0000",
+          sales: "12.0000",
+          estimatedRoyalty: null,
+          estimatedAdProfit: null,
+        },
+      ],
       campaigns: [
         { campaignId: "amazon-campaign", estimatedAdProfit: "1.0000" },
         { campaignId: "amazon-campaign-2", estimatedAdProfit: "1.0000" },
@@ -182,6 +221,7 @@ describe("search terms", () => {
     await expect(
       service().getSearchTermDetail("workspace-pk", "unknown term", 7),
     ).resolves.toBeNull();
+    expect(dashboard.searchTermDailySeries).not.toHaveBeenCalled();
   });
 
   it("never reports partial profit when any campaign lacks economics", async () => {
@@ -246,6 +286,15 @@ describe("search terms", () => {
       currency: "EUR",
       campaigns: [{ campaignId: "amazon-campaign-2" }],
     });
+    expect(dashboard.searchTermDailySeries).toHaveBeenLastCalledWith(
+      expect.anything(),
+      "workspace-pk",
+      "fantasy books",
+      "GB",
+      "2026-08-07",
+      "2026-08-13",
+      null,
+    );
   });
 
   it("still refuses to combine currencies inside one market", async () => {
@@ -288,6 +337,15 @@ describe("search terms", () => {
       expect.anything(),
       "workspace-pk",
       "fantasy books",
+      "2026-08-07",
+      "2026-08-13",
+      "book-1",
+    );
+    expect(dashboard.searchTermDailySeries).toHaveBeenCalledWith(
+      expect.anything(),
+      "workspace-pk",
+      "fantasy books",
+      "US",
       "2026-08-07",
       "2026-08-13",
       "book-1",
