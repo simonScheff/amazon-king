@@ -20,7 +20,7 @@ export default withMermaid(
 
     head: [
       ["link", { rel: "icon", type: "image/svg+xml", href: "/amazon-king/logo.svg" }],
-      ["meta", { name: "theme-color", content: "#7c3aed" }],
+      ["meta", { name: "theme-color", content: "#0a0a0b" }],
       ["meta", { property: "og:type", content: "website" }],
       ["meta", { property: "og:site_name", content: "Amazon King Docs" }],
       ["meta", { property: "og:image", content: `${hostname}og-image.png` }],

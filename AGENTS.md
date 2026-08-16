@@ -164,7 +164,8 @@ response, dashboard
 `daily` series + `writesDisabled`, `amazonConsoleUrl` on campaign
 list/detail payloads (built from the profile's `account_id` entity id, null
 when absent), and the cross-campaign search-term
-screens: `GET /api/search-terms` + `GET /api/search-terms/:term`), and
+screens: `GET /api/search-terms` + `GET /api/search-terms/:term` (detail
+includes a per-day `daily` series for the trend chart)), and
 `POST /api/campaign-creation-change-sets` (human-approved campaign creation:
 one `campaign_creation` change set per profile holding create_campaign →
 create_ad_group → create_product_ad/create_keyword/create_target actions

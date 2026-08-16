@@ -1,43 +1,66 @@
-/* Amazon King brand: violet gradient on an obsidian base, echoing the
-   dashboard's palette (#7c3aed → #5300b7 on #0b0d13). */
+/* Amazon King brand: "Lumina Graphite" — the dashboard's control-room theme.
+   Warm void neutrals (#0a0a0b base) with the electric violet brand scale
+   (#6d3bd7 fill / #8b5cf6 hover / #a078ff links / #d0bcff on tints), emerald
+   secondary accents, Space Grotesk display type over Inter body text. Mirrors
+   apps/web/src/index.css. */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap");
 
 :root {
-  --vp-c-brand-1: #7c3aed;
+  --vp-c-brand-1: #6d3bd7;
   --vp-c-brand-2: #8b5cf6;
-  --vp-c-brand-3: #a78bfa;
-  --vp-c-brand-soft: rgba(124, 58, 237, 0.14);
+  --vp-c-brand-3: #a078ff;
+  --vp-c-brand-soft: rgba(109, 59, 215, 0.14);
 
   --vp-button-brand-border: transparent;
   --vp-button-brand-text: #ffffff;
-  --vp-button-brand-bg: #6d28d9;
+  --vp-button-brand-bg: #6d3bd7;
   --vp-button-brand-hover-border: transparent;
   --vp-button-brand-hover-text: #ffffff;
-  --vp-button-brand-hover-bg: #7c3aed;
+  --vp-button-brand-hover-bg: #8b5cf6;
   --vp-button-brand-active-border: transparent;
   --vp-button-brand-active-text: #ffffff;
-  --vp-button-brand-active-bg: #5b21b6;
+  --vp-button-brand-active-bg: #5516be;
+
+  --vp-font-family-base:
+    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
 
   --vp-home-hero-name-color: transparent;
-  --vp-home-hero-name-background: linear-gradient(120deg, #a78bfa 10%, #7c3aed 55%, #34d399 110%);
-  --vp-home-hero-image-background-image: linear-gradient(-45deg, #7c3aed 40%, #34d399 130%);
+  --vp-home-hero-name-background: linear-gradient(120deg, #d0bcff 10%, #8b5cf6 55%, #4edea3 110%);
+  --vp-home-hero-image-background-image: linear-gradient(-45deg, #6d3bd7 40%, #4edea3 130%);
   --vp-home-hero-image-filter: blur(72px);
 }
 
 .dark {
-  --vp-c-bg: #0b0d13;
-  --vp-c-bg-alt: #10131c;
-  --vp-c-bg-elv: #141824;
-  --vp-c-bg-soft: #141824;
-  --vp-c-divider: #242a3a;
-  --vp-c-gutter: #242a3a;
-  --vp-c-brand-soft: rgba(124, 58, 237, 0.22);
+  --vp-c-bg: #0a0a0b;
+  --vp-c-bg-alt: #131314;
+  --vp-c-bg-elv: #161618;
+  --vp-c-bg-soft: #161618;
+  --vp-c-divider: #27272a;
+  --vp-c-gutter: #27272a;
+  --vp-c-text-1: #f4f2f7;
+  --vp-c-text-2: #cbc3d7;
+  --vp-c-text-3: #958ea0;
+  --vp-c-brand-1: #8b5cf6;
+  --vp-c-brand-2: #a078ff;
+  --vp-c-brand-3: #d0bcff;
+  --vp-c-brand-soft: rgba(139, 92, 246, 0.22);
 }
 
-/* Hero polish */
-.VPHero .name {
+/* Display face for headings and the hero, matching the dashboard */
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3,
+.VPHero .name,
+.VPHero .text,
+.VPNavBarTitle .title,
+.VPFeatures .VPFeature .title {
+  font-family: "Space Grotesk", var(--vp-font-family-base);
   letter-spacing: -0.02em;
 }
 
+/* Hero polish */
 .VPHero .tagline {
   max-width: 640px;
 }
@@ -63,7 +86,6 @@
   border-top: none;
   padding-top: 0;
   margin-top: 0;
-  letter-spacing: -0.01em;
 }
 
 .ak-screenshot {
