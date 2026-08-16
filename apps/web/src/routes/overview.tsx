@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   useAmazonStatus,
@@ -9,7 +10,12 @@ import {
 import { CountrySelect } from "../components/country-select";
 import { Flag } from "../components/flag";
 import { KpiCard } from "../components/kpi-card";
-import { PerformanceTrendChart } from "../components/performance-trend-chart";
+import {
+  PerformanceTrendChart,
+  TREND_SERIES_COLORS,
+  type TrendSeries,
+} from "../components/performance-trend-chart";
+import { DailyProfitChart } from "../components/daily-profit-chart";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardBody, CardHeader } from "../components/ui/card";
@@ -60,6 +66,29 @@ export function OverviewPage() {
 
   const currency = summary.data?.currency ?? "USD";
   const totals = summary.data?.totals;
+
+  // KPI cards double as toggles for the trend chart series.
+  const [visibleSeries, setVisibleSeries] = useState<ReadonlySet<TrendSeries>>(
+    () => new Set<TrendSeries>(["spend", "sales", "royalty"]),
+  );
+  const toggleSeries = (series: TrendSeries) => {
+    setVisibleSeries((current) => {
+      const next = new Set(current);
+      if (next.has(series)) {
+        // Keep at least one line on the chart.
+        if (next.size === 1) return current;
+        next.delete(series);
+      } else {
+        next.add(series);
+      }
+      return next;
+    });
+  };
+  const seriesProps = (series: TrendSeries, disabled = false) => ({
+    swatch: TREND_SERIES_COLORS[series],
+    active: visibleSeries.has(series),
+    onToggle: disabled ? undefined : () => toggleSeries(series),
+  });
 
   return (
     <div className="flex max-w-6xl flex-col gap-6">
@@ -140,22 +169,34 @@ export function OverviewPage() {
             <KpiCard
               label="Spend"
               value={formatMoney(totals?.cost, currency)}
+              {...seriesProps("spend")}
             />
             <KpiCard
               label="Sales"
               value={formatMoney(totals?.sales, currency)}
+              {...seriesProps("sales")}
             />
-            <KpiCard label="Orders" value={formatCount(totals?.orders)} />
-            <KpiCard label="ACoS" value={formatAcos(totals?.acos)} />
+            <KpiCard
+              label="Orders"
+              value={formatCount(totals?.orders)}
+              {...seriesProps("orders")}
+            />
+            <KpiCard
+              label="ACoS"
+              value={formatAcos(totals?.acos)}
+              {...seriesProps("acos")}
+            />
             <KpiCard
               label="Est. royalty"
               value={formatMoney(totals?.estimatedRoyalty, currency)}
               missing={summary.data.economicsMissing}
+              {...seriesProps("royalty", summary.data.economicsMissing)}
             />
             <KpiCard
               label="Est. ad profit"
               value={formatMoney(totals?.estimatedAdProfit, currency)}
               missing={summary.data.economicsMissing}
+              {...seriesProps("profit", summary.data.economicsMissing)}
             />
           </div>
           {summary.data.economicsMissing && (
@@ -166,14 +207,28 @@ export function OverviewPage() {
           )}
 
           <Card>
-            <CardHeader title="Spend, attributed sales & estimated royalties" />
+            <CardHeader title="Daily performance — click a metric card to toggle its line" />
             <CardBody>
               <PerformanceTrendChart
                 daily={summary.data.daily ?? []}
                 currency={currency}
+                showProfit
+                visible={[...visibleSeries]}
               />
             </CardBody>
           </Card>
+
+          {!summary.data.economicsMissing && (
+            <Card>
+              <CardHeader title="Daily profitability" />
+              <CardBody>
+                <DailyProfitChart
+                  daily={summary.data.daily ?? []}
+                  currency={currency}
+                />
+              </CardBody>
+            </Card>
+          )}
 
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>

@@ -4,6 +4,7 @@ import type { CampaignListRow } from "@amazon-king/contracts";
 import { useCampaigns, useProfiles } from "../api/endpoints";
 import { Badge } from "../components/ui/badge";
 import { Card } from "../components/ui/card";
+import { Input } from "../components/ui/input";
 import { SortableTh } from "../components/ui/sortable-th";
 import { Table, Td } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
@@ -70,6 +71,7 @@ export function CampaignsPage() {
     key: "cost",
     direction: "desc",
   });
+  const [query, setQuery] = useState("");
 
   const countryByProfile = new Map(
     (profiles.data ?? []).map((p) => [p.profileId, p.countryCode]),
@@ -79,8 +81,13 @@ export function CampaignsPage() {
     setSort((current) => nextSort(current, column, TEXT_COLUMNS));
   }
 
+  const trimmedQuery = query.trim().toLowerCase();
+  const filteredRows = (campaigns.data ?? []).filter(
+    (row) =>
+      trimmedQuery === "" || row.name.toLowerCase().includes(trimmedQuery),
+  );
   const sortedRows = campaigns.data
-    ? [...campaigns.data].sort((a, b) =>
+    ? [...filteredRows].sort((a, b) =>
         compareNullable(
           sortValue(a, sort.key),
           sortValue(b, sort.key),
@@ -95,12 +102,22 @@ export function CampaignsPage() {
         <h1 className="text-xl font-bold tracking-tight text-zinc-100">
           Campaigns
         </h1>
-        <Link
-          to="/campaigns/new"
-          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-medium text-white shadow-[0_4px_14px_rgba(109,40,217,0.35)] transition-all hover:bg-sky-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400 active:scale-[0.98]"
-        >
-          + New campaign
-        </Link>
+        <div className="flex items-center gap-2">
+          <Input
+            type="search"
+            aria-label="Filter campaigns"
+            placeholder="Filter campaigns…"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            className="w-48"
+          />
+          <Link
+            to="/campaigns/new"
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-medium text-white shadow-[0_4px_14px_rgba(109,40,217,0.35)] transition-all hover:bg-sky-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400 active:scale-[0.98]"
+          >
+            + New campaign
+          </Link>
+        </div>
       </div>
       <Card>
         {campaigns.isPending ? (
@@ -109,7 +126,9 @@ export function CampaignsPage() {
           <ErrorState error={campaigns.error} />
         ) : sortedRows.length === 0 ? (
           <EmptyState>
-            No campaigns imported yet. Connect Amazon Ads and run a sync first.
+            {trimmedQuery !== ""
+              ? `No campaigns match “${query.trim()}”.`
+              : "No campaigns imported yet. Connect Amazon Ads and run a sync first."}
           </EmptyState>
         ) : (
           <Table>

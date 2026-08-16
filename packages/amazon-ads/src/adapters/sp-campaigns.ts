@@ -91,7 +91,9 @@ const spKeywordSchema = z.looseObject({
 const spExpressionSchema = z.array(
   z.looseObject({
     type: z.string(),
-    value: z.string(),
+    // Only `type` is required by SP v3: auto-targeting predicates
+    // (QUERY_HIGH_REL_MATCHES, CLOSE_MATCH, …) carry no value.
+    value: z.string().optional(),
   }),
 );
 
@@ -106,13 +108,21 @@ const spTargetSchema = z.looseObject({
   resolvedExpression: spExpressionSchema.optional(),
 });
 
-const spNegativeTargetSchema = z.looseObject({
-  negativeTargetId: idField,
-  campaignId: idField,
-  state: z.string(),
-  expression: spExpressionSchema.optional(),
-  resolvedExpression: spExpressionSchema.optional(),
-});
+const spNegativeTargetSchema = z
+  .looseObject({
+    // SP v3 currently calls this `targetId`. Accept the older descriptive
+    // alias as well so already-captured fixtures remain readable.
+    targetId: idField.optional(),
+    negativeTargetId: idField.optional(),
+    campaignId: idField,
+    state: z.string(),
+    expression: spExpressionSchema.optional(),
+    resolvedExpression: spExpressionSchema.optional(),
+  })
+  .refine(
+    (row) => row.targetId !== undefined || row.negativeTargetId !== undefined,
+    { path: ["targetId"], message: "Expected Amazon negative target id" },
+  );
 
 const spNegativeKeywordSchema = z
   .looseObject({
@@ -331,7 +341,7 @@ export async function listNegativeTargets(
     itemSchema: spNegativeTargetSchema,
   });
   return rows.map((raw) => ({
-    negativeTargetId: raw.negativeTargetId,
+    negativeTargetId: raw.targetId ?? (raw.negativeTargetId as string),
     campaignId: raw.campaignId,
     state: raw.state,
     expression: raw.resolvedExpression ?? raw.expression ?? [],

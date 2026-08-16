@@ -110,6 +110,7 @@ describe("dashboard country filtering", () => {
         date: "2026-08-13",
         cost: "5.0000",
         sales: "20.0000",
+        orders: 2,
         estimatedRoyalty: null,
       },
     ]);

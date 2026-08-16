@@ -147,7 +147,9 @@ cors, rate-limit. All §11 routes plus the frontend's contract extensions
 (`GET /api/change-sets`, cannibalization comparison + campaign-level
 negative-exact/negative-target draft creation, `csrfToken` on the session
 response, dashboard
-`daily` series + `writesDisabled`, and the cross-campaign search-term
+`daily` series + `writesDisabled`, `amazonConsoleUrl` on campaign
+list/detail payloads (built from the profile's `account_id` entity id, null
+when absent), and the cross-campaign search-term
 screens: `GET /api/search-terms` + `GET /api/search-terms/:term`), and
 `POST /api/campaign-creation-change-sets` (human-approved campaign creation:
 one `campaign_creation` change set per profile holding create_campaign →
@@ -167,9 +169,18 @@ pointing at the creation set; `applyLoadedSet` rejects such a set with
 never blocked in all campaigns at once. Passwordless email login (magic link is **logged in
 dev only**); the login token remembers the allowlisted browser origin it was
 started from (`login_tokens.origin`) so the magic link and post-verify
-redirect work on localhost and a cloudflared tunnel interchangeably, stateless HMAC CSRF per session, single-use OAuth state marked used
+redirect work on localhost and a cloudflared tunnel interchangeably, and an
+optional same-origin `next` path (`login_tokens.next_path`) so the re-auth
+flow returns the user to the page that required it, stateless HMAC CSRF per
+session, single-use OAuth state marked used
 before code exchange, refresh tokens envelope-encrypted via
-`@amazon-king/crypto`, recent-auth (15 min) required for apply/rollback, and the
+`@amazon-king/crypto`, recent-auth (15 min) required for apply/rollback —
+except retrying a `failed` change set, which replays an already-approved
+payload through the same guarded path and therefore skips the recent-auth
+gate. On the web side, a gated mutation failing with `REAUTH_REQUIRED` opens
+the shared `ReauthDialog` (`apps/web/src/components/reauth-dialog.tsx`):
+one click emails a magic link carrying the current path as `next`, and the
+post-verify redirect lands the user back on that page — and the
 guarded write flow in `src/services/changes.ts` (fingerprint-idempotent create,
 preview → re-read Amazon + before-state compare → guardrails → per-item apply →
 verify; rollback is a compensating action, including verified app-created

@@ -119,33 +119,51 @@ export async function createLoginToken(
     expiresAt: Date;
     /** Web origin the login was started from; the magic link returns there. */
     origin?: string | null;
+    /** Same-origin path to redirect to after verify (e.g. `/changes`). */
+    nextPath?: string | null;
   },
 ): Promise<string> {
   const result = await db.query<{ id: string }>(
-    `insert into login_tokens (email, token_hash, expires_at, origin)
-     values ($1, $2, $3, $4)
+    `insert into login_tokens (email, token_hash, expires_at, origin, next_path)
+     values ($1, $2, $3, $4, $5)
      returning id`,
-    [input.email, input.tokenHash, input.expiresAt, input.origin ?? null],
+    [
+      input.email,
+      input.tokenHash,
+      input.expiresAt,
+      input.origin ?? null,
+      input.nextPath ?? null,
+    ],
   );
   return result.rows[0]!.id;
 }
 
 /**
- * Single-use consume: marks the token used atomically and returns the email
- * and originating web origin only when the token was unused and unexpired;
- * null otherwise.
+ * Single-use consume: marks the token used atomically and returns the email,
+ * originating web origin, and post-verify path only when the token was unused
+ * and unexpired; null otherwise.
  */
 export async function consumeLoginToken(
   db: Db,
   tokenHash: string,
-): Promise<{ email: string; origin: string | null } | null> {
-  const result = await db.query<{ email: string; origin: string | null }>(
+): Promise<{
+  email: string;
+  origin: string | null;
+  nextPath: string | null;
+} | null> {
+  const result = await db.query<{
+    email: string;
+    origin: string | null;
+    next_path: string | null;
+  }>(
     `update login_tokens set used_at = now()
      where token_hash = $1 and used_at is null and expires_at > now()
-     returning email, origin`,
+     returning email, origin, next_path`,
     [tokenHash],
   );
-  return result.rows[0] ?? null;
+  const row = result.rows[0];
+  if (!row) return null;
+  return { email: row.email, origin: row.origin, nextPath: row.next_path };
 }
 
 /** Create a one-time OAuth state tied to the authenticated user. */

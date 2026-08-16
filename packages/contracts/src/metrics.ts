@@ -32,13 +32,14 @@ export const dashboardSummarySchema = z.object({
   dataCurrentThrough: isoDateTimeSchema,
   /** True when writes are unavailable (kill switch or all profiles read-only). */
   writesDisabled: z.boolean().optional(),
-  /** Per-day monetary series for the dashboard trend chart. */
+  /** Per-day series for the dashboard trend chart. */
   daily: z
     .array(
       z.object({
         date: isoDateSchema,
         cost: nonNegativeDecimalStringSchema,
         sales: nonNegativeDecimalStringSchema,
+        orders: z.number().int().nonnegative(),
         estimatedRoyalty: nonNegativeDecimalStringSchema.nullable(),
       }),
     )
@@ -52,6 +53,14 @@ export const campaignRowSchema = z.object({
   name: z.string(),
   state: z.string(),
   totals: metricTotalsSchema,
+  /**
+   * Amazon Ads console (Campaign Manager) URL for the campaign's profile, so
+   * the UI can link out to Amazon for a side-by-side data check. Scoped to
+   * the profile, not the campaign: the console's per-campaign URLs use an id
+   * namespace the API never exposes. Null when the profile has no entity id
+   * on file (never re-synced with account info).
+   */
+  amazonConsoleUrl: z.string().nullable(),
 });
 export type CampaignRow = z.infer<typeof campaignRowSchema>;
 

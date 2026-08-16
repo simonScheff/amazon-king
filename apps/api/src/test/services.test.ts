@@ -243,6 +243,62 @@ describe("session service", () => {
     expect(verified!.webOrigin).toBe("http://localhost:5173");
   });
 
+  it("carries the requested post-verify path through the flow", async () => {
+    const db = new FakeDb();
+    const logger = fakeLogger();
+    const service = createSessionService({
+      db: db as never,
+      config: testConfig(),
+      logger,
+    });
+
+    const result = await service.startLogin(
+      "owner@example.com",
+      META,
+      undefined,
+      "/changes",
+    );
+
+    const token = new URL(result.devLoginUrl!).searchParams.get("token")!;
+    const verified = await service.verifyLogin(token, META);
+    expect(verified!.nextPath).toBe("/changes");
+  });
+
+  it("drops post-verify paths that could leave the origin", async () => {
+    const db = new FakeDb();
+    const logger = fakeLogger();
+    const service = createSessionService({
+      db: db as never,
+      config: testConfig(),
+      logger,
+    });
+
+    for (const bad of [
+      "//evil.example.com",
+      "\\evil",
+      "https://evil.example.com",
+    ]) {
+      const result = await service.startLogin(
+        "owner@example.com",
+        META,
+        undefined,
+        bad,
+      );
+      const token = new URL(result.devLoginUrl!).searchParams.get("token")!;
+      const verified = await service.verifyLogin(token, META);
+      expect(verified!.nextPath).toBeNull();
+    }
+  });
+
+  it("reports no post-verify path when none was requested", async () => {
+    const db = new FakeDb();
+    const logger = fakeLogger();
+    const { service, token } = await fullLogin(db, logger);
+
+    const verified = await service.verifyLogin(token, META);
+    expect(verified!.nextPath).toBeNull();
+  });
+
   it("rejects non-configured origins outside development", async () => {
     const db = new FakeDb();
     const service = createSessionService({
@@ -801,7 +857,7 @@ describe("cannibalization resolution", () => {
       evidence_window_start: "2026-06-14",
       evidence_window_end: new Date(2026, 7, 12),
       data_freshness_at: new Date("2026-08-13T02:01:00.000Z"),
-      expires_at: new Date("2026-08-16T02:01:00.000Z"),
+      expires_at: new Date(Date.now() + 86_400_000),
     });
     db.seedRecommendationEvidence(recommendation.id as string, {
       searchTerm: "tractor colouring book",

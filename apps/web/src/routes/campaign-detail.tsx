@@ -100,7 +100,15 @@ function NegativeKeywordsTable({ rows }: { rows: NegativeKeywordRow[] }) {
   );
 }
 
-function MetricsTable({ rows, currency }: { rows: Row[]; currency: string }) {
+function MetricsTable({
+  rows,
+  currency,
+  termLink,
+}: {
+  rows: Row[];
+  currency: string;
+  termLink?: { days: number; country?: string };
+}) {
   if (rows.length === 0) {
     return <EmptyState>Nothing here yet for this campaign.</EmptyState>;
   }
@@ -126,7 +134,25 @@ function MetricsTable({ rows, currency }: { rows: Row[]; currency: string }) {
               : null;
           return (
             <tr key={r.id}>
-              <Td className="max-w-xs truncate">{r.name}</Td>
+              <Td className="max-w-xs truncate">
+                {termLink ? (
+                  <Link
+                    to="/search-terms/$term"
+                    params={{ term: r.name }}
+                    search={{
+                      days: termLink.days,
+                      ...(termLink.country
+                        ? { country: termLink.country }
+                        : {}),
+                    }}
+                    className="text-sky-400 hover:underline"
+                  >
+                    {r.name}
+                  </Link>
+                ) : (
+                  r.name
+                )}
+              </Td>
               <Td>
                 <Badge tone={r.state === "enabled" ? "success" : "neutral"}>
                   {r.state}
@@ -197,6 +223,16 @@ export function CampaignDetailPage() {
         <Badge tone={c.state === "enabled" ? "success" : "neutral"}>
           {c.state}
         </Badge>
+        {c.amazonConsoleUrl ? (
+          <a
+            href={c.amazonConsoleUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs text-sky-400 hover:underline"
+          >
+            Open in Amazon Ads ↗
+          </a>
+        ) : null}
         <span className="text-xs text-zinc-500">
           Profile <span className="font-mono">{c.profileId}</span> · {currency}
           {country ? ` · ${country}` : ""}
@@ -310,7 +346,11 @@ export function CampaignDetailPage() {
             ) : tab === "negativeKeywords" ? (
               <NegativeKeywordsTable rows={campaign.data.negativeKeywords} />
             ) : (
-              <MetricsTable rows={campaign.data[tab]} currency={currency} />
+              <MetricsTable
+                rows={campaign.data[tab]}
+                currency={currency}
+                termLink={tab === "searchTerms" ? { days, country } : undefined}
+              />
             )}
           </div>
         </CardBody>

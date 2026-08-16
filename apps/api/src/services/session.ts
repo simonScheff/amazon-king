@@ -58,6 +58,16 @@ export function isAllowedWebOrigin(
   );
 }
 
+/**
+ * Post-verify redirect path allowlist: same-origin relative paths only.
+ * Rejects protocol-relative (`//host`) and backslash tricks so the redirect
+ * can never leave the allowlisted web origin. Checked on intake (the contract
+ * schema already enforces it) and again on the stored value at verify time.
+ */
+export function isAllowedNextPath(path: string): boolean {
+  return /^\/[^/\\]/.test(path) && path.length <= 500;
+}
+
 export interface SessionServiceDeps {
   db: Db;
   config: ApiConfig;
@@ -103,6 +113,7 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
       email: string,
       meta: RequestMeta,
       origin?: string,
+      next?: string,
     ): Promise<LoginStartResult> {
       if (
         config.ownerEmail &&
@@ -115,12 +126,14 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
       }
       const webOrigin =
         origin && isAllowedWebOrigin(origin, config) ? origin : null;
+      const nextPath = next && isAllowedNextPath(next) ? next : null;
       const token = randomToken();
       await sessions.createLoginToken(db, {
         email,
         tokenHash: sha256Hex(token),
         expiresAt: new Date(now().getTime() + LOGIN_TOKEN_TTL_MS),
         origin: webOrigin,
+        nextPath,
       });
       // The web app proxies /api, so the browser's own origin serves the
       // verify endpoint on localhost and tunnel alike; fall back to the
@@ -167,6 +180,11 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
         consumed.origin && isAllowedWebOrigin(consumed.origin, config)
           ? consumed.origin
           : config.webOrigin;
+      // Stored values predate any config change — re-validate before use.
+      const nextPath =
+        consumed.nextPath && isAllowedNextPath(consumed.nextPath)
+          ? consumed.nextPath
+          : null;
       const { user, workspaceId } = await identity.findOrProvisionOwner(
         db,
         email,
@@ -196,7 +214,7 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
         meta,
         session.id,
       );
-      return { sessionToken, auth, webOrigin };
+      return { sessionToken, auth, webOrigin, nextPath };
     },
 
     async authenticate(

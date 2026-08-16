@@ -44,3 +44,26 @@ Keep `WEB_ORIGIN` and `API_PUBLIC_URL` in `.env` pointed at
 request carries no origin. Note the Amazon _connect_ (OAuth) callback still
 redirects to `WEB_ORIGIN` only — connecting the Amazon account is best done
 from localhost.
+
+## This repo: no email on localhost — links are dev-delivered
+
+Local development has no SMTP configured, so **no real email is ever sent**.
+`POST /api/session/login` instead returns the magic link as `devLoginUrl` in
+the JSON response (the login page and the re-auth "Confirm it's you" dialog
+render it as a "Continue sign-in" link), and the API process also logs it.
+This is intentional (`apps/api/src/services/session.ts` `startLogin`); do not
+treat the missing email as a bug.
+
+Related sign-in facts worth knowing when working locally:
+
+- Spend-changing actions (apply, rollback, max-cpc, campaign creation)
+  require an app session created within the last 15 minutes
+  (`RECENT_AUTH_MS` in `apps/api/src/config.ts`). When it lapses, the web app
+  opens the re-auth dialog — on localhost, one click on the dev link
+  re-signs you in and returns you to the same page (the link carries the
+  path as `next`, stored in `login_tokens.next_path`, migration `0008`).
+- **After pulling or writing schema changes, run `make migrate`.** A missing
+  migration surfaces only as a generic "Internal server error" in the UI —
+  e.g. the re-auth dialog failed with a 500 until `0008_login_token_next_path.sql`
+  was applied to the running Docker Postgres. If a login or mutation 500s
+  locally, check `docker compose ps`, then pending migrations first.

@@ -104,7 +104,8 @@ export interface Keyword {
 /** One targeting expression predicate, e.g. { type: "ASIN_SAME_AS", value: "B0…" }. */
 export interface TargetExpression {
   type: string;
-  value: string;
+  /** Absent on auto-targeting predicates (e.g. QUERY_HIGH_REL_MATCHES). */
+  value?: string;
 }
 
 export interface Target {

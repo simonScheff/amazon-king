@@ -20,6 +20,8 @@ describe("toContractChangeAction", () => {
       adGroupId: null,
       targetId: null,
       searchTerm: null,
+      campaignName: null,
+      amazonCampaignId: null,
       beforeValue: "0.7500",
       afterValue: "0.6500",
       fingerprint: "fingerprint",

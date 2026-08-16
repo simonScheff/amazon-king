@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import type { SearchTermListRow } from "@amazon-king/contracts";
 import { useBooks, useSearchTerms } from "../api/endpoints";
 import { Card } from "../components/ui/card";
-import { Select } from "../components/ui/input";
+import { Input, Select } from "../components/ui/input";
 import { SortableTh } from "../components/ui/sortable-th";
 import { Table, Td, Th } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
@@ -72,13 +72,20 @@ export function SearchTermsPage() {
     key: "cost",
     direction: "desc",
   });
+  const [query, setQuery] = useState("");
 
   function onSort(column: SortKey) {
     setSort((current) => nextSort(current, column, TEXT_COLUMNS));
   }
 
+  const trimmedQuery = query.trim().toLowerCase();
+  const filteredRows = (searchTerms.data ?? []).filter(
+    (row) =>
+      trimmedQuery === "" ||
+      row.searchTerm.toLowerCase().includes(trimmedQuery),
+  );
   const sortedRows = searchTerms.data
-    ? [...searchTerms.data].sort((a, b) =>
+    ? [...filteredRows].sort((a, b) =>
         compareNullable(
           sortValue(a, sort.key),
           sortValue(b, sort.key),
@@ -94,6 +101,14 @@ export function SearchTermsPage() {
           Search terms
         </h1>
         <div className="ml-auto flex items-center gap-2">
+          <Input
+            type="search"
+            aria-label="Filter search terms"
+            placeholder="Filter terms…"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            className="w-48"
+          />
           <label htmlFor="product-filter" className="text-sm text-zinc-400">
             Product
           </label>
@@ -124,9 +139,11 @@ export function SearchTermsPage() {
           <ErrorState error={searchTerms.error} />
         ) : sortedRows.length === 0 ? (
           <EmptyState>
-            {book
-              ? "No search terms for this product in the selected window."
-              : "No search terms imported yet. Connect Amazon Ads and run a sync first."}
+            {trimmedQuery !== ""
+              ? `No search terms match “${query.trim()}”.`
+              : book
+                ? "No search terms for this product in the selected window."
+                : "No search terms imported yet. Connect Amazon Ads and run a sync first."}
           </EmptyState>
         ) : (
           <Table>

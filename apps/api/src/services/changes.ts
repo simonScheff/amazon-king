@@ -855,7 +855,7 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
         nt.expression.some(
           (entry) =>
             entry.type === "ASIN_SAME_AS" &&
-            entry.value.trim().toUpperCase() === needle,
+            entry.value?.trim().toUpperCase() === needle,
         ),
     );
   }
@@ -1357,7 +1357,7 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
               (t.expression ?? []).some(
                 (entry) =>
                   entry.type === "ASIN_SAME_AS" &&
-                  entry.value.trim().toUpperCase() === expressionAsin,
+                  entry.value?.trim().toUpperCase() === expressionAsin,
               ),
           )
         : undefined;
@@ -1694,7 +1694,7 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
                           expression.some(
                             (entry) =>
                               entry.type === "ASIN_SAME_AS" &&
-                              entry.value.trim().toUpperCase() ===
+                              entry.value?.trim().toUpperCase() ===
                                 asin.trim().toUpperCase(),
                           )
                         );
@@ -2353,6 +2353,16 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
         ...toResult(loaded.set, loaded.actions),
         guardrails: result.violations.map((v) => `${v.code}: ${v.message}`),
       };
+    },
+
+    async getChangeSetStatus(auth, changeSetId) {
+      const set = await changes.getChangeSetForWorkspace(
+        db,
+        auth.workspaceId,
+        changeSetId,
+      );
+      if (!set) throw notFound("Unknown change set");
+      return set.status;
     },
 
     async applyChangeSet(auth, changeSetId, meta) {

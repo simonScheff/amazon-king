@@ -52,7 +52,9 @@ const VALID_BODY = {
   keywords: [{ text: "tractor book", matchType: "EXACT", bid: "0.45" }],
 };
 
-function stubServices(options: { recentAuth?: boolean } = {}) {
+function stubServices(
+  options: { recentAuth?: boolean; changeSetStatus?: string } = {},
+) {
   const session = {
     authenticate: vi.fn(async () => AUTH),
     verifyCsrf: vi.fn(() => true),
@@ -70,6 +72,10 @@ function stubServices(options: { recentAuth?: boolean } = {}) {
         },
       ],
     })),
+    getChangeSetStatus: vi.fn(
+      async () => options.changeSetStatus ?? "previewed",
+    ),
+    applyChangeSet: vi.fn(async () => ({ id: "set-1", status: "applied" })),
   } as unknown as ChangeService;
   const services = {
     session,
@@ -181,5 +187,191 @@ describe("POST /api/campaign-creation-change-sets", () => {
     expect(response.statusCode).toBe(401);
     expect(response.json().error.code).toBe("REAUTH_REQUIRED");
     expect(changes.createCampaignCreationChangeSets).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/change-sets/:id/apply", () => {
+  let app: FastifyInstance | null = null;
+  afterEach(async () => {
+    await app?.close();
+    app = null;
+  });
+
+  async function start(
+    options: { recentAuth?: boolean; changeSetStatus?: string } = {},
+  ) {
+    const stubs = stubServices(options);
+    app = await buildServer({
+      config: testConfig(),
+      logger: createLogger("test", { level: "silent" }),
+      services: stubs.services,
+    });
+    return stubs;
+  }
+
+  function apply() {
+    return app!.inject({
+      method: "POST",
+      url: "/api/change-sets/set-1/apply",
+      headers: { "x-csrf-token": "csrf" },
+    });
+  }
+
+  it("applies a previewed set with a recent sign-in", async () => {
+    const { changes } = await start({ changeSetStatus: "previewed" });
+
+    const response = await apply();
+
+    expect(response.statusCode).toBe(200);
+    expect(changes.applyChangeSet).toHaveBeenCalledWith(
+      AUTH,
+      "set-1",
+      expect.anything(),
+    );
+  });
+
+  it("requires a recent sign-in for a first-time apply", async () => {
+    const { changes } = await start({
+      recentAuth: false,
+      changeSetStatus: "previewed",
+    });
+
+    const response = await apply();
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error.code).toBe("REAUTH_REQUIRED");
+    expect(changes.applyChangeSet).not.toHaveBeenCalled();
+  });
+
+  it("retries a failed set without a recent sign-in", async () => {
+    const { changes } = await start({
+      recentAuth: false,
+      changeSetStatus: "failed",
+    });
+
+    const response = await apply();
+
+    expect(response.statusCode).toBe(200);
+    expect(changes.applyChangeSet).toHaveBeenCalledWith(
+      AUTH,
+      "set-1",
+      expect.anything(),
+    );
+  });
+});
+
+describe("POST /api/session/login", () => {
+  let app: FastifyInstance | null = null;
+  afterEach(async () => {
+    await app?.close();
+    app = null;
+  });
+
+  async function start() {
+    const session = {
+      authenticate: vi.fn(async () => AUTH),
+      verifyCsrf: vi.fn(() => true),
+      isRecentAuth: vi.fn(() => true),
+      startLogin: vi.fn(async () => ({})),
+    } as unknown as SessionService;
+    const services = {
+      session,
+      changes: {},
+      amazon: {},
+      read: {},
+    } as unknown as ApiServices;
+    app = await buildServer({
+      config: testConfig(),
+      logger: createLogger("test", { level: "silent" }),
+      services,
+    });
+    return { session };
+  }
+
+  it("passes the requested post-verify path to the session service", async () => {
+    const { session } = await start();
+
+    const response = await app!.inject({
+      method: "POST",
+      url: "/api/session/login",
+      payload: { email: "owner@example.com", next: "/changes" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(session.startLogin).toHaveBeenCalledWith(
+      "owner@example.com",
+      expect.anything(),
+      undefined,
+      "/changes",
+    );
+  });
+
+  it("rejects a post-verify path that could leave the origin", async () => {
+    const { session } = await start();
+
+    const response = await app!.inject({
+      method: "POST",
+      url: "/api/session/login",
+      payload: { email: "owner@example.com", next: "//evil.example.com" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe("VALIDATION_ERROR");
+    expect(session.startLogin).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/session/verify", () => {
+  let app: FastifyInstance | null = null;
+  afterEach(async () => {
+    await app?.close();
+    app = null;
+  });
+
+  async function start(nextPath: string | null) {
+    const session = {
+      verifyLogin: vi.fn(async () => ({
+        sessionToken: "raw-session-token",
+        auth: AUTH,
+        webOrigin: "http://localhost:5173",
+        nextPath,
+      })),
+    } as unknown as SessionService;
+    const services = {
+      session,
+      changes: {},
+      amazon: {},
+      read: {},
+    } as unknown as ApiServices;
+    app = await buildServer({
+      config: testConfig(),
+      logger: createLogger("test", { level: "silent" }),
+      services,
+    });
+    return { session };
+  }
+
+  it("redirects back to the requested in-app path after verify", async () => {
+    await start("/changes");
+
+    const response = await app!.inject({
+      method: "GET",
+      url: "/api/session/verify?token=abc",
+    });
+
+    expect(response.statusCode).toBe(302);
+    expect(response.headers.location).toBe("http://localhost:5173/changes");
+  });
+
+  it("redirects to the bare web origin when no path was requested", async () => {
+    await start(null);
+
+    const response = await app!.inject({
+      method: "GET",
+      url: "/api/session/verify?token=abc",
+    });
+
+    expect(response.statusCode).toBe(302);
+    expect(response.headers.location).toBe("http://localhost:5173");
   });
 });

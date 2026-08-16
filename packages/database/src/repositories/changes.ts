@@ -62,6 +62,10 @@ export interface ChangeAction {
   adGroupId: string | null;
   targetId: string | null;
   searchTerm: string | null;
+  /** Resolved campaign name; only populated by listChangeActions. */
+  campaignName: string | null;
+  /** Resolved Amazon campaign id (app route key); only listChangeActions. */
+  amazonCampaignId: string | null;
   beforeValue: string | null;
   afterValue: string | null;
   fingerprint: string;
@@ -87,6 +91,9 @@ interface ChangeActionRow {
   ad_group_id: string | null;
   target_id: string | null;
   search_term: string | null;
+  /** Present only when the query joined campaigns (listChangeActions). */
+  campaign_name?: string | null;
+  amazon_campaign_id?: string | null;
   before_value: string | null;
   after_value: string | null;
   fingerprint: string;
@@ -113,6 +120,8 @@ function toChangeAction(row: ChangeActionRow): ChangeAction {
     adGroupId: row.ad_group_id,
     targetId: row.target_id,
     searchTerm: row.search_term,
+    campaignName: row.campaign_name ?? null,
+    amazonCampaignId: row.amazon_campaign_id ?? null,
     beforeValue: row.before_value,
     afterValue: row.after_value,
     fingerprint: row.fingerprint,
@@ -181,7 +190,11 @@ export async function listChangeActions(
   changeSetId: string,
 ): Promise<ChangeAction[]> {
   const result = await db.query<ChangeActionRow>(
-    `select * from change_actions where change_set_id = $1 order by id`,
+    `select ca.*, c.name as campaign_name, c.amazon_campaign_id
+     from change_actions ca
+     left join campaigns c on c.id = ca.campaign_id
+     where ca.change_set_id = $1
+     order by ca.id`,
     [changeSetId],
   );
   return result.rows.map(toChangeAction);

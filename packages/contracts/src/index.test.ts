@@ -158,6 +158,8 @@ describe("contracts smoke test", () => {
         campaignId: "campaign-1",
         name: "General",
         state: "enabled",
+        amazonConsoleUrl:
+          "https://advertising.amazon.com/cm/campaigns?entityId=ENTITY-1",
         totals: {
           impressions: 100,
           clicks: 10,
@@ -206,6 +208,8 @@ describe("contracts smoke test", () => {
       campaignId: "campaign-1",
       name: "General",
       state: "enabled",
+      amazonConsoleUrl:
+        "https://advertising.amazon.com/cm/campaigns?entityId=ENTITY-1",
       totals: {
         impressions: 100,
         clicks: 10,

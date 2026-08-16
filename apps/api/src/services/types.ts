@@ -15,6 +15,7 @@ import type {
   CannibalizationResolutionContext,
   ChangeAction,
   ChangeSet,
+  ChangeSetStatus,
   MaxCpcChangeSetResult,
   DashboardSummary,
   DataFreshness,
@@ -57,6 +58,8 @@ export interface VerifiedLogin {
   auth: AuthContext;
   /** Allowlisted web origin to redirect to after verify. */
   webOrigin: string;
+  /** Same-origin path within webOrigin to land on after verify, if requested. */
+  nextPath: string | null;
 }
 
 export interface LoginStartResult {
@@ -76,6 +79,8 @@ export interface SessionService {
     meta: RequestMeta,
     /** Browser Origin header of the login request; used for the magic-link base and post-verify redirect when allowlisted. */
     origin?: string,
+    /** Same-origin path to land on after verify (re-auth flow); relative paths only. */
+    next?: string,
   ): Promise<LoginStartResult>;
   /**
    * Consume a login token (single use), provision user/workspace on first
@@ -259,6 +264,16 @@ export interface ChangeService {
     changeSetId: string,
     meta: RequestMeta,
   ): Promise<ChangeSetPreviewResult>;
+  /**
+   * Workspace-scoped status of a change set. Used by the apply route to
+   * decide whether recent re-authentication is required: retrying a `failed`
+   * set replays an already-approved payload through the same guarded path, so
+   * it is exempt; first-time applies are not.
+   */
+  getChangeSetStatus(
+    auth: AuthContext,
+    changeSetId: string,
+  ): Promise<ChangeSetStatus>;
   /**
    * Guarded apply (§10): status lock, expiry check, Amazon re-read +
    * before-state compare, guardrail re-check, per-item results, verify.

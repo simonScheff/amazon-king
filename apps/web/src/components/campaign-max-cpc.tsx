@@ -5,7 +5,9 @@ import {
   useChangeSetPreview,
   useSetCampaignMaxCpc,
 } from "../api/endpoints";
+import { isReauthError } from "../api/client";
 import { formatDateTime, formatMoney } from "../lib/format";
+import { ReauthDialog } from "./reauth-dialog";
 import { EmptyState, ErrorState, Loading } from "./states";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -35,6 +37,7 @@ export function CampaignMaxCpc({ campaignId }: { campaignId: string }) {
   const setMaxCpc = useSetCampaignMaxCpc(campaignId);
   const [value, setValue] = useState("");
   const [draftId, setDraftId] = useState<string | null>(null);
+  const [reauthOpen, setReauthOpen] = useState(false);
   const preview = useChangeSetPreview(draftId);
   const apply = useApplyChangeSet(draftId ?? "");
 
@@ -78,6 +81,9 @@ export function CampaignMaxCpc({ campaignId }: { campaignId: string }) {
           apply.reset();
           setDraftId(result.changeSet.id);
         },
+        onError: (err) => {
+          if (isReauthError(err)) setReauthOpen(true);
+        },
       },
     );
   }
@@ -88,6 +94,9 @@ export function CampaignMaxCpc({ campaignId }: { campaignId: string }) {
         apply.reset();
         setDraftId(null);
         void controls.refetch();
+      },
+      onError: (err) => {
+        if (isReauthError(err)) setReauthOpen(true);
       },
     });
   }
@@ -172,7 +181,7 @@ export function CampaignMaxCpc({ campaignId }: { campaignId: string }) {
               applying a ceiling.
             </p>
           ) : null}
-          {setMaxCpc.error ? (
+          {setMaxCpc.error && !isReauthError(setMaxCpc.error) ? (
             <p role="alert" className="mt-3 text-sm text-red-300">
               {errorMessage(setMaxCpc.error)}
             </p>
@@ -304,7 +313,7 @@ export function CampaignMaxCpc({ campaignId }: { campaignId: string }) {
                 ) : null}
               </ul>
             )}
-            {apply.error ? (
+            {apply.error && !isReauthError(apply.error) ? (
               <p role="alert" className="mt-3 text-red-300">
                 {errorMessage(apply.error)}
               </p>
@@ -312,6 +321,7 @@ export function CampaignMaxCpc({ campaignId }: { campaignId: string }) {
           </div>
         ) : null}
       </Dialog>
+      <ReauthDialog open={reauthOpen} onClose={() => setReauthOpen(false)} />
     </div>
   );
 }

@@ -431,9 +431,13 @@ export function useApplyChangeSet(changeSetId: string) {
   return useMutation({
     mutationFn: () =>
       apiFetch(`/api/change-sets/${changeSetId}/apply`, { method: "POST" }),
-    onSuccess: async () => {
+    // onSettled: even a failed request can change server state (the guarded
+    // path records per-item failures and flips the set to failed before
+    // throwing), so always refresh both the list and the action rows.
+    onSettled: async () => {
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["change-sets"] }),
+        qc.invalidateQueries({ queryKey: ["change-set-preview"] }),
         qc.invalidateQueries({ queryKey: ["campaign-max-cpc"] }),
         qc.invalidateQueries({ queryKey: ["campaign"] }),
       ]);
@@ -446,7 +450,10 @@ export function useRollbackChangeAction() {
   return useMutation({
     mutationFn: (actionId: string) =>
       apiFetch(`/api/change-actions/${actionId}/rollback`, { method: "POST" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["change-sets"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["change-sets"] });
+      qc.invalidateQueries({ queryKey: ["change-set-preview"] });
+    },
   });
 }
 

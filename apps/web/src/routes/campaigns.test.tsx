@@ -41,6 +41,8 @@ function campaign(
     campaignId,
     name,
     state: "enabled",
+    amazonConsoleUrl:
+      "https://advertising.amazon.com/cm/campaigns?entityId=ENTITY-1",
     totals,
     profitability: {
       dateRange: { start: "2026-08-07", end: "2026-08-13" },
@@ -147,6 +149,30 @@ describe("CampaignsPage seven-day profitability", () => {
     expect(markets).toHaveLength(4);
     expect(markets[0]).toHaveTextContent("US");
     expect(markets[0]!.querySelector(".fi.fi-us")).not.toBeNull();
+  });
+
+  it("filters campaigns by the search box", () => {
+    const rowNames = () =>
+      screen
+        .getAllByRole("row")
+        .slice(1)
+        .map((row) => row.querySelector("td a")?.textContent ?? "");
+
+    render(<CampaignsPage />);
+    expect(rowNames()).toHaveLength(4);
+
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "RESEARCH" },
+    });
+    expect(rowNames()).toEqual(["Research"]);
+
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "zzz" },
+    });
+    expect(screen.getByText("No campaigns match “zzz”.")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "" } });
+    expect(rowNames()).toHaveLength(4);
   });
 
   it("sorts rows when a column header is clicked", () => {

@@ -390,6 +390,7 @@ export class FakeDb {
             token_hash: p[1],
             expires_at: p[2],
             origin: p[3] ?? null,
+            next_path: p[4] ?? null,
             used_at: null,
             created_at: new Date(),
           };
@@ -409,7 +410,13 @@ export class FakeDb {
           if (!row) return { rows: [], rowCount: 0 };
           row.used_at = new Date();
           return {
-            rows: [{ email: row.email, origin: row.origin }],
+            rows: [
+              {
+                email: row.email,
+                origin: row.origin,
+                next_path: row.next_path ?? null,
+              },
+            ],
             rowCount: 1,
           };
         },
@@ -868,9 +875,22 @@ export class FakeDb {
           ),
       },
       {
-        match: "select * from change_actions where change_set_id = $1",
+        match: "left join campaigns c on c.id = ca.campaign_id",
         handle: (p) =>
-          this.ok(t.changeActions.filter((r) => r.change_set_id === p[0])),
+          this.ok(
+            t.changeActions
+              .filter((r) => r.change_set_id === p[0])
+              .map((r) => {
+                const campaign = t.campaigns.find(
+                  (c) => c.id === r.campaign_id,
+                );
+                return {
+                  ...r,
+                  campaign_name: campaign?.name ?? null,
+                  amazon_campaign_id: campaign?.amazon_campaign_id ?? null,
+                };
+              }),
+          ),
       },
       {
         match: "select * from change_actions where id = $1",

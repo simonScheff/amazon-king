@@ -57,6 +57,8 @@ const detail: CampaignDetail = {
     campaignId: "campaign-1",
     name: "General",
     state: "enabled",
+    amazonConsoleUrl:
+      "https://advertising.amazon.com/cm/campaigns?entityId=ENTITY-1",
     totals: {
       impressions: 100,
       clicks: 10,
@@ -134,6 +136,17 @@ describe("CampaignDetailPage profitability", () => {
     expect(screen.getByTestId("campaign-chart")).toHaveTextContent(
       "2 daily points · profit shown",
     );
+  });
+
+  it("links to the campaign in the Amazon Ads console", () => {
+    render(<CampaignDetailPage />);
+
+    const link = screen.getByRole("link", { name: /Open in Amazon Ads/ });
+    expect(link).toHaveAttribute(
+      "href",
+      "https://advertising.amazon.com/cm/campaigns?entityId=ENTITY-1",
+    );
+    expect(link).toHaveAttribute("target", "_blank");
   });
 
   it("requests a different campaign window when the selector changes", () => {

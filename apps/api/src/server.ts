@@ -50,6 +50,10 @@ export interface BuildServerDeps {
 
 const STRICT_RATE = { max: 10, timeWindow: "1 minute" } as const;
 const WRITE_RATE = { max: 20, timeWindow: "1 minute" } as const;
+// Preview is a read (plan §11), but §13 gives it its own bucket. It must
+// tolerate the Change center fetching one preview per visible change set,
+// plus TanStack Query refetches, so it sits well above the write limits.
+const PREVIEW_RATE = { max: 120, timeWindow: "1 minute" } as const;
 
 function parse<T>(schema: ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
@@ -205,6 +209,7 @@ export async function buildServer(
         body.email,
         meta(request),
         request.headers.origin,
+        body.next,
       );
       // Always 200: never reveal whether an email is allowed.
       return { ok: true, ...result };
@@ -233,7 +238,7 @@ export async function buildServer(
         secure: !config.isDevelopment,
         expires: verified.auth.expiresAt,
       });
-      return reply.redirect(verified.webOrigin);
+      return reply.redirect(verified.webOrigin + (verified.nextPath ?? ""));
     },
   );
 
@@ -579,7 +584,7 @@ export async function buildServer(
 
   app.get(
     "/api/change-sets/:id/preview",
-    { config: { rateLimit: WRITE_RATE } },
+    { config: { rateLimit: PREVIEW_RATE } },
     async (request) => {
       const auth = await authenticate(request);
       const { id } = request.params as { id: string };
@@ -592,8 +597,13 @@ export async function buildServer(
     { config: { rateLimit: WRITE_RATE } },
     async (request) => {
       const auth = await authenticate(request);
-      requireRecentAuth(auth);
       const { id } = request.params as { id: string };
+      // Retrying a failed set replays an already-approved payload through the
+      // same guarded path (Amazon state is re-read and compared before anything
+      // is sent), so it does not require a recent sign-in. First-time applies
+      // of draft/previewed sets still do.
+      const status = await services.changes.getChangeSetStatus(auth, id);
+      if (status !== "failed") requireRecentAuth(auth);
       return services.changes.applyChangeSet(auth, id, meta(request));
     },
   );

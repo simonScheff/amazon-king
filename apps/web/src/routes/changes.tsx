@@ -1,11 +1,14 @@
 import { useState } from "react";
-import type { ChangeSet } from "@amazon-king/contracts";
+import { Link } from "@tanstack/react-router";
+import type { ChangeAction, ChangeSet } from "@amazon-king/contracts";
 import {
   useApplyChangeSet,
   useChangeSetPreview,
   useChangeSets,
   useRollbackChangeAction,
 } from "../api/endpoints";
+import { isReauthError } from "../api/client";
+import { ReauthDialog } from "../components/reauth-dialog";
 import { useToast } from "../components/toast";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -32,6 +35,20 @@ const statusTone: Record<
   not_applied: "danger",
 };
 
+/**
+ * Campaign shown in the actions table: the resolved campaign the action
+ * touches, or — for a campaign-creation set — the name of the campaign being
+ * created (those actions have no campaignId to join on yet).
+ */
+function campaignLabel(action: ChangeAction): string | null {
+  return (
+    action.campaignName ??
+    (action.actionType === "create_campaign"
+      ? (action.entityName ?? null)
+      : null)
+  );
+}
+
 function ChangeSetDetail({
   changeSet,
   allChangeSets,
@@ -39,11 +56,15 @@ function ChangeSetDetail({
   changeSet: ChangeSet;
   allChangeSets: ChangeSet[];
 }) {
-  const preview = useChangeSetPreview(changeSet.id);
+  // Collapsed by default; the preview (actions, guardrails) is fetched lazily
+  // on first expand so the page does not fan out one request per set.
+  const [expanded, setExpanded] = useState(false);
+  const preview = useChangeSetPreview(expanded ? changeSet.id : null);
   const apply = useApplyChangeSet(changeSet.id);
   const rollback = useRollbackChangeAction();
   const toast = useToast();
   const [confirmApply, setConfirmApply] = useState(false);
+  const [reauthOpen, setReauthOpen] = useState(false);
 
   // Cross-set dependency (e.g. cannibalization negatives locked until their
   // new destination campaign exists on Amazon). The API enforces the same
@@ -58,12 +79,20 @@ function ChangeSetDetail({
     <Card>
       <CardHeader
         title={
-          <span className="flex items-center gap-2">
+          <button
+            type="button"
+            aria-expanded={expanded}
+            onClick={() => setExpanded((v) => !v)}
+            className="flex items-center gap-2 text-left"
+          >
+            <span aria-hidden="true" className="w-3 text-zinc-500">
+              {expanded ? "▾" : "▸"}
+            </span>
             Change set <span className="font-mono text-xs">{changeSet.id}</span>
             <Badge tone={statusTone[changeSet.status] ?? "neutral"}>
               {labelize(changeSet.status)}
             </Badge>
-          </span>
+          </button>
         }
         action={
           <span className="text-xs text-zinc-500">
@@ -71,7 +100,7 @@ function ChangeSetDetail({
           </span>
         }
       />
-      {preview.isPending ? (
+      {!expanded ? null : preview.isPending ? (
         <Loading />
       ) : preview.error ? (
         <ErrorState error={preview.error} />
@@ -91,6 +120,7 @@ function ChangeSetDetail({
               <thead>
                 <tr>
                   <Th>Action</Th>
+                  <Th>Campaign</Th>
                   <Th className="text-right">Before</Th>
                   <Th className="text-right">After</Th>
                   <Th>Status</Th>
@@ -108,7 +138,27 @@ function ChangeSetDetail({
                       : a.status;
                   return (
                     <tr key={a.id}>
-                      <Td>{labelize(a.actionType)}</Td>
+                      <Td>
+                        {labelize(a.actionType)}
+                        {(a.searchTerm ?? a.entityName) != null && (
+                          <div className="mt-0.5 font-mono text-xs text-zinc-500">
+                            {a.searchTerm ?? a.entityName}
+                          </div>
+                        )}
+                      </Td>
+                      <Td className="max-w-48 text-sm text-zinc-300">
+                        {a.amazonCampaignId && campaignLabel(a) ? (
+                          <Link
+                            to="/campaigns/$id"
+                            params={{ id: a.amazonCampaignId }}
+                            className="text-sky-400 hover:underline"
+                          >
+                            {campaignLabel(a)}
+                          </Link>
+                        ) : (
+                          (campaignLabel(a) ?? "—")
+                        )}
+                      </Td>
                       <Td className="max-w-72 text-right font-mono text-xs">
                         {a.beforeValue ?? a.beforeDetail ?? "—"}
                       </Td>
@@ -134,11 +184,16 @@ function ChangeSetDetail({
                               onClick={() =>
                                 rollback.mutate(a.id, {
                                   onSuccess: () => toast("Rollback requested"),
-                                  onError: (err) =>
+                                  onError: (err) => {
+                                    if (isReauthError(err)) {
+                                      setReauthOpen(true);
+                                      return;
+                                    }
                                     toast(
                                       `Rollback failed: ${err.message}`,
                                       "error",
-                                    ),
+                                    );
+                                  },
                                 })
                               }
                             >
@@ -220,6 +275,10 @@ function ChangeSetDetail({
             },
             onError: (err) => {
               setConfirmApply(false);
+              if (isReauthError(err)) {
+                setReauthOpen(true);
+                return;
+              }
               toast(`Apply failed: ${err.message}`, "error");
             },
           })
@@ -230,6 +289,7 @@ function ChangeSetDetail({
         action is verified after applying, but spend-affecting changes take
         effect immediately.
       </Dialog>
+      <ReauthDialog open={reauthOpen} onClose={() => setReauthOpen(false)} />
     </Card>
   );
 }

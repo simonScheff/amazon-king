@@ -13,6 +13,7 @@ vi.mock("@amazon-king/database", () => ({
   },
   profiles: {
     getProfile: vi.fn(),
+    listProfilesByWorkspace: vi.fn(),
   },
   structure: {
     findCampaignByAmazonId: vi.fn(),
@@ -49,7 +50,7 @@ describe("campaign profitability", () => {
       id: "profile-pk",
       connectionId: "connection-pk",
       profileId: "amazon-profile",
-      accountId: null,
+      accountId: "ENTITY-1",
       region: "NA",
       countryCode: "US",
       currencyCode: "USD",
@@ -58,6 +59,21 @@ describe("campaign profitability", () => {
       enabled: true,
       writeEnabled: false,
     });
+    vi.mocked(profiles.listProfilesByWorkspace).mockResolvedValue([
+      {
+        id: "profile-pk",
+        connectionId: "connection-pk",
+        profileId: "amazon-profile",
+        accountId: "ENTITY-1",
+        region: "NA",
+        countryCode: "US",
+        currencyCode: "USD",
+        timezone: null,
+        accountType: null,
+        enabled: true,
+        writeEnabled: false,
+      },
+    ]);
     vi.mocked(dashboard.listCampaignRows).mockResolvedValue([
       {
         campaignPk: "campaign-pk",
@@ -143,6 +159,8 @@ describe("campaign profitability", () => {
       economicsMissing: false,
       dataCurrentThrough: "2026-08-13T00:00:00.000Z",
       campaign: {
+        amazonConsoleUrl:
+          "https://advertising.amazon.com/cm/campaigns?entityId=ENTITY-1",
         totals: {
           acos: 0.4,
           estimatedRoyalty: "10.0000",
@@ -176,6 +194,8 @@ describe("campaign profitability", () => {
     expect(result).toEqual([
       expect.objectContaining({
         campaignId: "amazon-campaign",
+        amazonConsoleUrl:
+          "https://advertising.amazon.com/cm/campaigns?entityId=ENTITY-1",
         profitability: {
           dateRange: { start: "2026-08-07", end: "2026-08-13" },
           currency: "USD",

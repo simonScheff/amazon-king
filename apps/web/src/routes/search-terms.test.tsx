@@ -175,6 +175,26 @@ describe("SearchTermsPage", () => {
     expect(rowTexts()).toEqual(["beta", "gamma", "alpha"]);
   });
 
+  it("filters terms by the search box", () => {
+    render(<SearchTermsPage />);
+    expect(rowTexts()).toHaveLength(3);
+
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "DRAGON" },
+    });
+    expect(rowTexts()).toEqual(["dragons"]);
+
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "zzz" },
+    });
+    expect(
+      screen.getByText("No search terms match “zzz”."),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "" } });
+    expect(rowTexts()).toHaveLength(3);
+  });
+
   it("passes the selected product to the query and keeps it on drill-down", () => {
     const navigate = vi.fn();
     mocks.useNavigate.mockReturnValue(navigate);

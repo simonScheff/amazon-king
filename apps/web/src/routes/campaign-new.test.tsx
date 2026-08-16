@@ -71,6 +71,10 @@ vi.mock("../api/endpoints", () => ({
   }),
 }));
 
+vi.mock("../components/reauth-dialog", () => ({
+  ReauthDialog: () => null,
+}));
+
 function next() {
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
 }

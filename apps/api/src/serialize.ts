@@ -33,6 +33,20 @@ export function isoDate(value: string | Date): string {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * Campaign Manager URL for a profile in the Amazon Ads console, anchored on
+ * the profile's entity id (`accountInfo.id` from the profiles API) so it
+ * opens the right marketplace. A per-campaign deep link is not possible: the
+ * console uses its own id namespace (the `A…` ids in its URLs) that the API
+ * never exposes and that cannot be derived from the API's numeric campaign
+ * id (see amzn/ads-advanced-tools-docs discussion #14). Null when the
+ * profile row has no entity id yet.
+ */
+export function amazonConsoleUrl(accountId: string | null): string | null {
+  if (!accountId) return null;
+  return `https://advertising.amazon.com/cm/campaigns?entityId=${encodeURIComponent(accountId)}`;
+}
+
 export function toContractProfile(
   row: profiles.AmazonProfileRow,
 ): AmazonProfile {
@@ -122,6 +136,9 @@ export function toContractChangeAction(
     beforeValue: row.beforeValue,
     afterValue: row.afterValue,
     entityName: row.entityName,
+    searchTerm: row.searchTerm,
+    campaignName: row.campaignName,
+    amazonCampaignId: row.amazonCampaignId,
     beforeDetail:
       row.actionType === "add_negative_exact"
         ? "No matching campaign negative exact"

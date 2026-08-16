@@ -760,6 +760,31 @@ describe("SP target and negative-target reads", () => {
     ]);
   });
 
+  it("accepts auto-targeting clauses whose expressions carry no value", async () => {
+    // SP v3 only requires `type` on an expression predicate; auto targets
+    // (close/loose match, substitutes, complements) have no value.
+    const { http } = makeHttp({
+      handler: () =>
+        jsonResponse({
+          targetingClauses: [
+            {
+              targetId: 880123457,
+              campaignId: 901234568,
+              adGroupId: 705432110,
+              state: "ENABLED",
+              bid: 0.4,
+              expressionType: "AUTO",
+              expression: [{ type: "QUERY_HIGH_REL_MATCHES" }],
+              resolvedExpression: [{ type: "QUERY_HIGH_REL_MATCHES" }],
+            },
+          ],
+        }),
+    });
+    const targets = await listTargets(http, TEST_CONTEXT);
+    expect(targets).toHaveLength(1);
+    expect(targets[0].expression).toEqual([{ type: "QUERY_HIGH_REL_MATCHES" }]);
+  });
+
   it("parses campaign-level negative targets with their ASIN expression", async () => {
     const { http, calls } = makeHttp({
       handler: () => jsonResponse(fixture("sp-negativeTargets-list.json")),

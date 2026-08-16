@@ -15,6 +15,11 @@ export class ApiError extends Error {
 
 let csrfToken: string | null = null;
 
+/** True for 401 REAUTH_REQUIRED: the action needs a fresher app sign-in. */
+export function isReauthError(error: unknown): boolean {
+  return error instanceof ApiError && error.code === "REAUTH_REQUIRED";
+}
+
 /** Called after every GET /api/session so mutations can send the CSRF header. */
 export function setCsrfToken(token: string | null): void {
   csrfToken = token;

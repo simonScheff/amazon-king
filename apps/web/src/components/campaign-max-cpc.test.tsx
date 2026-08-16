@@ -56,6 +56,10 @@ vi.mock("../api/endpoints", () => ({
   }),
 }));
 
+vi.mock("./reauth-dialog", () => ({
+  ReauthDialog: () => null,
+}));
+
 describe("CampaignMaxCpc", () => {
   afterEach(() => {
     cleanup();

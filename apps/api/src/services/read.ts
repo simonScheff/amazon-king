@@ -29,6 +29,7 @@ import { z } from "zod";
 import type { ApiConfig } from "../config.js";
 import { ApiError, conflict, notFound } from "../errors.js";
 import {
+  amazonConsoleUrl,
   isoDate,
   isoDateTime,
   toContractAuditEvent,
@@ -329,6 +330,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
           date: string;
           costMicros: number;
           salesMicros: number;
+          orders: number;
           estimatedRoyaltyMicros: number | null;
         }
       >();
@@ -337,10 +339,12 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
           date: row.date,
           costMicros: 0,
           salesMicros: 0,
+          orders: 0,
           estimatedRoyaltyMicros: economicsMissing ? null : 0,
         };
         point.costMicros += microsFromDecimalString(row.cost);
         point.salesMicros += microsFromDecimalString(row.sales);
+        point.orders += row.orders;
         if (point.estimatedRoyaltyMicros !== null) {
           const economics = economicsByProfile.get(row.profilePk);
           if (economics) {
@@ -385,6 +389,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
           date: row.date,
           cost: microsToDecimalString(row.costMicros),
           sales: microsToDecimalString(row.salesMicros),
+          orders: row.orders,
           estimatedRoyalty:
             row.estimatedRoyaltyMicros === null
               ? null
@@ -395,11 +400,12 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
 
     async listCampaigns(workspaceId, days) {
       const { start, end } = dateRange(now(), days);
-      const rows = await dashboard.listCampaignRows(
-        db,
-        workspaceId,
-        start,
-        end,
+      const [rows, profileRows] = await Promise.all([
+        dashboard.listCampaignRows(db, workspaceId, start, end),
+        profiles.listProfilesByWorkspace(db, workspaceId),
+      ]);
+      const consoleUrlByProfile = new Map(
+        profileRows.map((p) => [p.profileId, amazonConsoleUrl(p.accountId)]),
       );
       if (rows.some((row) => row.mixedCurrency)) {
         throw conflict(
@@ -419,6 +425,8 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
           name: row.name,
           state: row.state,
           totals: row.totals,
+          amazonConsoleUrl:
+            consoleUrlByProfile.get(row.amazonProfileId) ?? null,
           profitability: {
             dateRange: { start, end },
             currency: row.currency as DashboardSummary["currency"],
@@ -518,6 +526,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
           campaignId: campaign.amazonCampaignId,
           name: campaign.name,
           state: campaign.state,
+          amazonConsoleUrl: amazonConsoleUrl(profile.accountId),
           totals: {
             ...totals,
             acos: salesMicros > 0 ? costMicros / salesMicros : null,

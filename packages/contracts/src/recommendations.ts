@@ -186,6 +186,12 @@ export const changeActionSchema = z.object({
   beforeValue: decimalStringSchema.nullable(),
   afterValue: decimalStringSchema.nullable(),
   entityName: z.string().nullable().optional(),
+  /** Search term the action acts on (negative exacts, created keywords). */
+  searchTerm: z.string().nullable().optional(),
+  /** Name of the campaign the action touches, when it maps to one. */
+  campaignName: z.string().nullable().optional(),
+  /** Amazon campaign id (the key used by app campaign routes), when known. */
+  amazonCampaignId: z.string().nullable().optional(),
   beforeDetail: z.string().nullable().optional(),
   afterDetail: z.string().nullable().optional(),
   rollbackAvailable: z.boolean().optional(),
