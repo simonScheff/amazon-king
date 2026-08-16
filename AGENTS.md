@@ -75,10 +75,12 @@ packages/
 The web server and worker run as separate processes but remain one deployable
 product.
 
-The public documentation site lives in `website/` (VitePress, not a pnpm
-workspace member — it has its own `package.json` and lockfile and is excluded
-from the root Prettier check). Commands there: `pnpm install`, then `pnpm dev`
-/ `pnpm build` / `pnpm preview`. The site deploys to GitHub Pages at
+The public documentation site lives in `website/` (VitePress). It is not
+matched by the workspace globs in `pnpm-workspace.yaml`, so `pnpm -r` commands
+skip it, but its dependencies are recorded in the root `pnpm-lock.yaml`
+importers — run `pnpm install` at the repo root, and the site is excluded from
+the root Prettier check via `.prettierignore`. Commands in `website/`:
+`pnpm dev` / `pnpm build` / `pnpm preview`. The site deploys to GitHub Pages at
 `https://simonscheff.github.io/amazon-king/` (base path `/amazon-king/`) via
 `.github/workflows/docs.yml`, which builds on every PR touching `website/`
 (VitePress fails the build on dead internal links) and deploys on merges to

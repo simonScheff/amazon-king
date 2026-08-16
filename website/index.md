@@ -104,7 +104,7 @@ flowchart LR
     D --> F[Optimizer: 9 deterministic rules]
     F --> G[Dashboard: review recommendations]
     G -->|approve| H[Guarded change set]
-    H -->|preview → re-read → guardrails → apply → verify| B
+    H -->|preview, guardrails, apply, verify| B
 ```
 
 <p class="ak-muted">
