@@ -299,6 +299,11 @@ export interface CreateAdGroupAction {
   kind: "create_ad_group";
   /** actionId of a create_campaign action in the same change set. */
   campaignActionId: string;
+  /**
+   * Amazon id of an already-existing parent campaign (partial retry after a
+   * failed apply). Takes precedence over in-call resolution.
+   */
+  resolvedCampaignId?: string;
   name: string;
   /** Default bid as a string-encoded decimal. */
   defaultBid: string;
@@ -310,6 +315,13 @@ export interface CreateProductAdAction {
   kind: "create_product_ad";
   /** actionId of a create_ad_group action in the same change set. */
   adGroupActionId: string;
+  /**
+   * Amazon ids of an already-existing parent ad group and its campaign
+   * (partial retry after a failed apply). Take precedence over in-call
+   * resolution.
+   */
+  resolvedCampaignId?: string;
+  resolvedAdGroupId?: string;
   asin: string;
   state: "enabled" | "paused";
 }
@@ -320,6 +332,13 @@ export interface CreateKeywordAction {
   kind: "create_keyword";
   /** actionId of a create_ad_group action in the same change set. */
   adGroupActionId: string;
+  /**
+   * Amazon ids of an already-existing parent ad group and its campaign
+   * (partial retry after a failed apply). Take precedence over in-call
+   * resolution.
+   */
+  resolvedCampaignId?: string;
+  resolvedAdGroupId?: string;
   keywordText: string;
   matchType: "EXACT" | "PHRASE" | "BROAD";
   /** Bid as a string-encoded decimal. */
@@ -333,6 +352,13 @@ export interface CreateTargetAction {
   kind: "create_target";
   /** actionId of a create_ad_group action in the same change set. */
   adGroupActionId: string;
+  /**
+   * Amazon ids of an already-existing parent ad group and its campaign
+   * (partial retry after a failed apply). Take precedence over in-call
+   * resolution.
+   */
+  resolvedCampaignId?: string;
+  resolvedAdGroupId?: string;
   /** ASIN targeted via an ASIN_SAME_AS expression. */
   expressionAsin: string;
   /** Bid as a string-encoded decimal; omitted targets inherit the ad group default bid. */

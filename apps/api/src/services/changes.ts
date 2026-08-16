@@ -242,6 +242,41 @@ function applyFailureDetails(error: unknown): {
   };
 }
 
+/**
+ * Map a stored change action to the guardrail perspective. Negatives exclude
+ * spend, so the protected-term checks apply; a new campaign commits a daily
+ * budget; bid-like writes go through the bid guardrails. Entity-creation
+ * actions (create_ad_group / create_product_ad / create_keyword /
+ * create_target) modify no existing bid or budget, so they must not be
+ * treated as bid changes — their targetId is null and would spuriously match
+ * cooldown entries whose own targetId is null.
+ */
+function guardrailActionType(
+  actionType: changes.ChangeAction["actionType"],
+): GuardrailAction["actionType"] {
+  switch (actionType) {
+    case "add_negative_exact":
+    case "remove_negative_exact":
+      return actionType;
+    case "add_negative_target":
+      // A negative ASIN target excludes spend like a negative exact; the same
+      // protected-term check applies.
+      return "add_negative_exact";
+    case "create_campaign":
+      // A new campaign commits a daily budget, not a bid change.
+      return "update_budget";
+    case "create_ad_group":
+    case "create_product_ad":
+    case "create_keyword":
+    case "create_target":
+      return "create_entity";
+    default:
+      // update_bid, update_ad_group_default_bid, update_campaign_bidding,
+      // update_optimization_rule.
+      return "update_bid";
+  }
+}
+
 export function createChangeService(deps: ChangeServiceDeps): ChangeService {
   const { db, pool, config, logger, gateway } = deps;
   const now = () => deps.now?.() ?? new Date();
@@ -289,18 +324,7 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
         ? recById.get(action.recommendationId)
         : undefined;
       return {
-        actionType:
-          action.actionType === "add_negative_exact" ||
-          action.actionType === "remove_negative_exact"
-            ? action.actionType
-            : action.actionType === "add_negative_target"
-              ? // A negative ASIN target excludes spend like a negative exact;
-                // the same protected-term check applies.
-                "add_negative_exact"
-              : action.actionType === "create_campaign"
-                ? // A new campaign commits a daily budget, not a bid change.
-                  "update_budget"
-                : "update_bid",
+        actionType: guardrailActionType(action.actionType),
         targetId: action.targetId ?? action.amazonEntityId,
         campaignId: action.campaignId,
         searchTerm: action.searchTerm,
@@ -1265,9 +1289,17 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
             ad.adGroupId === existingAdGroup.adGroupId && ad.asin === spec.asin,
         )
       : undefined;
-    // Satisfied only when the campaign itself exists; children are looked up
-    // for id recording but do not gate the skip.
-    const preSatisfied = existingCampaign !== undefined;
+    // Satisfaction is per entity: after a failed apply, any prefix of the
+    // chain may already exist on Amazon. Satisfied entities are skipped and
+    // contribute their ids; missing ones are (re)sent, with pre-resolved
+    // parent ids when the parent was not created in this call.
+    const existingAdGroupParentIds =
+      existingCampaign && existingAdGroup
+        ? {
+            resolvedCampaignId: existingCampaign.campaignId,
+            resolvedAdGroupId: existingAdGroup.adGroupId,
+          }
+        : {};
 
     const translated: TranslatedAction[] = [
       {
@@ -1284,7 +1316,7 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
         amazonTargetId: existingCampaign?.campaignId ?? null,
         amazonCampaignId: existingCampaign?.campaignId ?? null,
         amazonAdGroupId: null,
-        preSatisfied,
+        preSatisfied: existingCampaign !== undefined,
       },
       {
         action: adGroupAction,
@@ -1292,13 +1324,16 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
           actionId: adGroupAction.id,
           kind: "create_ad_group",
           campaignActionId: campaignAction.id,
+          ...(existingCampaign
+            ? { resolvedCampaignId: existingCampaign.campaignId }
+            : {}),
           name: spec.adGroup.name,
           defaultBid: spec.adGroup.defaultBid,
         },
         amazonTargetId: existingAdGroup?.adGroupId ?? null,
         amazonCampaignId: existingCampaign?.campaignId ?? null,
         amazonAdGroupId: existingAdGroup?.adGroupId ?? null,
-        preSatisfied,
+        preSatisfied: existingAdGroup !== undefined,
       },
       {
         action: productAdAction,
@@ -1306,13 +1341,14 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
           actionId: productAdAction.id,
           kind: "create_product_ad",
           adGroupActionId: adGroupAction.id,
+          ...existingAdGroupParentIds,
           asin: spec.asin,
           state: spec.campaign.state,
         },
         amazonTargetId: existingAd?.adId ?? null,
         amazonCampaignId: existingCampaign?.campaignId ?? null,
         amazonAdGroupId: existingAdGroup?.adGroupId ?? null,
-        preSatisfied,
+        preSatisfied: existingAd !== undefined,
       },
     ];
     for (const action of keywordActions) {
@@ -1334,6 +1370,7 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
           actionId: action.id,
           kind: "create_keyword",
           adGroupActionId: adGroupAction.id,
+          ...existingAdGroupParentIds,
           keywordText: keywordState.keywordText,
           matchType: keywordState.matchType,
           bid: keywordState.bid,
@@ -1342,7 +1379,7 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
         amazonTargetId: existingKeyword?.keywordId ?? null,
         amazonCampaignId: existingCampaign?.campaignId ?? null,
         amazonAdGroupId: existingAdGroup?.adGroupId ?? null,
-        preSatisfied,
+        preSatisfied: existingKeyword !== undefined,
       });
     }
     for (const action of targetActions) {
@@ -1367,6 +1404,7 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
           actionId: action.id,
           kind: "create_target",
           adGroupActionId: adGroupAction.id,
+          ...existingAdGroupParentIds,
           expressionAsin,
           ...(targetState.bid !== undefined ? { bid: targetState.bid } : {}),
           state: spec.campaign.state,
@@ -1374,7 +1412,7 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
         amazonTargetId: existingTarget?.targetId ?? null,
         amazonCampaignId: existingCampaign?.campaignId ?? null,
         amazonAdGroupId: existingAdGroup?.adGroupId ?? null,
-        preSatisfied,
+        preSatisfied: existingTarget !== undefined,
       });
     }
     return translated;

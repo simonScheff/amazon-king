@@ -390,7 +390,8 @@ export async function listNegativeKeywordRows(
  * attributed through the ad group's book exactly like single-book campaigns
  * (plan §9): only when every ad in the ad group maps to one book with
  * in-effect, currency-matching economics. $4 optionally pins one search term;
- * $5 optionally restricts the facts to ad groups advertising one book.
+ * $5 optionally restricts the facts to ad groups advertising one book; $6
+ * optionally restricts them to one marketplace country code.
  */
 const SEARCH_TERM_CTES = `with st_daily as (
        select m.profile_id, m.search_term, m.campaign_id, m.ad_group_id,
@@ -408,6 +409,7 @@ const SEARCH_TERM_CTES = `with st_daily as (
        where conn.workspace_id = $1
          and m.metric_date between $2 and $3
          and ($4::text is null or m.search_term = $4)
+         and ($6::text is null or p.country_code = $6)
          and ($5::bigint is null or exists (
            select 1
            from ad_groups fg
@@ -485,6 +487,7 @@ export async function listSearchTermRollupRows(
   dateStart: string,
   dateEnd: string,
   bookId: string | null = null,
+  countryCode: string | null = null,
 ): Promise<SearchTermRollupRowData[]> {
   const result = await db.query<
     RawTotals & {
@@ -525,7 +528,7 @@ export async function listSearchTermRollupRows(
       and r.metric_date = d.metric_date
      group by d.search_term
      order by sum(d.cost) desc, d.search_term`,
-    [workspaceId, dateStart, dateEnd, null, bookId],
+    [workspaceId, dateStart, dateEnd, null, bookId, countryCode],
   );
   return result.rows.map((row) => ({
     searchTerm: row.search_term,
@@ -607,7 +610,7 @@ export async function listSearchTermCampaignRows(
       and r.metric_date = d.metric_date
      group by p.profile_id, p.country_code, d.campaign_id, c.name, c.state
      order by sum(d.cost) desc, d.campaign_id`,
-    [workspaceId, dateStart, dateEnd, searchTerm, bookId],
+    [workspaceId, dateStart, dateEnd, searchTerm, bookId, null],
   );
   return result.rows.map((row) => ({
     amazonProfileId: row.amazon_profile_id,

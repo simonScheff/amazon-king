@@ -475,6 +475,7 @@ describe("SP create request bodies", () => {
         {
           campaignId: "4567890123",
           adGroupId: "3456789012",
+          expressionType: "MANUAL",
           expression: [{ type: "ASIN_SAME_AS", value: "B0CXYZ1234" }],
           bid: 0.5,
           state: "ENABLED",
@@ -482,6 +483,7 @@ describe("SP create request bodies", () => {
         {
           campaignId: "4567890123",
           adGroupId: "3456789012",
+          expressionType: "MANUAL",
           expression: [{ type: "ASIN_SAME_AS", value: "B0ASIN0001" }],
           // No bid: the target inherits the ad group default bid.
           state: "PAUSED",

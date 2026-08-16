@@ -40,6 +40,7 @@ import {
 import {
   createChangeSet,
   findChangeActionByFingerprint,
+  listRecentAppliedActions,
 } from "./repositories/changes.js";
 import {
   buildChangeSetFingerprint,
@@ -86,7 +87,16 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
 
   it("applies migrations cleanly and is re-runnable", async () => {
     const applied = await migrate(pool);
-    expect(applied).toEqual(["0001", "0002", "0003", "0004"]);
+    expect(applied).toEqual([
+      "0001",
+      "0002",
+      "0003",
+      "0004",
+      "0005",
+      "0006",
+      "0007",
+      "0008",
+    ]);
     const again = await migrate(pool);
     expect(again).toEqual([]);
     const tables = await pool.query<{ count: string }>(
@@ -722,6 +732,28 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     );
     expect(filteredBreakdown).toEqual([]);
 
+    // Market filter restricts the rollup to one marketplace's facts.
+    const usOnly = await listSearchTermRollupRows(
+      pool,
+      workspaceId,
+      "2026-08-13",
+      "2026-08-14",
+      null,
+      "US",
+    );
+    expect(usOnly.map((row) => row.searchTerm)).toEqual(
+      rollup.map((row) => row.searchTerm),
+    );
+    const deOnly = await listSearchTermRollupRows(
+      pool,
+      workspaceId,
+      "2026-08-13",
+      "2026-08-14",
+      null,
+      "DE",
+    );
+    expect(deOnly).toEqual([]);
+
     // Daily series aggregates both campaigns of the selected market per day.
     const daily = await searchTermDailySeries(
       pool,
@@ -880,5 +912,32 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       action.fingerprint,
     );
     expect(byFingerprint?.id).toBe(first.actions[0]!.id);
+  });
+
+  it("listRecentAppliedActions falls back to the Amazon entity id when no internal target exists", async () => {
+    const profileId = await seedProfile(pool);
+    const user = await pool.query<{ id: string }>(
+      `insert into users (email) values ('cooldown@example.com') returning id`,
+    );
+    const set = await pool.query<{ id: string }>(
+      `insert into change_sets (profile_id, creator_user_id, status, fingerprint, applied_at)
+       values ($1, $2, 'applied', 'fp-recent-coalesce', now()) returning id`,
+      [profileId, user.rows[0]!.id],
+    );
+    // Live bid applies record only the Amazon entity id; the cooldown input
+    // must surface it as targetId or matching degenerates to null = null.
+    await pool.query(
+      `insert into change_actions (change_set_id, action_type, fingerprint, status, amazon_entity_id)
+       values ($1, 'update_bid', 'afp-recent-coalesce', 'applied', '454063756440621')`,
+      [set.rows[0]!.id],
+    );
+
+    const recent = await listRecentAppliedActions(
+      pool,
+      profileId,
+      new Date(Date.now() - 86_400_000),
+    );
+    expect(recent).toHaveLength(1);
+    expect(recent[0]!.targetId).toBe("454063756440621");
   });
 });

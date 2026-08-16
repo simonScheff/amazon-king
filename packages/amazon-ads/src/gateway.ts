@@ -337,10 +337,27 @@ export function createAmazonAdsGateway(
         string,
         { adGroupId: string; campaignId: string }
       >();
+      // Pre-resolved parent ids (partial retry: the ad group already exists
+      // on Amazon) win over in-call phase resolution.
+      const adGroupParent = (action: {
+        adGroupActionId: string;
+        resolvedCampaignId?: string;
+        resolvedAdGroupId?: string;
+      }): { adGroupId: string; campaignId: string } | undefined =>
+        action.resolvedAdGroupId && action.resolvedCampaignId
+          ? {
+              adGroupId: action.resolvedAdGroupId,
+              campaignId: action.resolvedCampaignId,
+            }
+          : adGroupsByActionId.get(action.adGroupActionId);
       if (createAdGroupActions.length > 0) {
         const resolved: ResolvedCreateAdGroupAction[] = [];
         for (const action of createAdGroupActions) {
-          const campaignId = campaignIdsByActionId.get(action.campaignActionId);
+          // A pre-resolved parent id (partial retry: the campaign already
+          // exists on Amazon) wins over in-call phase resolution.
+          const campaignId =
+            action.resolvedCampaignId ??
+            campaignIdsByActionId.get(action.campaignActionId);
           if (campaignId) {
             resolved.push({ ...action, resolvedCampaignId: campaignId });
           } else {
@@ -372,7 +389,7 @@ export function createAmazonAdsGateway(
         for (const action of createProductAdActions) {
           // The product ad also needs campaignId; derive it from the
           // resolved ad group's parent campaign.
-          const parent = adGroupsByActionId.get(action.adGroupActionId);
+          const parent = adGroupParent(action);
           if (parent) {
             resolved.push({
               ...action,
@@ -390,7 +407,7 @@ export function createAmazonAdsGateway(
       if (createKeywordActions.length > 0) {
         const resolved: ResolvedCreateKeywordAction[] = [];
         for (const action of createKeywordActions) {
-          const parent = adGroupsByActionId.get(action.adGroupActionId);
+          const parent = adGroupParent(action);
           if (parent) {
             resolved.push({
               ...action,
@@ -408,7 +425,7 @@ export function createAmazonAdsGateway(
       if (createTargetActions.length > 0) {
         const resolved: ResolvedCreateTargetAction[] = [];
         for (const action of createTargetActions) {
-          const parent = adGroupsByActionId.get(action.adGroupActionId);
+          const parent = adGroupParent(action);
           if (parent) {
             resolved.push({
               ...action,

@@ -393,8 +393,16 @@ export async function buildServer(
 
   app.get("/api/search-terms", async (request) => {
     const auth = await authenticate(request);
-    const { days, book } = parse(searchTermsQuerySchema, request.query);
-    return services.read.listSearchTerms(auth.workspaceId, days, book ?? null);
+    const { days, book, country } = parse(
+      searchTermsQuerySchema,
+      request.query,
+    );
+    return services.read.listSearchTerms(
+      auth.workspaceId,
+      days,
+      book ?? null,
+      country ?? null,
+    );
   });
 
   app.get("/api/search-terms/:term", async (request) => {

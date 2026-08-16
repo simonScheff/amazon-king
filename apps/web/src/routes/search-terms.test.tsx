@@ -13,7 +13,8 @@ import { SearchTermsPage } from "./search-terms";
 const mocks = vi.hoisted(() => ({
   useSearchTerms: vi.fn(),
   useBooks: vi.fn(),
-  useSearch: vi.fn(() => ({}) as { book?: string }),
+  useProfiles: vi.fn(),
+  useSearch: vi.fn(() => ({}) as { book?: string; country?: string }),
   useNavigate: vi.fn(() => vi.fn()),
 }));
 
@@ -26,7 +27,33 @@ vi.mock("@tanstack/react-router", () => ({
 vi.mock("../api/endpoints", () => ({
   useSearchTerms: mocks.useSearchTerms,
   useBooks: mocks.useBooks,
+  useProfiles: mocks.useProfiles,
 }));
+
+const PROFILES = [
+  {
+    profileId: "profile-us",
+    accountId: "account-1",
+    region: "NA",
+    countryCode: "US",
+    currencyCode: "USD",
+    timezone: "America/Los_Angeles",
+    accountType: "seller",
+    enabled: true,
+    writeEnabled: false,
+  },
+  {
+    profileId: "profile-de",
+    accountId: "account-2",
+    region: "EU",
+    countryCode: "DE",
+    currencyCode: "EUR",
+    timezone: "Europe/Berlin",
+    accountType: "seller",
+    enabled: true,
+    writeEnabled: false,
+  },
+];
 
 function searchTerm(
   term: string,
@@ -66,6 +93,7 @@ describe("SearchTermsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.useSearch.mockReturnValue({});
+    mocks.useProfiles.mockReturnValue({ data: PROFILES, isPending: false });
     mocks.useBooks.mockReturnValue({
       data: [
         { id: "book-1", asin: "B001", title: "First title", format: "ebook" },
@@ -92,7 +120,7 @@ describe("SearchTermsPage", () => {
   it("shows the seven-day result for every aggregated search term", () => {
     render(<SearchTermsPage />);
 
-    expect(mocks.useSearchTerms).toHaveBeenCalledWith(7, undefined);
+    expect(mocks.useSearchTerms).toHaveBeenCalledWith(7, undefined, undefined);
     expect(
       screen.getByRole("columnheader", { name: "7-day profit" }),
     ).toBeInTheDocument();
@@ -201,7 +229,7 @@ describe("SearchTermsPage", () => {
     mocks.useSearch.mockReturnValue({ book: "book-1" });
     render(<SearchTermsPage />);
 
-    expect(mocks.useSearchTerms).toHaveBeenCalledWith(7, "book-1");
+    expect(mocks.useSearchTerms).toHaveBeenCalledWith(7, "book-1", undefined);
 
     const select = screen.getByRole("combobox");
     expect(select).toHaveValue("book-1");
@@ -212,5 +240,41 @@ describe("SearchTermsPage", () => {
       search: {},
       replace: true,
     });
+  });
+
+  it("filters by market through the URL and passes it to the query", () => {
+    const navigate = vi.fn();
+    mocks.useNavigate.mockReturnValue(navigate);
+    mocks.useSearch.mockReturnValue({ book: "book-1", country: "DE" });
+    render(<SearchTermsPage />);
+
+    expect(mocks.useSearchTerms).toHaveBeenCalledWith(7, "book-1", "DE");
+
+    const marketFilter = screen.getByRole("button", {
+      name: "Filter by market",
+    });
+    fireEvent.click(marketFilter);
+    fireEvent.click(
+      screen.getByRole("option", { name: /Germany/ }).querySelector("button")!,
+    );
+    expect(navigate).toHaveBeenCalledWith({
+      to: "/search-terms",
+      search: { book: "book-1", country: "DE" },
+      replace: true,
+    });
+  });
+
+  it("shows an empty state naming the market when it has no search terms", () => {
+    mocks.useSearch.mockReturnValue({ country: "DE" });
+    mocks.useSearchTerms.mockReturnValue({
+      isPending: false,
+      error: null,
+      data: [],
+    });
+    render(<SearchTermsPage />);
+
+    expect(
+      screen.getByText("No search terms in Germany for the selected window."),
+    ).toBeInTheDocument();
   });
 });

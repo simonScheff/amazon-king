@@ -125,11 +125,22 @@ const campaignDetailRoute = createRoute({
 const searchTermsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/search-terms",
-  validateSearch: (search: Record<string, unknown>): { book?: string } => ({
-    ...(typeof search.book === "string" && search.book !== ""
-      ? { book: search.book }
-      : {}),
-  }),
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { book?: string; country?: string } => {
+    const country =
+      typeof search.country === "string"
+        ? search.country.trim().toUpperCase()
+        : undefined;
+    return {
+      ...(typeof search.book === "string" && search.book !== ""
+        ? { book: search.book }
+        : {}),
+      ...(country !== undefined && /^[A-Z]{2}$/.test(country)
+        ? { country }
+        : {}),
+    };
+  },
   component: SearchTermsPage,
 });
 

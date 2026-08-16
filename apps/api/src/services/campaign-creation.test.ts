@@ -704,6 +704,60 @@ describe("campaign creation apply", () => {
     expect(targetAction.amazon_entity_id).toBe("tg-existing");
   });
 
+  it("resumes a partially created chain: existing parents are skipped, the missing target is sent", async () => {
+    const setupResult = setup();
+    const { db, service, gateway, book } = setupResult;
+    const input: CampaignCreationCreate = {
+      ...creationInput(book.id as string),
+      keywords: [],
+      targets: [{ asin: "B0ABCDEF12", bid: "0.50" }],
+    };
+    const draft = await service.createCampaignCreationChangeSets(
+      authFixture(),
+      input,
+      META,
+    );
+    // A previous attempt created the campaign, ad group, and product ad on
+    // Amazon but failed before the target: the pre-check snapshot shows all
+    // three, and only the target may be (re)sent.
+    gateway.syncCampaignStructure
+      .mockResolvedValueOnce(createdSnapshot())
+      .mockResolvedValueOnce(
+        createdSnapshot({ targets: [targetRow("tg-new-1", "B0ABCDEF12")] }),
+      );
+
+    const applied = await service.applyChangeSet(
+      authFixture(),
+      draft.changeSets[0]!.id,
+      META,
+    );
+
+    expect(applied.changeSet.status).toBe("applied");
+    const sent = gateway.applyActions.mock.calls[0]![0] as {
+      actions: Array<Record<string, unknown>>;
+    };
+    const targetAction = db.tables.changeActions.find(
+      (a) => a.action_type === "create_target",
+    )!;
+    expect(sent.actions).toEqual([
+      expect.objectContaining({
+        kind: "create_target",
+        actionId: targetAction.id,
+        resolvedCampaignId: "camp-new",
+        resolvedAdGroupId: "ag-new",
+        expressionAsin: "B0ABCDEF12",
+      }),
+    ]);
+    for (const parent of db.tables.changeActions.filter(
+      (a) => a.action_type !== "create_target",
+    )) {
+      expect(parent.status).toBe("applied");
+      expect(parent.amazon_response).toMatchObject({ code: "ALREADY_PRESENT" });
+    }
+    expect(targetAction.status).toBe("applied");
+    expect(targetAction.amazon_entity_id).toBe("tg-new-1");
+  });
+
   it("marks create_target verification_failed when the target is missing afterwards", async () => {
     const setupResult = setup();
     const { db, service, gateway, book } = setupResult;
@@ -847,6 +901,45 @@ describe("campaign creation apply", () => {
     await service
       .rollbackAction(authFixture(), action.id as string, META)
       .catch((error) => expectApiError(error, "NOT_ROLLBACKABLE"));
+  });
+
+  it("is not blocked by cooldowns from recent bid changes recorded without an internal target", async () => {
+    const setupResult = setup();
+    const { db, service, gateway, profile } = setupResult;
+    // A bid change applied inside the 7-day cooldown, recorded with only an
+    // Amazon entity id (no internal target row) — the shape live bid applies
+    // produce. Creation actions have no target id either and must not
+    // cooldown-match against it (null never establishes a match).
+    const recentSet = db.seedChangeSet({
+      profile_id: profile.id,
+      status: "applied",
+      applied_at: new Date(),
+    });
+    db.seedChangeAction({
+      change_set_id: recentSet.id,
+      action_type: "update_bid",
+      target_id: null,
+      amazon_entity_id: "454063756440621",
+      status: "applied",
+    });
+    const changeSetId = await createDraft(setupResult);
+
+    const preview = await service.previewChangeSet(
+      authFixture(),
+      changeSetId,
+      META,
+    );
+    expect(preview.guardrails).toEqual([]);
+
+    gateway.syncCampaignStructure
+      .mockResolvedValueOnce(emptySnapshot()) // pre-check: nothing exists yet
+      .mockResolvedValueOnce(createdSnapshot()); // post-write verification
+    const applied = await service.applyChangeSet(
+      authFixture(),
+      changeSetId,
+      META,
+    );
+    expect(applied.changeSet.status).toBe("applied");
   });
 });
 

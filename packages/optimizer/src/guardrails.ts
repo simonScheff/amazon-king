@@ -46,7 +46,13 @@ export interface GuardrailAction {
     | "update_bid"
     | "add_negative_exact"
     | "remove_negative_exact"
-    | "update_budget";
+    | "update_budget"
+    /**
+     * A new ad group / product ad / keyword / target. It modifies no existing
+     * bid or budget, so no monetary guardrail applies; only the staleness and
+     * protected-entity checks above the switch run.
+     */
+    | "create_entity";
   targetId?: string | null;
   campaignId?: string | null;
   searchTerm?: string | null;
@@ -172,6 +178,10 @@ export function checkGuardrails(input: GuardrailInput): GuardrailResult {
         // A rollback removes a negative; protected-term checks apply only
         // when creating the exclusion. Campaign protection still applies.
         break;
+      case "create_entity":
+        // Nothing exists yet to clamp or cool down; a new entity's bid or
+        // budget has no "before" to compare against.
+        break;
       case "update_bid": {
         const before = action.beforeMicros ?? null;
         const after = action.afterMicros ?? null;
@@ -189,12 +199,16 @@ export function checkGuardrails(input: GuardrailInput): GuardrailResult {
           }
         }
         const targetId = action.targetId ?? null;
-        const changedRecently = recentChanges.some(
-          (change) =>
-            change.actionType === "update_bid" &&
-            change.targetId === targetId &&
-            parseIsoDateTime(change.changedAt) >= bidCooldownCutoff,
-        );
+        // A null target id can never establish a cooldown match — comparing
+        // null to null would block every unidentified target fleet-wide.
+        const changedRecently =
+          targetId !== null &&
+          recentChanges.some(
+            (change) =>
+              change.actionType === "update_bid" &&
+              change.targetId === targetId &&
+              parseIsoDateTime(change.changedAt) >= bidCooldownCutoff,
+          );
         if (changedRecently) {
           violations.push({
             code: "BID_COOLDOWN_ACTIVE",

@@ -239,6 +239,9 @@ export function buildTargetCreateBody(
     targetingClauses: actions.map((action) => ({
       campaignId: asSpV3Id(action.resolvedCampaignId),
       adGroupId: asSpV3Id(action.resolvedAdGroupId),
+      // Required by SP v3 — omitting it is rejected with "Value null at
+      // 'targetingClauses.N.member.expressionType'".
+      expressionType: "MANUAL",
       expression: [{ type: "ASIN_SAME_AS", value: action.expressionAsin }],
       // Without a bid the target inherits the ad group default bid.
       ...(action.bid !== undefined ? { bid: Number(action.bid) } : {}),

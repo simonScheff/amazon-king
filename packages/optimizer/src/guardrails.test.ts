@@ -115,6 +115,53 @@ describe("checkGuardrails", () => {
     expect(result.allowed).toBe(true);
   });
 
+  it("never cooldown-matches a null target id against null", () => {
+    const result = checkGuardrails(
+      baseInput({
+        actions: [bidAction({ targetId: null })],
+        recentChanges: [
+          {
+            actionType: "update_bid",
+            targetId: null,
+            campaignId: null,
+            searchTerm: null,
+            changedAt: "2026-02-14T00:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    expect(result.violations.map((v) => v.code)).not.toContain(
+      "BID_COOLDOWN_ACTIVE",
+    );
+  });
+
+  it("skips bid guardrails for entity-creation actions", () => {
+    const result = checkGuardrails(
+      baseInput({
+        actions: [
+          {
+            actionType: "create_entity",
+            targetId: null,
+            campaignId: null,
+            beforeMicros: null,
+            afterMicros: 600_000,
+            evidenceEnd: freshEvidenceEnd,
+          },
+        ],
+        recentChanges: [
+          {
+            actionType: "update_bid",
+            targetId: null,
+            campaignId: null,
+            searchTerm: null,
+            changedAt: "2026-02-14T00:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    expect(result.allowed).toBe(true);
+  });
+
   it("refuses a negative on a protected term", () => {
     const result = checkGuardrails(
       baseInput({

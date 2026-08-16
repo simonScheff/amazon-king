@@ -11,6 +11,7 @@ coverage/
 
 # Runtime data and exports may contain Amazon Ads data.
 .data/
+.playwright-mcp/
 reports/
 exports/
 *.dump

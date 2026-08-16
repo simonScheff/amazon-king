@@ -574,6 +574,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       workspaceId,
       days,
       bookId = null,
+      countryCode = null,
     ): Promise<SearchTermListRow[]> {
       const { start, end } = dateRange(now(), days);
       const bookPk = await requireBook(workspaceId, bookId);
@@ -583,6 +584,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         start,
         end,
         bookPk,
+        countryCode,
       );
       if (rows.some((row) => row.mixedCurrency)) {
         throw conflict(

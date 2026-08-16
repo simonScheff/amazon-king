@@ -119,6 +119,7 @@ describe("search terms", () => {
       "2026-08-07",
       "2026-08-13",
       null,
+      null,
     );
     expect(result).toEqual([
       {
@@ -325,6 +326,7 @@ describe("search terms", () => {
       "2026-08-07",
       "2026-08-13",
       "book-1",
+      null,
     );
 
     await service().getSearchTermDetail(
@@ -349,6 +351,18 @@ describe("search terms", () => {
       "2026-08-07",
       "2026-08-13",
       "book-1",
+    );
+  });
+
+  it("passes a market filter through to the rollup query", async () => {
+    await service().listSearchTerms("workspace-pk", 7, null, "DE");
+    expect(dashboard.listSearchTermRollupRows).toHaveBeenCalledWith(
+      expect.anything(),
+      "workspace-pk",
+      "2026-08-07",
+      "2026-08-13",
+      null,
+      "DE",
     );
   });
 

@@ -612,6 +612,7 @@ describe("gateway.applyActions entity creation", () => {
         {
           campaignId: "4567890123",
           adGroupId: "3456789012",
+          expressionType: "MANUAL",
           expression: [{ type: "ASIN_SAME_AS", value: "B0CXYZ1234" }],
           bid: 0.5,
           state: "ENABLED",
@@ -624,6 +625,71 @@ describe("gateway.applyActions entity creation", () => {
       ["c1", "applied", "4567890123"],
       ["g1", "applied", "3456789012"],
       ["t1", "applied", "880123457"],
+    ]);
+  });
+
+  it("sends a create_target with pre-resolved parent ids and no parent phases", async () => {
+    const { gateway, calls } = makeGateway(createHandler());
+    const results = await gateway.applyActions({
+      changeSetId: "cs-create-target-retry",
+      profileId: "1111111111",
+      actions: [
+        {
+          actionId: "t1",
+          kind: "create_target",
+          adGroupActionId: "g1",
+          resolvedCampaignId: "4567890123",
+          resolvedAdGroupId: "3456789012",
+          expressionAsin: "B0CXYZ1234",
+          bid: "0.50",
+          state: "enabled",
+        },
+      ],
+    });
+    expect(
+      calls.map((call) => [call.method, new URL(call.url).pathname]),
+    ).toEqual([["POST", "/sp/targets"]]);
+    expect(JSON.parse(calls[0]!.body as string)).toEqual({
+      targetingClauses: [
+        {
+          campaignId: "4567890123",
+          adGroupId: "3456789012",
+          expressionType: "MANUAL",
+          expression: [{ type: "ASIN_SAME_AS", value: "B0CXYZ1234" }],
+          bid: 0.5,
+          state: "ENABLED",
+        },
+      ],
+    });
+    expect(
+      results.map((r) => [r.actionId, r.status, r.amazonEntityId]),
+    ).toEqual([["t1", "applied", "880123457"]]);
+  });
+
+  it("sends a create_ad_group with a pre-resolved campaign id and no campaign phase", async () => {
+    const { gateway, calls } = makeGateway(createHandler());
+    const results = await gateway.applyActions({
+      changeSetId: "cs-create-adgroup-retry",
+      profileId: "1111111111",
+      actions: [
+        {
+          actionId: "g1",
+          kind: "create_ad_group",
+          campaignActionId: "c1",
+          resolvedCampaignId: "4567890123",
+          name: "Book One - Ad Group",
+          defaultBid: "0.45",
+        },
+      ],
+    });
+    expect(
+      calls.map((call) => [call.method, new URL(call.url).pathname]),
+    ).toEqual([["POST", "/sp/adGroups"]]);
+    expect(JSON.parse(calls[0]!.body as string).adGroups[0].campaignId).toBe(
+      "4567890123",
+    );
+    expect(results.map((r) => [r.actionId, r.status])).toEqual([
+      ["g1", "applied"],
     ]);
   });
 

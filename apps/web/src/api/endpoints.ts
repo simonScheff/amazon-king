@@ -291,12 +291,16 @@ export function useCreateCampaignDrafts() {
 // Search terms
 // ---------------------------------------------------------------------------
 
-export function useSearchTerms(days = 7, bookId?: string) {
+export function useSearchTerms(
+  days = 7,
+  bookId?: string,
+  countryCode?: string,
+) {
   return useQuery({
-    queryKey: ["search-terms", days, bookId ?? null],
+    queryKey: ["search-terms", days, bookId ?? null, countryCode ?? null],
     queryFn: () =>
       apiFetch("/api/search-terms", {
-        query: { days, book: bookId },
+        query: { days, book: bookId, country: countryCode },
         schema: z.array(searchTermListRowSchema),
       }),
   });

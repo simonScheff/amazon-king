@@ -952,7 +952,7 @@ export class FakeDb {
         },
       },
       {
-        match: "select ca.action_type, ca.target_id::text",
+        match: "select ca.action_type, coalesce(ca.target_id::text",
         handle: (p) => {
           const since = new Date(p[1] as string);
           const rows = t.changeActions
@@ -970,7 +970,7 @@ export class FakeDb {
               const set = t.changeSets.find((s) => s.id === a.change_set_id)!;
               return {
                 action_type: a.action_type,
-                target_id: a.target_id,
+                target_id: a.target_id ?? a.amazon_entity_id,
                 campaign_id: a.campaign_id,
                 search_term: a.search_term,
                 applied_at: set.applied_at,

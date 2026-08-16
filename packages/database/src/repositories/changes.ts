@@ -493,6 +493,9 @@ export interface RecentAppliedAction {
  * optimizer's guardrails read (plan §10: one adjustment per cooldown period).
  * Rollback actions carry rollback_of_id so cooldown suppression ignores them
  * only when the caller chooses; here they are simply included as changes.
+ * Actions recorded without an internal target row (e.g. bid changes resolved
+ * straight from an Amazon entity id) expose that Amazon id as targetId via
+ * the coalesce, so cooldown matching never degenerates to null = null.
  */
 export async function listRecentAppliedActions(
   db: Db,
@@ -507,7 +510,8 @@ export async function listRecentAppliedActions(
     applied_at: string;
     change_set_id: string;
   }>(
-    `select ca.action_type, ca.target_id::text as target_id,
+    `select ca.action_type,
+            coalesce(ca.target_id::text, ca.amazon_entity_id) as target_id,
             ca.campaign_id::text as campaign_id, ca.search_term,
             cs.applied_at, cs.id::text as change_set_id
      from change_actions ca

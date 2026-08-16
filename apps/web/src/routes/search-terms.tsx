@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import type { SearchTermListRow } from "@amazon-king/contracts";
-import { useBooks, useSearchTerms } from "../api/endpoints";
+import { useBooks, useProfiles, useSearchTerms } from "../api/endpoints";
 import { Card } from "../components/ui/card";
 import { Input, Select } from "../components/ui/input";
 import { SortableTh } from "../components/ui/sortable-th";
 import { Table, Td, Th } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
 import { Flag } from "../components/flag";
+import { CountrySelect } from "../components/country-select";
 import { AmazonProductLink } from "../components/amazon-product-link";
 import { ProfitabilityResult } from "../components/profitability-result";
 import {
@@ -15,7 +16,7 @@ import {
   hasCampaignActivity,
 } from "../lib/campaign-profit";
 import { formatAcos, formatCount, formatMoney } from "../lib/format";
-import { countryNameForCode } from "../lib/marketplaces";
+import { countryNameForCode, marketplaceOptions } from "../lib/marketplaces";
 import { compareNullable, nextSort, type Sort } from "../lib/sorting";
 
 const PROFITABILITY_DAYS = 7;
@@ -63,11 +64,17 @@ function sortValue(
 }
 
 export function SearchTermsPage() {
-  const search = useSearch({ strict: false }) as { book?: string };
+  const search = useSearch({ strict: false }) as {
+    book?: string;
+    country?: string;
+  };
   const book = search.book;
+  const country = search.country;
   const navigate = useNavigate();
   const books = useBooks();
-  const searchTerms = useSearchTerms(PROFITABILITY_DAYS, book);
+  const profiles = useProfiles();
+  const searchTerms = useSearchTerms(PROFITABILITY_DAYS, book, country);
+  const marketplaces = marketplaceOptions(profiles.data ?? []);
   const [sort, setSort] = useState<Sort<SortKey>>({
     key: "cost",
     direction: "desc",
@@ -76,6 +83,17 @@ export function SearchTermsPage() {
 
   function onSort(column: SortKey) {
     setSort((current) => nextSort(current, column, TEXT_COLUMNS));
+  }
+
+  function setFilter(next: { book?: string; country?: string }) {
+    void navigate({
+      to: "/search-terms",
+      search: {
+        ...(next.book ? { book: next.book } : {}),
+        ...(next.country ? { country: next.country } : {}),
+      },
+      replace: true,
+    });
   }
 
   const trimmedQuery = query.trim().toLowerCase();
@@ -100,28 +118,22 @@ export function SearchTermsPage() {
         <h1 className="text-xl font-bold tracking-tight text-zinc-100">
           Search terms
         </h1>
-        <div className="ml-auto flex items-center gap-2">
-          <Input
-            type="search"
-            aria-label="Filter search terms"
-            placeholder="Filter terms…"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            className="w-48"
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <CountrySelect
+            value={country ?? ""}
+            options={marketplaces}
+            allLabel="All markets"
+            aria-label="Filter by market"
+            disabled={profiles.isPending}
+            onChange={(value) => setFilter({ book, country: value })}
           />
-          <label htmlFor="product-filter" className="text-sm text-zinc-400">
-            Product
-          </label>
           <Select
-            id="product-filter"
+            aria-label="Filter by product"
             value={book ?? ""}
             onChange={(event) =>
-              void navigate({
-                to: "/search-terms",
-                search: event.target.value ? { book: event.target.value } : {},
-                replace: true,
-              })
+              setFilter({ book: event.target.value, country })
             }
+            className="max-w-56 truncate"
           >
             <option value="">All products</option>
             {(books.data ?? []).map((b) => (
@@ -130,6 +142,14 @@ export function SearchTermsPage() {
               </option>
             ))}
           </Select>
+          <Input
+            type="search"
+            aria-label="Filter search terms"
+            placeholder="Filter terms…"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            className="w-48"
+          />
         </div>
       </div>
       <Card>
@@ -141,9 +161,11 @@ export function SearchTermsPage() {
           <EmptyState>
             {trimmedQuery !== ""
               ? `No search terms match “${query.trim()}”.`
-              : book
-                ? "No search terms for this product in the selected window."
-                : "No search terms imported yet. Connect Amazon Ads and run a sync first."}
+              : country
+                ? `No search terms in ${countryNameForCode(country)} for the selected window.`
+                : book
+                  ? "No search terms for this product in the selected window."
+                  : "No search terms imported yet. Connect Amazon Ads and run a sync first."}
           </EmptyState>
         ) : (
           <Table>
@@ -213,9 +235,11 @@ export function SearchTermsPage() {
             <tbody>
               {sortedRows.map((term) => {
                 const currency = term.currency;
-                const defaultCountry = term.countryCodes.includes("US")
-                  ? "US"
-                  : term.countryCodes[0];
+                const defaultCountry =
+                  country ??
+                  (term.countryCodes.includes("US")
+                    ? "US"
+                    : term.countryCodes[0]);
                 const hasActivity = hasCampaignActivity(term.totals);
                 const profitStatus = getCampaignProfitStatus(
                   term.totals,

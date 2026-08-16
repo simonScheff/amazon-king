@@ -158,6 +158,7 @@ export interface ReadService {
     workspaceId: string,
     days: number,
     bookId?: string | null,
+    countryCode?: string | null,
   ): Promise<SearchTermListRow[]>;
   getSearchTermDetail(
     workspaceId: string,
