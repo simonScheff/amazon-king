@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Amazon King">
+  <defs>
+    <linearGradient id="background" x1="56" y1="32" x2="456" y2="480" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7c3aed" />
+      <stop offset="1" stop-color="#5300b7" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#background)" />
+  <path fill="#fff" d="M64 360 149 152h50l85 208h-60l-15-42h-72l-15 42H64Zm90-90h38l-19-56-19 56Z" />
+  <path fill="#fff" d="M278 152h57v80l63-80h70l-84 97 88 111h-72l-57-78-8 8v70h-57V152Z" />
+</svg>

@@ -75,6 +75,19 @@ packages/
 The web server and worker run as separate processes but remain one deployable
 product.
 
+The public documentation site lives in `website/` (VitePress, not a pnpm
+workspace member — it has its own `package.json` and lockfile and is excluded
+from the root Prettier check). Commands there: `pnpm install`, then `pnpm dev`
+/ `pnpm build` / `pnpm preview`. The site deploys to GitHub Pages at
+`https://simonscheff.github.io/amazon-king/` (base path `/amazon-king/`) via
+`.github/workflows/docs.yml`, which builds on every PR touching `website/`
+(VitePress fails the build on dead internal links) and deploys on merges to
+`main`. Pages are Markdown under `website/` with the sidebar defined in
+`website/.vitepress/config.mts`; screenshots live in
+`website/public/screenshots/` and are referenced as `/screenshots/<name>.png`
+(VitePress prepends the base automatically). Keep the docs in sync when
+changing behavior, routes, env vars, or commands.
+
 ## Build and test commands
 
 Established so far (run from the repo root unless noted):

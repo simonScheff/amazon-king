@@ -2,7 +2,10 @@
 
 [![CI](https://github.com/simonScheff/amazon-king/actions/workflows/ci.yml/badge.svg)](https://github.com/simonScheff/amazon-king/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/simonScheff/amazon-king/actions/workflows/codeql.yml/badge.svg)](https://github.com/simonScheff/amazon-king/actions/workflows/codeql.yml)
+[![Docs](https://github.com/simonScheff/amazon-king/actions/workflows/docs.yml/badge.svg)](https://github.com/simonScheff/amazon-king/actions/workflows/docs.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
+**[Documentation →](https://simonscheff.github.io/amazon-king/)**
 
 amazon-king is an open-source, self-hosted Amazon Ads optimizer for KDP
 authors. It imports Sponsored Products data, evaluates it against user-entered

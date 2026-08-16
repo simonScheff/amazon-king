@@ -1,0 +1,88 @@
+/* Amazon King brand: violet gradient on an obsidian base, echoing the
+   dashboard's palette (#7c3aed → #5300b7 on #0b0d13). */
+
+:root {
+  --vp-c-brand-1: #7c3aed;
+  --vp-c-brand-2: #8b5cf6;
+  --vp-c-brand-3: #a78bfa;
+  --vp-c-brand-soft: rgba(124, 58, 237, 0.14);
+
+  --vp-button-brand-border: transparent;
+  --vp-button-brand-text: #ffffff;
+  --vp-button-brand-bg: #6d28d9;
+  --vp-button-brand-hover-border: transparent;
+  --vp-button-brand-hover-text: #ffffff;
+  --vp-button-brand-hover-bg: #7c3aed;
+  --vp-button-brand-active-border: transparent;
+  --vp-button-brand-active-text: #ffffff;
+  --vp-button-brand-active-bg: #5b21b6;
+
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #a78bfa 10%, #7c3aed 55%, #34d399 110%);
+  --vp-home-hero-image-background-image: linear-gradient(-45deg, #7c3aed 40%, #34d399 130%);
+  --vp-home-hero-image-filter: blur(72px);
+}
+
+.dark {
+  --vp-c-bg: #0b0d13;
+  --vp-c-bg-alt: #10131c;
+  --vp-c-bg-elv: #141824;
+  --vp-c-bg-soft: #141824;
+  --vp-c-divider: #242a3a;
+  --vp-c-gutter: #242a3a;
+  --vp-c-brand-soft: rgba(124, 58, 237, 0.22);
+}
+
+/* Hero polish */
+.VPHero .name {
+  letter-spacing: -0.02em;
+}
+
+.VPHero .tagline {
+  max-width: 640px;
+}
+
+.VPFeatures .VPFeature {
+  transition:
+    border-color 0.25s,
+    background-color 0.25s;
+}
+
+.VPFeatures .VPFeature:hover {
+  border-color: var(--vp-c-brand-1);
+}
+
+/* Landing page custom sections */
+.ak-section {
+  max-width: 1152px;
+  margin: 0 auto;
+  padding: 48px 24px 8px;
+}
+
+.ak-section h2 {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+  letter-spacing: -0.01em;
+}
+
+.ak-screenshot {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.ak-screenshot img {
+  display: block;
+  width: 100%;
+}
+
+.ak-muted {
+  color: var(--vp-c-text-2);
+}
+
+/* Mermaid diagrams should not look oversized on wide screens */
+.mermaid {
+  text-align: center;
+}
