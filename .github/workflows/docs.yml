@@ -23,9 +23,6 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: website
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v6
@@ -37,7 +34,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # `vitepress build` fails on dead internal links, which doubles as the
       # broken-link check for pull requests.
-      - run: pnpm build
+      - run: pnpm --filter amazon-king-website build
       - uses: actions/upload-pages-artifact@v4
         with:
           path: website/.vitepress/dist

@@ -19,8 +19,8 @@
   "scripts": {
     "dev": "pnpm -r --parallel --if-present dev",
     "build": "pnpm -r --if-present build",
-    "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck",
     "lint": "prettier --check .",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
