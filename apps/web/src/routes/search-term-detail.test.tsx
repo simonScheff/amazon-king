@@ -27,6 +27,7 @@ vi.mock("@tanstack/react-router", () => ({
 vi.mock("../api/endpoints", () => ({
   useSearchTerm: mocks.useSearchTerm,
   useProfiles: mocks.useProfiles,
+  useCountrySpend: () => ({ data: undefined }),
 }));
 
 function detail(campaigns: SearchTermDetail["campaigns"]): SearchTermDetail {

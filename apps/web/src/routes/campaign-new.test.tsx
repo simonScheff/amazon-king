@@ -63,6 +63,7 @@ vi.mock("../api/endpoints", () => ({
     error: null,
     data: mocks.profiles,
   }),
+  useCountrySpend: () => ({ data: undefined }),
   useBooks: () => ({ isPending: false, error: null, data: mocks.books }),
   useCreateCampaignDrafts: () => ({
     isPending: false,

@@ -362,6 +362,12 @@ export async function buildServer(
     return services.read.dashboardSummary(auth.workspaceId, days, country);
   });
 
+  app.get("/api/dashboard/country-spend", async (request) => {
+    const auth = await authenticate(request);
+    const { days } = parse(daysQuerySchema, request.query);
+    return services.read.dashboardCountrySpend(auth.workspaceId, days);
+  });
+
   app.get("/api/campaigns", async (request) => {
     const auth = await authenticate(request);
     const { days } = parse(daysQuerySchema, request.query);

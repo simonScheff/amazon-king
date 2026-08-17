@@ -16,6 +16,7 @@ import type {
   ChangeAction,
   ChangeSet,
   ChangeSetStatus,
+  CountrySpend,
   MaxCpcChangeSetResult,
   DashboardSummary,
   DataFreshness,
@@ -148,6 +149,10 @@ export interface ReadService {
     days: number,
     countryCode: string,
   ): Promise<DashboardSummary>;
+  dashboardCountrySpend(
+    workspaceId: string,
+    days: number,
+  ): Promise<CountrySpend>;
   listCampaigns(workspaceId: string, days: number): Promise<CampaignListRow[]>;
   getCampaignDetail(
     workspaceId: string,

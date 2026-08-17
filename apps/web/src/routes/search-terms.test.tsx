@@ -28,6 +28,7 @@ vi.mock("../api/endpoints", () => ({
   useSearchTerms: mocks.useSearchTerms,
   useBooks: mocks.useBooks,
   useProfiles: mocks.useProfiles,
+  useCountrySpend: () => ({ data: undefined }),
 }));
 
 const PROFILES = [

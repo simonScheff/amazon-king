@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { AmazonProfile } from "@amazon-king/contracts";
-import { marketplaceOptions, resolveCountry } from "./marketplaces";
+import {
+  marketplaceOptions,
+  resolveCountry,
+  sortMarketplacesBySpend,
+} from "./marketplaces";
 
 function profile(
   countryCode: string,
@@ -44,5 +48,45 @@ describe("marketplace country choices", () => {
     expect(resolveCountry(undefined, withUs)).toBe("US");
     expect(resolveCountry("GB", withUs)).toBe("GB");
     expect(resolveCountry("US", withoutUs)).toBe("GB");
+  });
+});
+
+describe("sortMarketplacesBySpend", () => {
+  it("orders countries by spend descending, zero-spend countries last in prior order", () => {
+    const options = marketplaceOptions([
+      profile("US", "USD"),
+      profile("AU", "AUD"),
+      profile("GB", "GBP"),
+      profile("DE", "EUR"),
+    ]);
+    const sorted = sortMarketplacesBySpend(
+      options,
+      new Map([
+        ["DE", 12.5],
+        ["US", 30],
+      ]),
+    );
+
+    // US has the most spend despite the US-first default; AU and GB have no
+    // metrics and keep their previous relative order at the end.
+    expect(sorted.map((option) => option.countryCode)).toEqual([
+      "US",
+      "DE",
+      "AU",
+      "GB",
+    ]);
+  });
+
+  it("keeps the original order when no spend data is available", () => {
+    const options = marketplaceOptions([
+      profile("US", "USD"),
+      profile("GB", "GBP"),
+    ]);
+
+    expect(
+      sortMarketplacesBySpend(options, new Map()).map(
+        (option) => option.countryCode,
+      ),
+    ).toEqual(["US", "GB"]);
   });
 });

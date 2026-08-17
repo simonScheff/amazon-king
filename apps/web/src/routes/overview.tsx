@@ -28,7 +28,8 @@ import {
   formatMoney,
   labelize,
 } from "../lib/format";
-import { marketplaceOptions, resolveCountry } from "../lib/marketplaces";
+import { resolveCountry } from "../lib/marketplaces";
+import { useSpendSortedMarketplaces } from "../lib/use-spend-sorted-marketplaces";
 
 const DAY_OPTIONS = [7, 14, 30, 60] as const;
 
@@ -43,7 +44,7 @@ export function OverviewPage() {
   const navigate = useNavigate();
 
   const profiles = useProfiles();
-  const marketplaces = marketplaceOptions(profiles.data ?? []);
+  const marketplaces = useSpendSortedMarketplaces(days);
   const country = resolveCountry(search.country, marketplaces);
   const selectedMarketplace = marketplaces.find(
     (marketplace) => marketplace.countryCode === country,
@@ -267,7 +268,7 @@ export function OverviewPage() {
                     .map((r) => (
                       <li
                         key={r.id}
-                        className="relative overflow-hidden rounded-md border border-zinc-800 bg-zinc-900 p-4 pl-5"
+                        className="relative overflow-hidden rounded-md border border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-600"
                       >
                         <span
                           aria-hidden="true"
@@ -275,17 +276,25 @@ export function OverviewPage() {
                             r.priority <= 2 ? "bg-amber-300" : "bg-sky-400"
                           }`}
                         />
-                        <div className="flex items-center gap-2">
-                          <Badge tone={r.priority <= 2 ? "warning" : "neutral"}>
-                            P{r.priority}
-                          </Badge>
-                          <span className="text-xs text-zinc-500">
-                            {labelize(r.type)}
-                          </span>
-                        </div>
-                        <p className="mt-1.5 line-clamp-3 text-sm text-zinc-200">
-                          {r.rationale}
-                        </p>
+                        <Link
+                          to="/recommendations/$id"
+                          params={{ id: r.id }}
+                          className="block p-4 pl-5"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              tone={r.priority <= 2 ? "warning" : "neutral"}
+                            >
+                              P{r.priority}
+                            </Badge>
+                            <span className="text-xs text-zinc-500">
+                              {labelize(r.type)}
+                            </span>
+                          </div>
+                          <p className="mt-1.5 line-clamp-3 text-sm text-zinc-200">
+                            {r.rationale}
+                          </p>
+                        </Link>
                       </li>
                     ))}
                 </ul>

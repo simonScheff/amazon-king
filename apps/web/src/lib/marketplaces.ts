@@ -58,3 +58,19 @@ export function resolveCountry(
   if (options.some((option) => option.countryCode === "US")) return "US";
   return options[0]?.countryCode ?? "US";
 }
+
+/**
+ * Order country choices by ad spend descending. Sort is stable: countries
+ * without metrics in the window (missing from the map, treated as zero) keep
+ * their existing relative order at the end.
+ */
+export function sortMarketplacesBySpend(
+  options: readonly MarketplaceOption[],
+  spendByCountry: ReadonlyMap<string, number>,
+): MarketplaceOption[] {
+  return [...options].sort(
+    (a, b) =>
+      (spendByCountry.get(b.countryCode) ?? 0) -
+      (spendByCountry.get(a.countryCode) ?? 0),
+  );
+}

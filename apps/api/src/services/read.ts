@@ -2,6 +2,7 @@ import type {
   AmazonProfile,
   Book,
   CannibalizationResolutionContext,
+  CountrySpend,
   DashboardSummary,
   SearchTermDetail,
   SearchTermListRow,
@@ -395,6 +396,56 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
               ? null
               : microsToDecimalString(row.estimatedRoyaltyMicros),
         })),
+      };
+    },
+
+    async dashboardCountrySpend(workspaceId, days): Promise<CountrySpend> {
+      const { start, end } = dateRange(now(), days);
+      const all = await profiles.listProfilesByWorkspace(db, workspaceId);
+      const enabled = all.filter((p) => p.enabled);
+
+      const byCountry = new Map<
+        string,
+        { currency: string; spendMicros: number }
+      >();
+      for (const profile of enabled) {
+        let totals: metrics.MetricTotals | null;
+        try {
+          totals = await metrics.dashboardTotals(db, profile.id, start, end);
+        } catch (error) {
+          if (error instanceof metrics.MixedCurrencyError) {
+            throw conflict(
+              "MIXED_CURRENCY",
+              "Profile data mixes currencies; refusing to aggregate (plan §9)",
+            );
+          }
+          throw error;
+        }
+        if (!totals) continue;
+        const entry = byCountry.get(profile.countryCode) ?? {
+          currency: totals.currency,
+          spendMicros: 0,
+        };
+        if (entry.currency !== totals.currency) {
+          throw conflict(
+            "MIXED_CURRENCY",
+            "Profiles use different currencies; refusing to aggregate (plan §9)",
+          );
+        }
+        entry.spendMicros += microsFromDecimalString(totals.cost);
+        byCountry.set(profile.countryCode, entry);
+      }
+
+      return {
+        dateRange: { start, end },
+        countries: [...byCountry.entries()]
+          .map(([countryCode, entry]) => ({
+            countryCode,
+            currency:
+              entry.currency as CountrySpend["countries"][number]["currency"],
+            spend: microsToDecimalString(entry.spendMicros),
+          }))
+          .sort((a, b) => Number(b.spend) - Number(a.spend)),
       };
     },
 

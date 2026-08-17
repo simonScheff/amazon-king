@@ -16,7 +16,8 @@ import {
   hasCampaignActivity,
 } from "../lib/campaign-profit";
 import { formatAcos, formatCount, formatMoney } from "../lib/format";
-import { countryNameForCode, marketplaceOptions } from "../lib/marketplaces";
+import { countryNameForCode } from "../lib/marketplaces";
+import { useSpendSortedMarketplaces } from "../lib/use-spend-sorted-marketplaces";
 import { compareNullable, nextSort, type Sort } from "../lib/sorting";
 
 const PROFITABILITY_DAYS = 7;
@@ -78,7 +79,7 @@ export function CampaignsPage() {
   const countryByProfile = new Map(
     (profiles.data ?? []).map((p) => [p.profileId, p.countryCode]),
   );
-  const marketplaces = marketplaceOptions(profiles.data ?? []);
+  const marketplaces = useSpendSortedMarketplaces(PROFITABILITY_DAYS);
   const marketProfileIds = new Set(
     country === ""
       ? []

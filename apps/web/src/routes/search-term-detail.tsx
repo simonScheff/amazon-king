@@ -6,7 +6,8 @@ import {
   useSearch,
 } from "@tanstack/react-router";
 import type { SearchTermCampaignRow } from "@amazon-king/contracts";
-import { useProfiles, useSearchTerm } from "../api/endpoints";
+import { useSearchTerm } from "../api/endpoints";
+import { useSpendSortedMarketplaces } from "../lib/use-spend-sorted-marketplaces";
 import { KpiCard } from "../components/kpi-card";
 import { AmazonProductLink } from "../components/amazon-product-link";
 import { ProfitabilityResult } from "../components/profitability-result";
@@ -30,7 +31,7 @@ import {
   formatMoney,
 } from "../lib/format";
 import { compareNullable, nextSort, type Sort } from "../lib/sorting";
-import { countryNameForCode, marketplaceOptions } from "../lib/marketplaces";
+import { countryNameForCode } from "../lib/marketplaces";
 
 const DAY_OPTIONS = [7, 14, 30, 60] as const;
 const DEFAULT_DAYS = 7;
@@ -95,7 +96,7 @@ export function SearchTermDetailPage() {
   const book = search.book;
   const navigate = useNavigate();
   const detail = useSearchTerm(term, days, book, search.country);
-  const profiles = useProfiles();
+  const marketplaces = useSpendSortedMarketplaces(days);
   const [sort, setSort] = useState<Sort<SortKey>>({
     key: "cost",
     direction: "desc",
@@ -128,7 +129,7 @@ export function SearchTermDetailPage() {
   // currently viewed. Picking one opens the campaign wizard prefilled with
   // this term — as an exact keyword, or as a product target when the term is
   // an ASIN (the wizard's prefill decides).
-  const copyTargets = marketplaceOptions(profiles.data ?? []).filter(
+  const copyTargets = marketplaces.filter(
     (option) => option.countryCode !== data.countryCode,
   );
 

@@ -18,6 +18,7 @@ import {
   cannibalizationResolutionContextSchema,
   changeActionSchema,
   changeSetSchema,
+  countrySpendSchema,
   dashboardSummarySchema,
   dataFreshnessSchema,
   maxCpcChangeSetResultSchema,
@@ -200,6 +201,17 @@ export function useDashboardSummary(days: number, country = "US") {
       apiFetch("/api/dashboard/summary", {
         query: { days, country },
         schema: dashboardSummaryResponseSchema,
+      }),
+  });
+}
+
+export function useCountrySpend(days: number) {
+  return useQuery({
+    queryKey: ["dashboard-country-spend", days],
+    queryFn: () =>
+      apiFetch("/api/dashboard/country-spend", {
+        query: { days },
+        schema: countrySpendSchema,
       }),
   });
 }

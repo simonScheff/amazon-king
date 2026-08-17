@@ -21,7 +21,7 @@ import { Input, Select } from "../components/ui/input";
 import { EmptyState, ErrorState, Loading } from "../components/states";
 import { Flag } from "../components/flag";
 import { isAsin } from "../lib/asin";
-import { marketplaceOptions } from "../lib/marketplaces";
+import { useSpendSortedMarketplaces } from "../lib/use-spend-sorted-marketplaces";
 
 const STEPS = [
   "markets",
@@ -153,10 +153,8 @@ export function CampaignNewPage() {
   );
 
   const step: Step = STEPS[stepIndex] ?? "markets";
-  const options = useMemo(
-    () => marketplaceOptions(profiles.data ?? []),
-    [profiles.data],
-  );
+  // No window selector on this page; rank markets by the default 30-day spend.
+  const options = useSpendSortedMarketplaces(30);
   const writeEnabledByProfile = useMemo(
     () =>
       new Map((profiles.data ?? []).map((p) => [p.profileId, p.writeEnabled])),

@@ -137,3 +137,87 @@ describe("dashboard country filtering", () => {
     expect(result.totals.estimatedRoyalty).toBe("8.5000");
   });
 });
+
+describe("dashboard country spend", () => {
+  const CA_PROFILE = {
+    ...US_PROFILE,
+    id: "profile-ca",
+    profileId: "amazon-ca",
+    countryCode: "CA",
+    currencyCode: "CAD",
+  };
+  const US_PROFILE_2 = {
+    ...US_PROFILE,
+    id: "profile-us-2",
+    profileId: "amazon-us-2",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(profiles.listProfilesByWorkspace).mockResolvedValue([
+      US_PROFILE,
+      US_PROFILE_2,
+      UK_PROFILE,
+      CA_PROFILE,
+    ]);
+    vi.mocked(metrics.dashboardTotals).mockImplementation(
+      async (_db, profileId) => {
+        if (profileId === CA_PROFILE.id) return null; // no metrics in window
+        const cost =
+          profileId === UK_PROFILE.id
+            ? "20.0000"
+            : profileId === US_PROFILE_2.id
+              ? "7.0000"
+              : "5.0000";
+        return {
+          currency: profileId === UK_PROFILE.id ? "GBP" : "USD",
+          impressions: 100,
+          clicks: 10,
+          cost,
+          sales: "0.0000",
+          orders: 0,
+        };
+      },
+    );
+  });
+
+  it("sums profiles per country and sorts countries by spend descending", async () => {
+    const service = createReadService({
+      db: {} as never,
+      config: { killSwitch: false } as ApiConfig,
+      logger: {} as never,
+      now: () => new Date("2026-08-13T12:00:00.000Z"),
+    });
+
+    const result = await service.dashboardCountrySpend("workspace-1", 7);
+
+    expect(result.dateRange).toEqual({
+      start: "2026-08-07",
+      end: "2026-08-13",
+    });
+    // GB (20) > US (5 + 7 = 12); CA has no metrics and is omitted.
+    expect(result.countries).toEqual([
+      { countryCode: "GB", currency: "GBP", spend: "20.0000" },
+      { countryCode: "US", currency: "USD", spend: "12.0000" },
+    ]);
+  });
+
+  it("ignores disabled profiles", async () => {
+    vi.mocked(profiles.listProfilesByWorkspace).mockResolvedValue([
+      { ...UK_PROFILE, enabled: false },
+      US_PROFILE,
+    ]);
+    const service = createReadService({
+      db: {} as never,
+      config: { killSwitch: false } as ApiConfig,
+      logger: {} as never,
+      now: () => new Date("2026-08-13T12:00:00.000Z"),
+    });
+
+    const result = await service.dashboardCountrySpend("workspace-1", 7);
+
+    expect(result.countries).toEqual([
+      { countryCode: "US", currency: "USD", spend: "5.0000" },
+    ]);
+  });
+});

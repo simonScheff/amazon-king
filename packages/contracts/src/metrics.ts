@@ -47,6 +47,27 @@ export const dashboardSummarySchema = z.object({
 });
 export type DashboardSummary = z.infer<typeof dashboardSummarySchema>;
 
+/**
+ * GET /api/dashboard/country-spend — ad spend per marketplace country over the
+ * requested window, sorted by spend descending. Powers spend-ordered country
+ * selectors. Countries without metrics in the window are omitted (treated as
+ * zero by clients).
+ */
+export const countrySpendSchema = z.object({
+  dateRange: z.object({
+    start: isoDateSchema,
+    end: isoDateSchema,
+  }),
+  countries: z.array(
+    z.object({
+      countryCode: z.string(),
+      currency: currencyCodeSchema,
+      spend: nonNegativeDecimalStringSchema,
+    }),
+  ),
+});
+export type CountrySpend = z.infer<typeof countrySpendSchema>;
+
 export const campaignRowSchema = z.object({
   profileId: z.string(),
   campaignId: z.string(),
