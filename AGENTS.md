@@ -119,7 +119,27 @@ new campaign" as the destination: it links here with
 `recommendationId`/`searchTerm`/`country` search params (validated in
 `src/router.tsx`), which prefill the market, campaign name, MANUAL targeting,
 and the term as an EXACT keyword, and are submitted as
-`cannibalization.recommendationId` on the payload.
+`cannibalization.recommendationId` on the payload. Entering a keyword or
+ASIN product target in the wizard switches the campaign to MANUAL targeting
+automatically (Amazon rejects manual targeting clauses in AUTO campaigns, and
+creates the default auto targets itself — so an AUTO campaign submits no
+keywords/targets). The campaign detail page header has one-click guarded
+controls (`src/components/campaign-controls.tsx`): pause/enable and rename,
+each drafting and immediately applying a `campaign_update` change set via
+`POST /api/campaigns/:campaignId/state|name` (REAUTH_REQUIRED opens the
+shared ReauthDialog). A global multi-select
+**product filter** lives in the sidebar footer
+(`src/components/product-filter.tsx`, rendered by `Sidebar` in
+`src/components/layout.tsx`; checkbox dropdown modeled on `CountrySelect` that
+opens upward — or rightward when the sidebar is collapsed to icons — with
+options from `useBooks()`): it writes a `books`
+comma-separated book-id search param validated once on the `appRoute` layout
+route in `src/router.tsx` and retained across navigation via
+`retainSearchParams(["books"])` plus a custom `stringifySearch` that keeps the
+`?books=3,7` form (retention is proven by `src/router.test.tsx`). The
+overview, campaigns, campaign detail, search terms, and recommendations pages
+pass the selection to their query hooks (query keys include the sorted id
+list); `/changes`, `/settings`, and `/connect` ignore it.
 
 `packages/database` (`@amazon-king/database`) is implemented: plain SQL
 migrations under `migrations/` (numbered `NNNN_name.sql`, applied by
@@ -169,11 +189,23 @@ includes a per-day `daily` series for the trend chart)), and
 `POST /api/campaign-creation-change-sets` (human-approved campaign creation:
 one `campaign_creation` change set per profile holding create_campaign →
 create_ad_group → create_product_ad/create_keyword/create_target actions
-(product targets are ASINs via `ASIN_SAME_AS` expressions, bid optional);
+(product targets are ASINs via `ASIN_SAME_AS` expressions, bid optional;
+keywords/targets are MANUAL-only — AUTO campaigns carry no manual targeting
+actions because Amazon creates the default auto targets itself and rejects
+manual targeting clauses in auto campaigns, which the contract schema
+enforces);
 apply resolves the
 creation chain, treats an existing same-name campaign as already satisfied,
 verifies created ids against a fresh structure read, then enqueues a
-structure_sync; creation sets are not rollbackable). When the payload carries
+structure_sync; creation sets are not rollbackable). One-click campaign
+updates: `POST /api/campaigns/:campaignId/state` (pause/enable) and
+`POST /api/campaigns/:campaignId/name` (rename) each draft a single-action
+`campaign_update` change set (`update_campaign_state` /
+`update_campaign_name`, migration `0009_campaign_update.sql`) and immediately
+run the guarded apply; both are rollbackable by restoring the before-state,
+and verified applies write through to the local `campaigns` mirror
+(`structure.updateCampaignAttributes`). Amazon has no campaign delete — only
+terminal `ARCHIVED` — which the app deliberately does not expose. When the payload carries
 `cannibalization.recommendationId`, the service additionally validates the
 finding (it must cover the conflict's profile) and drafts one
 `recommendation`-kind change set adding the term as a campaign-level negative
@@ -199,7 +231,15 @@ post-verify redirect lands the user back on that page — and the
 guarded write flow in `src/services/changes.ts` (fingerprint-idempotent create,
 preview → re-read Amazon + before-state compare → guardrails → per-item apply →
 verify; rollback is a compensating action, including verified app-created
-negative exact keywords; negative ASIN targets are not rollbackable). Route
+negative exact keywords; negative ASIN targets are not rollbackable). The
+metric list endpoints (`dashboard/summary`, `dashboard/country-spend`,
+`campaigns` list + detail, `recommendations`, `search-terms` + detail) accept a
+`books` comma-separated book-id query param powering the web app's global
+product filter: ids are resolved to internal PKs per request via
+`requireBookPks` (404 on unknown/foreign book) and forwarded to the
+repositories, which filter with an `EXISTS (ad_groups → ads.asin →
+book_profile_links)` predicate and `book_id = any($n)` — include-all semantics
+at ad-group grain, union across selected books, null/empty = unfiltered. Route
 handlers are thin wrappers
 over injectable services (`src/services/types.js`); tests use the SQL-matching
 in-memory `FakeDb` (`src/test/fake-db.ts`). Commands: `dev` (`tsx watch

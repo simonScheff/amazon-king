@@ -157,6 +157,8 @@ describe("gateway.previewCapabilities", () => {
         "update_bid",
         "update_ad_group_default_bid",
         "update_campaign_bidding",
+        "update_campaign_state",
+        "update_campaign_name",
         "update_optimization_rule",
         "add_negative_exact",
         "remove_negative_exact",

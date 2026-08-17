@@ -217,6 +217,13 @@ export interface RecommendationListFilter {
   type?: RecommendationType;
   state?: RecommendationState;
   limit?: number;
+  /**
+   * Product filter (null/undefined or empty = no filter): keep
+   * recommendations whose ad group — or any ad group of their campaign —
+   * advertises one of the selected books. Recommendations with no campaign
+   * or ad group linkage are not attributable to a book and stay listed.
+   */
+  bookIds?: bigint[] | null;
 }
 
 /** List recommendations for a workspace (any state), highest priority first. */
@@ -235,6 +242,32 @@ export async function listRecommendationsByWorkspace(
      where c.workspace_id = $1
        and ($2::text is null or r.type = $2)
        and ($3::text is null or r.state = $3)
+       and (coalesce(cardinality($5::bigint[]), 0) = 0 or
+         case
+           when r.ad_group_id is not null then exists (
+             select 1
+             from ads fa
+             join book_profile_links fb
+               on fb.profile_id = fa.profile_id
+              and fb.marketplace_asin = fa.asin
+              and fb.enabled = true
+             where fa.ad_group_id = r.ad_group_id
+               and fb.book_id = any($5)
+           )
+           when r.campaign_id is not null then exists (
+             select 1
+             from ad_groups fg
+             join ads fa
+               on fa.profile_id = fg.profile_id and fa.ad_group_id = fg.id
+             join book_profile_links fb
+               on fb.profile_id = fg.profile_id
+              and fb.marketplace_asin = fa.asin
+              and fb.enabled = true
+             where fg.campaign_id = r.campaign_id
+               and fb.book_id = any($5)
+           )
+           else true
+         end)
      order by r.priority asc, r.created_at desc
      limit coalesce($4, 100)`,
     [
@@ -242,6 +275,7 @@ export async function listRecommendationsByWorkspace(
       filter.type ?? null,
       filter.state ?? null,
       filter.limit ?? null,
+      filter.bookIds ?? null,
     ],
   );
   return result.rows.map(withProfile);

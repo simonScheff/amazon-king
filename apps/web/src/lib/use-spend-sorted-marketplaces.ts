@@ -11,9 +11,12 @@ import {
  * US-first/alphabetical order at the end). Backs every country selector so
  * all of them rank markets the same way.
  */
-export function useSpendSortedMarketplaces(days: number): MarketplaceOption[] {
+export function useSpendSortedMarketplaces(
+  days: number,
+  bookIds?: string[],
+): MarketplaceOption[] {
   const profiles = useProfiles();
-  const countrySpend = useCountrySpend(days);
+  const countrySpend = useCountrySpend(days, bookIds);
   return sortMarketplacesBySpend(
     marketplaceOptions(profiles.data ?? []),
     new Map(

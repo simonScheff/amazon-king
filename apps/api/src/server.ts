@@ -8,13 +8,16 @@ import {
   bookMappingInputSchema,
   campaignCreationCreateSchema,
   campaignCreationResultSchema,
+  campaignUpdateResultSchema,
   cannibalizationResolutionCreateSchema,
   changeSetCreateSchema,
   loginRequestSchema,
   profileUpdateSchema,
   recommendationStateSchema,
   recommendationTypeSchema,
+  renameCampaignSchema,
   setCampaignMaxCpcSchema,
+  updateCampaignStateSchema,
 } from "@amazon-king/contracts";
 import { withRequestId } from "@amazon-king/observability";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
@@ -347,7 +350,25 @@ export async function buildServer(
     days: z.coerce.number().int().min(1).max(90).default(30),
   });
 
+  /**
+   * Global product filter: comma-separated external book ids ("3,7") →
+   * string[], undefined when the param is absent. Shared by every metric
+   * screen endpoint; the service resolves each id against the workspace.
+   */
+  const booksQueryParam = z
+    .string()
+    .optional()
+    .transform((value) =>
+      value === undefined
+        ? undefined
+        : value
+            .split(",")
+            .map((id) => id.trim())
+            .filter((id) => id.length > 0),
+    );
+
   const dashboardQuerySchema = daysQuerySchema.extend({
+    books: booksQueryParam,
     country: z
       .string()
       .trim()
@@ -356,39 +377,49 @@ export async function buildServer(
       .default("US"),
   });
 
+  const booksQuerySchema = daysQuerySchema.extend({
+    books: booksQueryParam,
+  });
+
   app.get("/api/dashboard/summary", async (request) => {
     const auth = await authenticate(request);
-    const { days, country } = parse(dashboardQuerySchema, request.query);
-    return services.read.dashboardSummary(auth.workspaceId, days, country);
+    const { days, country, books } = parse(dashboardQuerySchema, request.query);
+    return services.read.dashboardSummary(
+      auth.workspaceId,
+      days,
+      country,
+      books,
+    );
   });
 
   app.get("/api/dashboard/country-spend", async (request) => {
     const auth = await authenticate(request);
-    const { days } = parse(daysQuerySchema, request.query);
-    return services.read.dashboardCountrySpend(auth.workspaceId, days);
+    const { days, books } = parse(booksQuerySchema, request.query);
+    return services.read.dashboardCountrySpend(auth.workspaceId, days, books);
   });
 
   app.get("/api/campaigns", async (request) => {
     const auth = await authenticate(request);
-    const { days } = parse(daysQuerySchema, request.query);
-    return services.read.listCampaigns(auth.workspaceId, days);
+    const { days, books } = parse(booksQuerySchema, request.query);
+    return services.read.listCampaigns(auth.workspaceId, days, books);
   });
 
   app.get("/api/campaigns/:id", async (request) => {
     const auth = await authenticate(request);
     const { id } = request.params as { id: string };
-    const { days } = parse(daysQuerySchema, request.query);
+    const { days, books } = parse(booksQuerySchema, request.query);
     const detail = await services.read.getCampaignDetail(
       auth.workspaceId,
       id,
       days,
+      books,
     );
     if (!detail) throw notFound("Unknown campaign");
     return detail;
   });
 
   const searchTermsQuerySchema = daysQuerySchema.extend({
-    book: z.string().min(1).optional(),
+    books: booksQueryParam,
     country: z
       .string()
       .trim()
@@ -399,14 +430,14 @@ export async function buildServer(
 
   app.get("/api/search-terms", async (request) => {
     const auth = await authenticate(request);
-    const { days, book, country } = parse(
+    const { days, books, country } = parse(
       searchTermsQuerySchema,
       request.query,
     );
     return services.read.listSearchTerms(
       auth.workspaceId,
       days,
-      book ?? null,
+      books ?? null,
       country ?? null,
     );
   });
@@ -414,7 +445,7 @@ export async function buildServer(
   app.get("/api/search-terms/:term", async (request) => {
     const auth = await authenticate(request);
     const { term } = request.params as { term: string };
-    const { days, book, country } = parse(
+    const { days, books, country } = parse(
       searchTermsQuerySchema,
       request.query,
     );
@@ -422,7 +453,7 @@ export async function buildServer(
       auth.workspaceId,
       term,
       days,
-      book ?? null,
+      books ?? null,
       country ?? null,
     );
     if (!detail) throw notFound("Unknown search term");
@@ -480,14 +511,18 @@ export async function buildServer(
 
   app.get("/api/recommendations", async (request) => {
     const auth = await authenticate(request);
-    const filter = parse(
+    const { books, ...filter } = parse(
       z.object({
         type: recommendationTypeSchema.optional(),
         state: recommendationStateSchema.optional(),
+        books: booksQueryParam,
       }),
       request.query,
     );
-    return services.read.listRecommendations(auth.workspaceId, filter);
+    return services.read.listRecommendations(auth.workspaceId, {
+      ...filter,
+      bookIds: books,
+    });
   });
 
   app.get("/api/recommendations/:id", async (request) => {
@@ -572,6 +607,43 @@ export async function buildServer(
         body.maxCpc,
         meta(request),
       );
+    },
+  );
+
+  // One-click guarded campaign updates (pause/enable, rename).
+  app.post(
+    "/api/campaigns/:campaignId/state",
+    { config: { rateLimit: WRITE_RATE } },
+    async (request) => {
+      const auth = await authenticate(request);
+      requireRecentAuth(auth);
+      const { campaignId } = request.params as { campaignId: string };
+      const body = parse(updateCampaignStateSchema, request.body);
+      const result = await services.changes.updateCampaign(
+        auth,
+        campaignId,
+        { state: body.state },
+        meta(request),
+      );
+      return parse(campaignUpdateResultSchema, result);
+    },
+  );
+
+  app.post(
+    "/api/campaigns/:campaignId/name",
+    { config: { rateLimit: WRITE_RATE } },
+    async (request) => {
+      const auth = await authenticate(request);
+      requireRecentAuth(auth);
+      const { campaignId } = request.params as { campaignId: string };
+      const body = parse(renameCampaignSchema, request.body);
+      const result = await services.changes.updateCampaign(
+        auth,
+        campaignId,
+        { name: body.name },
+        meta(request),
+      );
+      return parse(campaignUpdateResultSchema, result);
     },
   );
 

@@ -127,6 +127,12 @@ export interface AmazonService {
 export interface RecommendationFilter {
   type?: RecommendationType;
   state?: RecommendationState;
+  /**
+   * Global product filter: external book ids from the API. Undefined/empty =
+   * no filter. The service resolves each id to a workspace-owned internal PK
+   * (404 on an unknown or foreign book).
+   */
+  bookIds?: string[];
 }
 
 export interface ReadService {
@@ -148,28 +154,35 @@ export interface ReadService {
     workspaceId: string,
     days: number,
     countryCode: string,
+    bookIds?: string[],
   ): Promise<DashboardSummary>;
   dashboardCountrySpend(
     workspaceId: string,
     days: number,
+    bookIds?: string[],
   ): Promise<CountrySpend>;
-  listCampaigns(workspaceId: string, days: number): Promise<CampaignListRow[]>;
+  listCampaigns(
+    workspaceId: string,
+    days: number,
+    bookIds?: string[],
+  ): Promise<CampaignListRow[]>;
   getCampaignDetail(
     workspaceId: string,
     amazonCampaignId: string,
     days: number,
+    bookIds?: string[],
   ): Promise<CampaignDetail | null>;
   listSearchTerms(
     workspaceId: string,
     days: number,
-    bookId?: string | null,
+    bookIds?: string[] | null,
     countryCode?: string | null,
   ): Promise<SearchTermListRow[]>;
   getSearchTermDetail(
     workspaceId: string,
     searchTerm: string,
     days: number,
-    bookId?: string | null,
+    bookIds?: string[] | null,
     countryCode?: string | null,
   ): Promise<SearchTermDetail | null>;
   listBooks(workspaceId: string): Promise<Book[]>;
@@ -238,6 +251,18 @@ export interface ChangeService {
     maxCpc: string,
     meta: RequestMeta,
   ): Promise<MaxCpcChangeSetResult>;
+  /**
+   * One-click campaign attribute update (pause/enable or rename): drafts an
+   * immutable `campaign_update` change set and immediately runs the guarded
+   * apply. Exactly one of state/name is set (the routes guarantee it).
+   * Fingerprinted: re-submitting the identical update replays the same set.
+   */
+  updateCampaign(
+    auth: AuthContext,
+    amazonCampaignId: string,
+    update: { state?: "enabled" | "paused"; name?: string },
+    meta: RequestMeta,
+  ): Promise<ChangeSetWithActions>;
   /**
    * Create an immutable change set from recommendation ids. Fingerprinted:
    * replaying the same ids returns the existing set (double-click safe).

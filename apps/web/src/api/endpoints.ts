@@ -15,6 +15,7 @@ import {
   campaignDetailSchema,
   campaignListRowSchema,
   campaignMaxCpcSchema,
+  campaignUpdateResultSchema,
   cannibalizationResolutionContextSchema,
   changeActionSchema,
   changeSetSchema,
@@ -194,23 +195,40 @@ export function useEnqueueSync(profileId: string) {
 // Dashboard
 // ---------------------------------------------------------------------------
 
-export function useDashboardSummary(days: number, country = "US") {
+/**
+ * Normalizes the global product filter into the API's comma-separated `books`
+ * query param (sorted so the query key is stable regardless of check order).
+ * Returns undefined when no books are selected.
+ */
+function booksParam(bookIds?: string[]): string | undefined {
+  return bookIds && bookIds.length > 0
+    ? [...bookIds].sort().join(",")
+    : undefined;
+}
+
+export function useDashboardSummary(
+  days: number,
+  country = "US",
+  bookIds?: string[],
+) {
+  const books = booksParam(bookIds);
   return useQuery({
-    queryKey: ["dashboard-summary", days, country],
+    queryKey: ["dashboard-summary", days, country, books ?? null],
     queryFn: () =>
       apiFetch("/api/dashboard/summary", {
-        query: { days, country },
+        query: { days, country, books },
         schema: dashboardSummaryResponseSchema,
       }),
   });
 }
 
-export function useCountrySpend(days: number) {
+export function useCountrySpend(days: number, bookIds?: string[]) {
+  const books = booksParam(bookIds);
   return useQuery({
-    queryKey: ["dashboard-country-spend", days],
+    queryKey: ["dashboard-country-spend", days, books ?? null],
     queryFn: () =>
       apiFetch("/api/dashboard/country-spend", {
-        query: { days },
+        query: { days, books },
         schema: countrySpendSchema,
       }),
   });
@@ -230,24 +248,30 @@ export function useDataFreshness() {
 // Campaigns
 // ---------------------------------------------------------------------------
 
-export function useCampaigns(days = 7) {
+export function useCampaigns(days = 7, bookIds?: string[]) {
+  const books = booksParam(bookIds);
   return useQuery({
-    queryKey: ["campaigns", days],
+    queryKey: ["campaigns", days, books ?? null],
     queryFn: () =>
       apiFetch("/api/campaigns", {
-        query: { days },
+        query: { days, books },
         schema: z.array(campaignListRowSchema),
       }),
   });
 }
 
-export function useCampaign(campaignId: string, days: number) {
+export function useCampaign(
+  campaignId: string,
+  days: number,
+  bookIds?: string[],
+) {
+  const books = booksParam(bookIds);
   return useQuery({
-    queryKey: ["campaign", campaignId, days],
+    queryKey: ["campaign", campaignId, days, books ?? null],
     placeholderData: keepPreviousData,
     queryFn: () =>
       apiFetch(`/api/campaigns/${campaignId}`, {
-        query: { days },
+        query: { days, books },
         schema: campaignDetailSchema,
       }),
   });
@@ -281,6 +305,46 @@ export function useSetCampaignMaxCpc(campaignId: string) {
   });
 }
 
+/** One-click guarded pause/enable of a campaign. */
+export function useUpdateCampaignState(campaignId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { state: "enabled" | "paused" }) =>
+      apiFetch(`/api/campaigns/${campaignId}/state`, {
+        method: "POST",
+        body,
+        schema: campaignUpdateResultSchema,
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["campaign", campaignId] }),
+        qc.invalidateQueries({ queryKey: ["campaigns"] }),
+        qc.invalidateQueries({ queryKey: ["change-sets"] }),
+      ]);
+    },
+  });
+}
+
+/** One-click guarded rename of a campaign. */
+export function useRenameCampaign(campaignId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string }) =>
+      apiFetch(`/api/campaigns/${campaignId}/name`, {
+        method: "POST",
+        body,
+        schema: campaignUpdateResultSchema,
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["campaign", campaignId] }),
+        qc.invalidateQueries({ queryKey: ["campaigns"] }),
+        qc.invalidateQueries({ queryKey: ["change-sets"] }),
+      ]);
+    },
+  });
+}
+
 export function useCreateCampaignDrafts() {
   const qc = useQueryClient();
   return useMutation({
@@ -305,14 +369,15 @@ export function useCreateCampaignDrafts() {
 
 export function useSearchTerms(
   days = 7,
-  bookId?: string,
+  bookIds?: string[],
   countryCode?: string,
 ) {
+  const books = booksParam(bookIds);
   return useQuery({
-    queryKey: ["search-terms", days, bookId ?? null, countryCode ?? null],
+    queryKey: ["search-terms", days, books ?? null, countryCode ?? null],
     queryFn: () =>
       apiFetch("/api/search-terms", {
-        query: { days, book: bookId, country: countryCode },
+        query: { days, books, country: countryCode },
         schema: z.array(searchTermListRowSchema),
       }),
   });
@@ -321,15 +386,16 @@ export function useSearchTerms(
 export function useSearchTerm(
   term: string,
   days: number,
-  bookId?: string,
+  bookIds?: string[],
   countryCode?: string,
 ) {
+  const books = booksParam(bookIds);
   return useQuery({
-    queryKey: ["search-term", term, days, bookId ?? null, countryCode ?? null],
+    queryKey: ["search-term", term, days, books ?? null, countryCode ?? null],
     placeholderData: keepPreviousData,
     queryFn: () =>
       apiFetch(`/api/search-terms/${encodeURIComponent(term)}`, {
-        query: { days, book: bookId, country: countryCode },
+        query: { days, books, country: countryCode },
         schema: searchTermDetailSchema,
       }),
   });
@@ -339,15 +405,19 @@ export function useSearchTerm(
 // Recommendations
 // ---------------------------------------------------------------------------
 
-export function useRecommendations(filters?: {
-  type?: RecommendationType;
-  state?: RecommendationState;
-}) {
+export function useRecommendations(
+  filters?: {
+    type?: RecommendationType;
+    state?: RecommendationState;
+  },
+  bookIds?: string[],
+) {
+  const books = booksParam(bookIds);
   return useQuery({
-    queryKey: ["recommendations", filters ?? {}],
+    queryKey: ["recommendations", filters ?? {}, books ?? null],
     queryFn: () =>
       apiFetch("/api/recommendations", {
-        query: { type: filters?.type, state: filters?.state },
+        query: { type: filters?.type, state: filters?.state, books },
         schema: z.array(recommendationSchema),
       }),
   });

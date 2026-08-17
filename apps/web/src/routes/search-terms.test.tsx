@@ -12,9 +12,8 @@ import { SearchTermsPage } from "./search-terms";
 
 const mocks = vi.hoisted(() => ({
   useSearchTerms: vi.fn(),
-  useBooks: vi.fn(),
   useProfiles: vi.fn(),
-  useSearch: vi.fn(() => ({}) as { book?: string; country?: string }),
+  useSearch: vi.fn(() => ({}) as { books?: string[]; country?: string }),
   useNavigate: vi.fn(() => vi.fn()),
 }));
 
@@ -26,7 +25,6 @@ vi.mock("@tanstack/react-router", () => ({
 
 vi.mock("../api/endpoints", () => ({
   useSearchTerms: mocks.useSearchTerms,
-  useBooks: mocks.useBooks,
   useProfiles: mocks.useProfiles,
   useCountrySpend: () => ({ data: undefined }),
 }));
@@ -95,11 +93,6 @@ describe("SearchTermsPage", () => {
     vi.clearAllMocks();
     mocks.useSearch.mockReturnValue({});
     mocks.useProfiles.mockReturnValue({ data: PROFILES, isPending: false });
-    mocks.useBooks.mockReturnValue({
-      data: [
-        { id: "book-1", asin: "B001", title: "First title", format: "ebook" },
-      ],
-    });
     mocks.useSearchTerms.mockReturnValue({
       isPending: false,
       error: null,
@@ -224,32 +217,29 @@ describe("SearchTermsPage", () => {
     expect(rowTexts()).toHaveLength(3);
   });
 
-  it("passes the selected product to the query and keeps it on drill-down", () => {
-    const navigate = vi.fn();
-    mocks.useNavigate.mockReturnValue(navigate);
-    mocks.useSearch.mockReturnValue({ book: "book-1" });
+  it("passes the global product filter to the query", () => {
+    mocks.useSearch.mockReturnValue({ books: ["book-1", "book-2"] });
     render(<SearchTermsPage />);
 
-    expect(mocks.useSearchTerms).toHaveBeenCalledWith(7, "book-1", undefined);
-
-    const select = screen.getByRole("combobox");
-    expect(select).toHaveValue("book-1");
-
-    fireEvent.change(select, { target: { value: "" } });
-    expect(navigate).toHaveBeenCalledWith({
-      to: "/search-terms",
-      search: {},
-      replace: true,
-    });
+    expect(mocks.useSearchTerms).toHaveBeenCalledWith(
+      7,
+      ["book-1", "book-2"],
+      undefined,
+    );
+    // The per-page product dropdown is gone — the global filter in the app
+    // shell owns product selection now.
+    expect(
+      screen.queryByRole("combobox", { name: "Filter by product" }),
+    ).not.toBeInTheDocument();
   });
 
   it("filters by market through the URL and passes it to the query", () => {
     const navigate = vi.fn();
     mocks.useNavigate.mockReturnValue(navigate);
-    mocks.useSearch.mockReturnValue({ book: "book-1", country: "DE" });
+    mocks.useSearch.mockReturnValue({ books: ["book-1"], country: "DE" });
     render(<SearchTermsPage />);
 
-    expect(mocks.useSearchTerms).toHaveBeenCalledWith(7, "book-1", "DE");
+    expect(mocks.useSearchTerms).toHaveBeenCalledWith(7, ["book-1"], "DE");
 
     const marketFilter = screen.getByRole("button", {
       name: "Filter by market",
@@ -258,10 +248,30 @@ describe("SearchTermsPage", () => {
     fireEvent.click(
       screen.getByRole("option", { name: /Germany/ }).querySelector("button")!,
     );
-    expect(navigate).toHaveBeenCalledWith({
-      to: "/search-terms",
-      search: { book: "book-1", country: "DE" },
-      replace: true,
+    const call = navigate.mock.calls.at(-1)?.[0] as {
+      to: string;
+      search: (prev: Record<string, unknown>) => Record<string, unknown>;
+      replace: boolean;
+    };
+    expect(call.to).toBe("/search-terms");
+    expect(call.replace).toBe(true);
+    // The functional update preserves the inherited books param.
+    expect(call.search({ books: ["book-1"], country: "DE" })).toEqual({
+      books: ["book-1"],
+      country: "DE",
+    });
+
+    // "All markets" clears the country without dropping the product filter.
+    fireEvent.click(marketFilter);
+    fireEvent.click(
+      screen
+        .getByRole("option", { name: "All markets" })
+        .querySelector("button")!,
+    );
+    const cleared = navigate.mock.calls.at(-1)?.[0] as typeof call;
+    expect(cleared.search({ books: ["book-1"], country: "DE" })).toEqual({
+      books: ["book-1"],
+      country: undefined,
     });
   });
 

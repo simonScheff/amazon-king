@@ -18,6 +18,16 @@ vi.mock("@tanstack/react-router", () => ({
 
 vi.mock("../api/endpoints", () => ({
   useCampaign: mocks.useCampaign,
+  useUpdateCampaignState: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+    error: null,
+  }),
+  useRenameCampaign: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+    error: null,
+  }),
   useProfiles: () => ({
     isPending: false,
     error: null,
@@ -47,6 +57,10 @@ vi.mock("../components/performance-trend-chart", () => ({
 
 vi.mock("../components/campaign-max-cpc", () => ({
   CampaignMaxCpc: () => <div>Max CPC controls</div>,
+}));
+
+vi.mock("../components/reauth-dialog", () => ({
+  ReauthDialog: () => null,
 }));
 
 const detail: CampaignDetail = {
@@ -90,7 +104,38 @@ const detail: CampaignDetail = {
   ],
   adGroups: [],
   targets: [],
-  searchTerms: [],
+  searchTerms: [
+    {
+      id: "tractor gifts",
+      name: "tractor gifts",
+      state: "n/a",
+      totals: {
+        impressions: 9,
+        clicks: 1,
+        cost: "0.5000",
+        sales: "8.3000",
+        orders: 1,
+      },
+      estimatedRoyalty: "4.0000",
+      estimatedAdProfit: "3.5000",
+      economicsMissing: false,
+    },
+    {
+      id: "farm tractors",
+      name: "farm tractors",
+      state: "n/a",
+      totals: {
+        impressions: 2,
+        clicks: 1,
+        cost: "0.5000",
+        sales: "0.0000",
+        orders: 0,
+      },
+      estimatedRoyalty: null,
+      estimatedAdProfit: null,
+      economicsMissing: true,
+    },
+  ],
   negativeKeywords: [
     {
       id: "negative-campaign",
@@ -129,7 +174,7 @@ describe("CampaignDetailPage profitability", () => {
   it("shows campaign profit and a campaign-only daily chart", () => {
     render(<CampaignDetailPage />);
 
-    expect(mocks.useCampaign).toHaveBeenCalledWith("campaign-1", 7);
+    expect(mocks.useCampaign).toHaveBeenCalledWith("campaign-1", 7, undefined);
     expect(screen.getByText("Profitable")).toBeInTheDocument();
     expect(screen.getByText("$2.00 estimated ad profit")).toBeInTheDocument();
     expect(screen.getByText("Est. ad profit")).toBeInTheDocument();
@@ -154,11 +199,19 @@ describe("CampaignDetailPage profitability", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "14d" }));
 
-    expect(mocks.navigate).toHaveBeenCalledWith({
-      to: "/campaigns/$id",
-      params: { id: "campaign-1" },
-      search: { days: 14 },
-      replace: true,
+    const call = mocks.navigate.mock.calls.at(-1)?.[0] as {
+      to: string;
+      params: { id: string };
+      search: (prev: Record<string, unknown>) => Record<string, unknown>;
+      replace: boolean;
+    };
+    expect(call.to).toBe("/campaigns/$id");
+    expect(call.params).toEqual({ id: "campaign-1" });
+    expect(call.replace).toBe(true);
+    // The functional search update keeps existing params (e.g. books).
+    expect(call.search({ days: 7, books: ["3"] })).toEqual({
+      days: 14,
+      books: ["3"],
     });
   });
 
@@ -185,5 +238,33 @@ describe("CampaignDetailPage profitability", () => {
     expect(
       screen.getByRole("cell", { name: "Ad group · Exact ad group" }),
     ).toBeInTheDocument();
+  });
+
+  it("shows per-term profitability in the search terms tab", () => {
+    render(<CampaignDetailPage />);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Search terms" }));
+
+    expect(
+      screen.getByRole("columnheader", { name: "Profit" }),
+    ).toBeInTheDocument();
+    const profitableRow = screen
+      .getByRole("cell", { name: "tractor gifts" })
+      .closest("tr");
+    expect(profitableRow).toHaveTextContent("Profitable");
+    expect(profitableRow).toHaveTextContent("$3.50");
+    const missingRow = screen
+      .getByRole("cell", { name: "farm tractors" })
+      .closest("tr");
+    expect(missingRow).toHaveTextContent("Profit unavailable");
+    expect(missingRow).toHaveTextContent("Missing economics");
+  });
+
+  it("does not show a profit column on the other metric tabs", () => {
+    render(<CampaignDetailPage />);
+
+    expect(
+      screen.queryByRole("columnheader", { name: "Profit" }),
+    ).not.toBeInTheDocument();
   });
 });

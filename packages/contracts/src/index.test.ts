@@ -8,8 +8,10 @@ import {
   campaignMaxCpcSchema,
   recommendationChangeActionType,
   recommendationSchema,
+  renameCampaignSchema,
   sessionInfoSchema,
   setCampaignMaxCpcSchema,
+  updateCampaignStateSchema,
 } from "./index.js";
 
 describe("contracts smoke test", () => {
@@ -253,5 +255,21 @@ describe("contracts smoke test", () => {
       enforcedAt: "2026-08-13T08:00:00.000Z",
     });
     expect(controls.status).toBe("covered");
+  });
+
+  it("validates campaign state and rename payloads", () => {
+    expect(updateCampaignStateSchema.parse({ state: "paused" })).toEqual({
+      state: "paused",
+    });
+    expect(() =>
+      updateCampaignStateSchema.parse({ state: "archived" }),
+    ).toThrow();
+    expect(renameCampaignSchema.parse({ name: "  New name  " })).toEqual({
+      name: "New name",
+    });
+    expect(() => renameCampaignSchema.parse({ name: "   " })).toThrow();
+    expect(() =>
+      renameCampaignSchema.parse({ name: "x".repeat(129) }),
+    ).toThrow();
   });
 });

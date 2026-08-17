@@ -4,7 +4,7 @@ import {
   isoDateTimeSchema,
   nonNegativeDecimalStringSchema,
 } from "./common.js";
-import { changeSetSchema } from "./recommendations.js";
+import { changeActionSchema, changeSetSchema } from "./recommendations.js";
 
 /** Amazon's Sponsored Products campaign bidding strategies. */
 export const sponsoredProductsBiddingStrategySchema = z.enum([
@@ -85,3 +85,22 @@ export const maxCpcChangeSetResultSchema = z.object({
   actionsCreated: z.number().int().nonnegative(),
 });
 export type MaxCpcChangeSetResult = z.infer<typeof maxCpcChangeSetResultSchema>;
+
+/** Pause or enable a campaign (one-click guarded apply). */
+export const updateCampaignStateSchema = z.object({
+  state: z.enum(["enabled", "paused"]),
+});
+export type UpdateCampaignState = z.infer<typeof updateCampaignStateSchema>;
+
+/** Rename a campaign (one-click guarded apply). Amazon caps names at 128. */
+export const renameCampaignSchema = z.object({
+  name: z.string().trim().min(1).max(128),
+});
+export type RenameCampaign = z.infer<typeof renameCampaignSchema>;
+
+/** The applied one-click campaign update (pause/enable or rename). */
+export const campaignUpdateResultSchema = z.object({
+  changeSet: changeSetSchema,
+  actions: z.array(changeActionSchema),
+});
+export type CampaignUpdateResult = z.infer<typeof campaignUpdateResultSchema>;

@@ -33,6 +33,10 @@ mostly empty — here's what each part is for.
 
 ![Dashboard overview with KPI cards, daily performance charts, and top problems](/screenshots/overview.png)
 
+- **Product filter** — the checkbox dropdown at the bottom of the left sidebar
+  scopes the whole app to one or more of your books ("All products" by
+  default). The overview, campaigns, search terms, and recommendations screens
+  all respect it, and the selection persists as you navigate.
 - **Country and date-range selectors** — every number on the page respects
   these. Currency is never mixed across marketplaces; pick one country at a
   time.

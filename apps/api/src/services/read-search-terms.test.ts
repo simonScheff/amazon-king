@@ -315,33 +315,30 @@ describe("search terms", () => {
 
   it("passes a workspace-owned book filter through to the queries", async () => {
     vi.mocked(books.getBook).mockResolvedValue({
-      id: "book-1",
+      id: "7",
       workspaceId: "workspace-pk",
     } as never);
 
-    await service().listSearchTerms("workspace-pk", 7, "book-1");
+    await service().listSearchTerms("workspace-pk", 7, ["7"]);
     expect(dashboard.listSearchTermRollupRows).toHaveBeenCalledWith(
       expect.anything(),
       "workspace-pk",
       "2026-08-07",
       "2026-08-13",
-      "book-1",
+      [7n],
       null,
     );
 
-    await service().getSearchTermDetail(
-      "workspace-pk",
-      "fantasy books",
-      7,
-      "book-1",
-    );
+    await service().getSearchTermDetail("workspace-pk", "fantasy books", 7, [
+      "7",
+    ]);
     expect(dashboard.listSearchTermCampaignRows).toHaveBeenCalledWith(
       expect.anything(),
       "workspace-pk",
       "fantasy books",
       "2026-08-07",
       "2026-08-13",
-      "book-1",
+      [7n],
     );
     expect(dashboard.searchTermDailySeries).toHaveBeenCalledWith(
       expect.anything(),
@@ -350,7 +347,28 @@ describe("search terms", () => {
       "US",
       "2026-08-07",
       "2026-08-13",
-      "book-1",
+      [7n],
+    );
+  });
+
+  it("resolves each selected book and passes the union to the queries", async () => {
+    vi.mocked(books.getBook).mockImplementation(async (_db, id) => {
+      if (id === "7" || id === "9") {
+        return { id, workspaceId: "workspace-pk" } as never;
+      }
+      return null;
+    });
+
+    await service().listSearchTerms("workspace-pk", 7, ["7", "9"]);
+
+    expect(books.getBook).toHaveBeenCalledTimes(2);
+    expect(dashboard.listSearchTermRollupRows).toHaveBeenCalledWith(
+      expect.anything(),
+      "workspace-pk",
+      "2026-08-07",
+      "2026-08-13",
+      [7n, 9n],
+      null,
     );
   });
 
@@ -373,8 +391,21 @@ describe("search terms", () => {
     } as never);
 
     await expect(
-      service().listSearchTerms("workspace-pk", 7, "book-9"),
+      service().listSearchTerms("workspace-pk", 7, ["book-9"]),
     ).rejects.toMatchObject({ statusCode: 404 });
     expect(dashboard.listSearchTermRollupRows).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unknown book id with 404", async () => {
+    vi.mocked(books.getBook).mockResolvedValue(null);
+
+    await expect(
+      service().listSearchTerms("workspace-pk", 7, ["42"]),
+    ).rejects.toMatchObject({ statusCode: 404 });
+    await expect(
+      service().getSearchTermDetail("workspace-pk", "fantasy books", 7, ["42"]),
+    ).rejects.toMatchObject({ statusCode: 404 });
+    expect(dashboard.listSearchTermRollupRows).not.toHaveBeenCalled();
+    expect(dashboard.listSearchTermCampaignRows).not.toHaveBeenCalled();
   });
 });

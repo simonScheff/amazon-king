@@ -8,8 +8,10 @@ import {
 import type { MetricTotals, NegativeKeywordRow } from "@amazon-king/contracts";
 import { useCampaign, useProfiles } from "../api/endpoints";
 import { KpiCard } from "../components/kpi-card";
+import { CampaignControls } from "../components/campaign-controls";
 import { CampaignMaxCpc } from "../components/campaign-max-cpc";
 import { PerformanceTrendChart } from "../components/performance-trend-chart";
+import { ProfitabilityResult } from "../components/profitability-result";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardBody, CardHeader } from "../components/ui/card";
@@ -45,6 +47,9 @@ interface Row {
   name: string;
   state: string;
   totals: MetricTotals;
+  /** Present on search-term rows only. */
+  estimatedAdProfit?: string | null;
+  economicsMissing?: boolean;
 }
 
 function formatAmazonLabel(value: string) {
@@ -104,10 +109,12 @@ function MetricsTable({
   rows,
   currency,
   termLink,
+  showProfit = false,
 }: {
   rows: Row[];
   currency: string;
   termLink?: { days: number; country?: string };
+  showProfit?: boolean;
 }) {
   if (rows.length === 0) {
     return <EmptyState>Nothing here yet for this campaign.</EmptyState>;
@@ -124,6 +131,7 @@ function MetricsTable({
           <Th className="text-right">Sales</Th>
           <Th className="text-right">Orders</Th>
           <Th className="text-right">ACoS</Th>
+          {showProfit ? <Th>Profit</Th> : null}
         </tr>
       </thead>
       <tbody>
@@ -170,6 +178,21 @@ function MetricsTable({
               </Td>
               <Td className="text-right">{formatCount(r.totals.orders)}</Td>
               <Td className="text-right">{formatAcos(acos)}</Td>
+              {showProfit ? (
+                <Td>
+                  <ProfitabilityResult
+                    status={getCampaignProfitStatus(
+                      r.totals,
+                      r.economicsMissing ?? false,
+                      r.estimatedAdProfit ?? null,
+                    )}
+                    amount={r.estimatedAdProfit ?? null}
+                    currency={currency}
+                    economicsMissing={r.economicsMissing ?? false}
+                    hasActivity={hasCampaignActivity(r.totals)}
+                  />
+                </Td>
+              ) : null}
             </tr>
           );
         })}
@@ -180,12 +203,15 @@ function MetricsTable({
 
 export function CampaignDetailPage() {
   const { id } = useParams({ strict: false }) as { id: string };
-  const search = useSearch({ strict: false }) as { days?: number };
+  const search = useSearch({ strict: false }) as {
+    days?: number;
+    books?: string[];
+  };
   const days = DAY_OPTIONS.includes(search.days as 7)
     ? Number(search.days)
     : 30;
   const navigate = useNavigate();
-  const campaign = useCampaign(id, days);
+  const campaign = useCampaign(id, days, search.books);
   const profiles = useProfiles();
   const [tab, setTab] = useState<Tab>("adGroups");
 
@@ -223,6 +249,9 @@ export function CampaignDetailPage() {
         <Badge tone={c.state === "enabled" ? "success" : "neutral"}>
           {c.state}
         </Badge>
+        {c.state !== "archived" ? (
+          <CampaignControls campaignId={id} name={c.name} state={c.state} />
+        ) : null}
         {c.amazonConsoleUrl ? (
           <a
             href={c.amazonConsoleUrl}
@@ -249,7 +278,7 @@ export function CampaignDetailPage() {
                   navigate({
                     to: "/campaigns/$id",
                     params: { id },
-                    search: { days: option },
+                    search: (prev) => ({ ...prev, days: option }),
                     replace: true,
                   })
                 }
@@ -350,6 +379,7 @@ export function CampaignDetailPage() {
                 rows={campaign.data[tab]}
                 currency={currency}
                 termLink={tab === "searchTerms" ? { days, country } : undefined}
+                showProfit={tab === "searchTerms"}
               />
             )}
           </div>

@@ -124,7 +124,13 @@ export const changeSetSchema = z.object({
   status: changeSetStatusSchema,
   createdAt: isoDateTimeSchema,
   kind: z
-    .enum(["recommendation", "max_cpc", "rollback", "campaign_creation"])
+    .enum([
+      "recommendation",
+      "max_cpc",
+      "rollback",
+      "campaign_creation",
+      "campaign_update",
+    ])
     .optional(),
   /**
    * When set, this change set may only be applied after the referenced change
@@ -148,6 +154,8 @@ export const changeActionTypeSchema = z.enum([
   "create_keyword",
   "create_target",
   "add_negative_target",
+  "update_campaign_state",
+  "update_campaign_name",
 ]);
 export type ChangeActionType = z.infer<typeof changeActionTypeSchema>;
 

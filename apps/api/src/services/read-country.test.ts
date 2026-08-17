@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@amazon-king/database", () => ({
   audit: {},
-  books: {},
+  books: {
+    getBook: vi.fn(),
+  },
   changes: {},
   connections: {},
   enqueue: {},
@@ -22,7 +24,7 @@ vi.mock("@amazon-king/database", () => ({
   },
 }));
 
-import { dashboard, metrics, profiles } from "@amazon-king/database";
+import { books, dashboard, metrics, profiles } from "@amazon-king/database";
 import type { ApiConfig } from "../config.js";
 import { createReadService } from "./read.js";
 
@@ -98,12 +100,14 @@ describe("dashboard country filtering", () => {
       US_PROFILE.id,
       "2026-07-15",
       "2026-08-13",
+      null,
     );
     expect(dashboard.dailySeries).toHaveBeenCalledWith(
       expect.anything(),
       [US_PROFILE.id],
       "2026-07-15",
       "2026-08-13",
+      null,
     );
     expect(result.daily).toEqual([
       {
@@ -135,6 +139,51 @@ describe("dashboard country filtering", () => {
 
     expect(result.daily?.[0]?.estimatedRoyalty).toBe("8.5000");
     expect(result.totals.estimatedRoyalty).toBe("8.5000");
+  });
+
+  it("forwards the product filter to the totals and daily series", async () => {
+    vi.mocked(books.getBook).mockResolvedValue({
+      id: "7",
+      workspaceId: "workspace-1",
+    } as never);
+    const service = createReadService({
+      db: {} as never,
+      config: { killSwitch: false } as ApiConfig,
+      logger: {} as never,
+      now: () => new Date("2026-08-13T12:00:00.000Z"),
+    });
+
+    await service.dashboardSummary("workspace-1", 30, "US", ["7"]);
+
+    expect(metrics.dashboardTotals).toHaveBeenCalledWith(
+      expect.anything(),
+      US_PROFILE.id,
+      "2026-07-15",
+      "2026-08-13",
+      [7n],
+    );
+    expect(dashboard.dailySeries).toHaveBeenCalledWith(
+      expect.anything(),
+      [US_PROFILE.id],
+      "2026-07-15",
+      "2026-08-13",
+      [7n],
+    );
+  });
+
+  it("rejects an unknown book id with 404 before reading metrics", async () => {
+    vi.mocked(books.getBook).mockResolvedValue(null);
+    const service = createReadService({
+      db: {} as never,
+      config: { killSwitch: false } as ApiConfig,
+      logger: {} as never,
+      now: () => new Date("2026-08-13T12:00:00.000Z"),
+    });
+
+    await expect(
+      service.dashboardSummary("workspace-1", 30, "US", ["42"]),
+    ).rejects.toMatchObject({ statusCode: 404 });
+    expect(metrics.dashboardTotals).not.toHaveBeenCalled();
   });
 });
 
@@ -219,5 +268,31 @@ describe("dashboard country spend", () => {
     expect(result.countries).toEqual([
       { countryCode: "US", currency: "USD", spend: "5.0000" },
     ]);
+  });
+
+  it("forwards the product filter to every profile's totals", async () => {
+    vi.mocked(books.getBook).mockImplementation(async (_db, id) => {
+      if (id === "7" || id === "9") {
+        return { id, workspaceId: "workspace-1" } as never;
+      }
+      return null;
+    });
+    const service = createReadService({
+      db: {} as never,
+      config: { killSwitch: false } as ApiConfig,
+      logger: {} as never,
+      now: () => new Date("2026-08-13T12:00:00.000Z"),
+    });
+
+    await service.dashboardCountrySpend("workspace-1", 7, ["7", "9"]);
+
+    expect(metrics.dashboardTotals).toHaveBeenCalledTimes(4);
+    expect(metrics.dashboardTotals).toHaveBeenCalledWith(
+      expect.anything(),
+      US_PROFILE.id,
+      "2026-08-07",
+      "2026-08-13",
+      [7n, 9n],
+    );
   });
 });

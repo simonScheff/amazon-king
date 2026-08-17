@@ -242,11 +242,28 @@ export interface UpdateCampaignBiddingAction {
   state?: string;
 }
 
+/** Pause or enable a campaign via PUT /sp/campaigns. */
+export interface UpdateCampaignStateAction {
+  actionId: string;
+  kind: "update_campaign_state";
+  campaignId: string;
+  state: "enabled" | "paused";
+}
+
+/** Rename a campaign via PUT /sp/campaigns. */
+export interface UpdateCampaignNameAction {
+  actionId: string;
+  kind: "update_campaign_name";
+  campaignId: string;
+  name: string;
+  /** Current Amazon state, carried through while the name changes. */
+  state?: string;
+}
+
 export interface UpdateOptimizationRuleAction {
   actionId: string;
   kind: "update_optimization_rule";
-  optimizationRuleId: string;
-  /** Full Amazon rule payload with status changed to DISABLED. */
+  optimizationRuleId: string; /** Full Amazon rule payload with status changed to DISABLED. */
   rule: Record<string, unknown>;
 }
 
@@ -370,6 +387,8 @@ export type ChangeAction =
   | UpdateBidAction
   | UpdateAdGroupDefaultBidAction
   | UpdateCampaignBiddingAction
+  | UpdateCampaignStateAction
+  | UpdateCampaignNameAction
   | UpdateOptimizationRuleAction
   | AddNegativeExactAction
   | RemoveNegativeExactAction

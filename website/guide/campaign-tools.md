@@ -5,12 +5,27 @@ description: The new-campaign wizard, cannibalization resolution, and Max CPC en
 
 # Campaign Tools
 
-Beyond per-recommendation approvals, amazon-king has three campaign-level
-tools. All three produce ordinary draft change sets that go through the same
+Beyond per-recommendation approvals, amazon-king has several campaign-level
+tools. All of them produce ordinary change sets that go through the same
 [guarded apply pipeline](/guide/applying-changes) — preview, fresh re-read,
 guardrails, verification.
 
 ![Campaign detail page with the Max CPC tab](/screenshots/campaign-detail.png)
+
+## Pause / enable / rename
+
+The campaign detail page header has one-click controls to **pause** (or
+re-enable) and **rename** a campaign. Each click drafts a single-action
+`campaign_update` change set and applies it immediately through the guarded
+pipeline (recent sign-in required — if your session is too old, the re-auth
+dialog emails you a magic link and returns you to the page). The verified
+change is reflected in the dashboard right away, and both actions are
+rollbackable from the Change center (the previous state or name is restored).
+
+Use rename to annotate *why* you paused something — e.g. "… — paused,
+accidental auto campaign". There is deliberately no delete: Amazon only
+offers a terminal `ARCHIVED` state that can never be undone, so the app does
+not expose it.
 
 ## New campaign wizard
 
@@ -28,8 +43,12 @@ The wizard at `/campaigns/new` has six steps:
 4. **Book** — pick a book from your catalog; the wizard uses its per-market
    ASINs for the product ads.
 5. **Keywords & targets** — keywords (EXACT, PHRASE, or BROAD, each with a
-   bid) and/or ASIN product targets (optional bid). At least one of the two
-   is required.
+   bid) and/or ASIN product targets (optional bid). Entering a keyword or
+   ASIN switches the campaign to **MANUAL** targeting automatically: Amazon
+   rejects manual targeting clauses in AUTO campaigns (it creates the close
+   match, loose match, substitutes, and complements targets itself), so an
+   AUTO campaign is only valid with no keywords or targets entered, and a
+   MANUAL campaign requires at least one.
 6. **Review** — the payload is validated against the shared contract schema
    before submission.
 
@@ -40,8 +59,9 @@ required) and creates **one draft `campaign_creation` change set per market**.
 
 Each creation set is an ordered chain of actions:
 `create_campaign → create_ad_group → create_product_ad`, plus one
-`create_keyword` / `create_target` per keyword or ASIN target. Product
-targets are expressed as `ASIN_SAME_AS` expressions.
+`create_keyword` / `create_target` per keyword or ASIN target (MANUAL
+campaigns only — an AUTO campaign's set is just the three entity creates).
+Product targets are expressed as `ASIN_SAME_AS` expressions.
 
 - Created Amazon ids from each phase are substituted into dependent actions;
   a child whose parent failed is not attempted and fails with

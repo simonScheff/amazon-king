@@ -411,6 +411,34 @@ describe("campaign creation change sets", () => {
     // A target without a bid inherits the ad group default — no bid is stored.
     expect(targetActions[1]!.after_state).not.toHaveProperty("bid");
   });
+
+  it("creates an automatic campaign with no manual targeting actions", async () => {
+    const { db, service, book } = setup();
+    const base = creationInput(book.id as string);
+    const input: CampaignCreationCreate = {
+      ...base,
+      campaign: { ...base.campaign, targetingType: "AUTO" },
+      // Amazon rejects manual keywords/targets in auto campaigns and creates
+      // its own default auto targets, so none are drafted.
+      keywords: [],
+    };
+
+    const result = await service.createCampaignCreationChangeSets(
+      authFixture(),
+      input,
+      META,
+    );
+
+    expect(result.changeSets).toHaveLength(1);
+    expect(db.tables.changeActions.map((a) => a.action_type)).toEqual([
+      "create_campaign",
+      "create_ad_group",
+      "create_product_ad",
+    ]);
+    expect(db.tables.changeActions[0]!.after_state).toMatchObject({
+      targetingType: "AUTO",
+    });
+  });
 });
 
 // -- guarded apply -------------------------------------------------------------
@@ -507,6 +535,60 @@ describe("campaign creation apply", () => {
       (job) => job.type === "structure_sync",
     );
     expect(syncJob?.payload).toEqual({ profileId: profile.id });
+  });
+
+  it("applies an automatic campaign: only the three entity creates are sent", async () => {
+    const setupResult = setup();
+    const { db, service, gateway, book } = setupResult;
+    const base = creationInput(book.id as string);
+    const result = await service.createCampaignCreationChangeSets(
+      authFixture(),
+      {
+        ...base,
+        campaign: { ...base.campaign, targetingType: "AUTO" },
+        keywords: [],
+      },
+      META,
+    );
+    const changeSetId = result.changeSets[0]!.id;
+    const autoSnapshot = createdSnapshot({
+      campaigns: [
+        { ...createdSnapshot().campaigns[0]!, targetingType: "AUTO" },
+      ],
+      keywords: [],
+    });
+    gateway.syncCampaignStructure
+      .mockResolvedValueOnce(emptySnapshot()) // pre-check: nothing exists yet
+      .mockResolvedValueOnce(autoSnapshot); // post-write verification
+
+    const applied = await service.applyChangeSet(
+      authFixture(),
+      changeSetId,
+      META,
+    );
+
+    expect(applied.changeSet.status).toBe("applied");
+    expect(applied.actions.map((a) => a.status)).toEqual([
+      "applied",
+      "applied",
+      "applied",
+    ]);
+    const sent = gateway.applyActions.mock.calls[0]![0] as {
+      actions: Array<Record<string, unknown>>;
+    };
+    expect(sent.actions.map((a) => a.kind)).toEqual([
+      "create_campaign",
+      "create_ad_group",
+      "create_product_ad",
+    ]);
+    expect(sent.actions[0]).toEqual(
+      expect.objectContaining({ targetingType: "AUTO" }),
+    );
+    expect(db.tables.changeActions.map((a) => a.amazon_entity_id)).toEqual([
+      "camp-new",
+      "ag-new",
+      "ad-new",
+    ]);
   });
 
   it("skips the write when a campaign with the same name already exists", async () => {

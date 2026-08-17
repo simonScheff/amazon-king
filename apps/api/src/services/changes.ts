@@ -147,9 +147,16 @@ const campaignCreationSpecSchema = z
     // Sets persisted before product targets existed carry no `targets` key.
     targets: z.array(campaignCreationTargetSchema).default([]),
   })
-  .refine((value) => value.keywords.length + value.targets.length > 0, {
-    message: "Provide at least one keyword or product target",
-  });
+  // Manual targeting clauses are required for MANUAL campaigns only: Amazon
+  // populates AUTO campaigns with its own default auto targets. Legacy sets
+  // drafted with targets in an AUTO campaign stay parseable so retrying them
+  // surfaces Amazon's own rejection instead of an opaque apply-time failure.
+  .refine(
+    (value) =>
+      value.campaign.targetingType === "AUTO" ||
+      value.keywords.length + value.targets.length > 0,
+    { message: "Provide at least one keyword or product target" },
+  );
 
 const CAMPAIGN_CREATION_TYPES = new Set([
   "create_campaign",
@@ -269,6 +276,11 @@ function guardrailActionType(
     case "create_product_ad":
     case "create_keyword":
     case "create_target":
+      return "create_entity";
+    case "update_campaign_state":
+    case "update_campaign_name":
+      // Campaign attribute changes touch no bid or budget, so they must not
+      // be treated as bid changes either (same reasoning as create_entity).
       return "create_entity";
     default:
       // update_bid, update_ad_group_default_bid, update_campaign_bidding,
@@ -1201,6 +1213,75 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
           amazonAdGroupId: null,
           preSatisfied: liveNegative === undefined,
         });
+      } else if (
+        action.actionType === "update_campaign_state" ||
+        action.actionType === "update_campaign_name"
+      ) {
+        if (!snapshot || !action.amazonEntityId) {
+          throw new ApiError(
+            500,
+            "INTERNAL",
+            `Malformed ${action.actionType} action`,
+          );
+        }
+        const liveCampaign = snapshot.campaigns.find(
+          (item) => item.campaignId === action.amazonEntityId,
+        );
+        if (!liveCampaign) {
+          throw conflict(
+            "STALE_BEFORE_STATE",
+            "Campaign no longer exists on Amazon; re-sync before applying",
+          );
+        }
+        const before = stateRecord(action.beforeState);
+        const after = stateRecord(action.afterState);
+        if (action.actionType === "update_campaign_state") {
+          const desired = String(after.state);
+          const current = liveCampaign.state.trim().toLowerCase();
+          const preSatisfied = current === desired;
+          if (!preSatisfied && current !== String(before.state)) {
+            throw conflict(
+              "STALE_BEFORE_STATE",
+              "Amazon campaign state changed since this update was drafted; re-create it from the current state",
+            );
+          }
+          translated.push({
+            action,
+            gatewayAction: {
+              actionId: action.id,
+              kind: "update_campaign_state",
+              campaignId: action.amazonEntityId,
+              state: desired === "paused" ? "paused" : "enabled",
+            },
+            amazonTargetId: null,
+            amazonCampaignId: action.amazonEntityId,
+            amazonAdGroupId: null,
+            preSatisfied,
+          });
+        } else {
+          const desiredName = String(after.name);
+          const preSatisfied = liveCampaign.name === desiredName;
+          if (!preSatisfied && liveCampaign.name !== before.name) {
+            throw conflict(
+              "STALE_BEFORE_STATE",
+              "Amazon campaign name changed since this rename was drafted; re-create it from the current name",
+            );
+          }
+          translated.push({
+            action,
+            gatewayAction: {
+              actionId: action.id,
+              kind: "update_campaign_name",
+              campaignId: action.amazonEntityId,
+              name: desiredName,
+              state: liveCampaign.state,
+            },
+            amazonTargetId: null,
+            amazonCampaignId: action.amazonEntityId,
+            amazonAdGroupId: null,
+            preSatisfied,
+          });
+        }
       } else {
         throw new ApiError(
           500,
@@ -1238,11 +1319,19 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
     const targetActions = actions.filter(
       (a) => a.actionType === "create_target",
     );
+    if (!campaignAction || !adGroupAction || !productAdAction) {
+      throw new ApiError(
+        500,
+        "INTERNAL",
+        "Malformed campaign_creation change set",
+      );
+    }
+    // AUTO campaigns carry no manual keyword/target actions — Amazon creates
+    // its default auto targets itself.
+    const isAuto =
+      stateRecord(campaignAction.afterState).targetingType === "AUTO";
     if (
-      !campaignAction ||
-      !adGroupAction ||
-      !productAdAction ||
-      (keywordActions.length === 0 && targetActions.length === 0) ||
+      (!isAuto && keywordActions.length === 0 && targetActions.length === 0) ||
       actions.length !== keywordActions.length + targetActions.length + 3
     ) {
       throw new ApiError(
@@ -1765,6 +1854,32 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
           verified = !verification.negativeKeywords.some(
             (item) => item.negativeKeywordId === t.amazonTargetId,
           );
+        } else if (
+          (t.action.actionType === "update_campaign_state" ||
+            t.action.actionType === "update_campaign_name") &&
+          t.amazonCampaignId &&
+          verification
+        ) {
+          const liveCampaign = verification.campaigns.find(
+            (item) => item.campaignId === t.amazonCampaignId,
+          );
+          const after = stateRecord(t.action.afterState);
+          verified =
+            liveCampaign !== undefined &&
+            (t.action.actionType === "update_campaign_state"
+              ? liveCampaign.state.trim().toLowerCase() === String(after.state)
+              : liveCampaign.name === after.name);
+          if (verified && liveCampaign && t.action.campaignId) {
+            // Write the verified change through to the local mirror so the
+            // dashboard reflects it without waiting for the next sync.
+            await structure.updateCampaignAttributes(
+              db,
+              t.action.campaignId,
+              t.action.actionType === "update_campaign_state"
+                ? { state: liveCampaign.state }
+                : { name: liveCampaign.name },
+            );
+          }
         } else if (t.amazonCampaignId && verification) {
           const negative = findNegative(
             verification,
@@ -1985,6 +2100,105 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
         controls,
         actionsCreated: created.actions.length,
       } satisfies MaxCpcChangeSetResult;
+    },
+
+    async updateCampaign(auth, amazonCampaignId, update, meta) {
+      if (config.killSwitch) {
+        throw forbidden(
+          "WRITES_DISABLED",
+          "The global kill switch is enabled; all writes are disabled",
+        );
+      }
+      const campaign = await structure.findCampaignByAmazonId(
+        db,
+        auth.workspaceId,
+        amazonCampaignId,
+      );
+      if (!campaign) throw notFound("Unknown campaign");
+      const profile = await profiles.getProfile(db, campaign.profileId);
+      if (!profile) throw new ApiError(500, "INTERNAL", "Profile row missing");
+      if (!profile.writeEnabled) {
+        throw forbidden(
+          "WRITES_DISABLED",
+          "Profile is read-only; enable writes before updating the campaign",
+        );
+      }
+
+      // Exactly one attribute per one-click update (the routes guarantee it).
+      const isStateUpdate = update.state !== undefined;
+      const beforeState = isStateUpdate
+        ? { state: campaign.state.trim().toLowerCase() }
+        : { name: campaign.name };
+      const afterState = isStateUpdate
+        ? { state: update.state }
+        : { name: update.name };
+      const spec: changes.ChangeActionInsert = {
+        actionType: isStateUpdate
+          ? "update_campaign_state"
+          : "update_campaign_name",
+        campaignId: campaign.id,
+        entityName: campaign.name,
+        amazonEntityId: amazonCampaignId,
+        beforeState,
+        afterState,
+        fingerprint: "",
+      };
+      const setFingerprint = buildChangeSetFingerprint({
+        profileId: campaign.profileId,
+        creatorUserId: auth.userId,
+        actions: [
+          {
+            kind: "campaign_update",
+            campaignId: amazonCampaignId,
+            ...afterState,
+          },
+          spec,
+        ],
+      });
+      const created = await changes.createChangeSet(pool, {
+        profileId: campaign.profileId,
+        creatorUserId: auth.userId,
+        fingerprint: setFingerprint,
+        kind: "campaign_update",
+        metadata: {
+          campaignPk: campaign.id,
+          amazonCampaignId,
+          ...afterState,
+        },
+        actions: [
+          {
+            ...spec,
+            fingerprint: buildChangeActionFingerprint({
+              changeSetId: setFingerprint,
+              actionType: spec.actionType,
+              targetId: null,
+              campaignId: spec.campaignId,
+              adGroupId: null,
+              searchTerm: null,
+              beforeValue: null,
+              afterValue: null,
+              amazonEntityId: spec.amazonEntityId ?? null,
+              beforeState: spec.beforeState,
+              afterState: spec.afterState,
+            }),
+          },
+        ],
+      });
+      await recordAudit(
+        auth,
+        meta,
+        "campaign.update.create",
+        created.changeSet.id,
+        {
+          campaignId: amazonCampaignId,
+          ...afterState,
+          replayed: !created.created,
+        },
+      );
+      // One-click flow: apply immediately through the same guarded path.
+      // Replaying an already-applied set returns its stored result.
+      const loaded = await loadSet(auth, created.changeSet.id);
+      return applyLoadedSet(auth, meta, loaded, null);
     },
 
     async createChangeSet(auth, recommendationIds, meta) {
@@ -2460,6 +2674,29 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
           adGroupId: null,
           targetId: null,
           searchTerm: original.searchTerm,
+          beforeValue: null,
+          afterValue: null,
+          rollbackOfId: original.id,
+          amazonEntityId: original.amazonEntityId,
+          entityName: original.entityName,
+          beforeState: original.afterState,
+          afterState: original.beforeState,
+          fingerprint: "",
+        };
+      } else if (
+        (original.actionType === "update_campaign_state" ||
+          original.actionType === "update_campaign_name") &&
+        original.beforeState &&
+        original.afterState
+      ) {
+        // Attribute updates are reversed by restoring the saved before-state.
+        spec = {
+          recommendationId: null,
+          actionType: original.actionType,
+          campaignId: original.campaignId,
+          adGroupId: null,
+          targetId: null,
+          searchTerm: null,
           beforeValue: null,
           afterValue: null,
           rollbackOfId: original.id,

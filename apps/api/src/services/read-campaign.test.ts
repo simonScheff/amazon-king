@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@amazon-king/database", () => ({
   audit: {},
-  books: {},
+  books: {
+    getBook: vi.fn(),
+  },
   changes: {},
   connections: {},
   enqueue: {},
@@ -28,7 +30,7 @@ vi.mock("@amazon-king/database", () => ({
   },
 }));
 
-import { dashboard, profiles, structure } from "@amazon-king/database";
+import { books, dashboard, profiles, structure } from "@amazon-king/database";
 import type { ApiConfig } from "../config.js";
 import { createReadService } from "./read.js";
 
@@ -98,7 +100,36 @@ describe("campaign profitability", () => {
     ]);
     vi.mocked(dashboard.listAdGroupRows).mockResolvedValue([]);
     vi.mocked(dashboard.listTargetRows).mockResolvedValue([]);
-    vi.mocked(dashboard.listSearchTermRows).mockResolvedValue([]);
+    vi.mocked(dashboard.listSearchTermRows).mockResolvedValue([
+      {
+        id: "tractor gifts",
+        name: "tractor gifts",
+        state: "n/a",
+        totals: {
+          impressions: 9,
+          clicks: 1,
+          cost: "0.5000",
+          sales: "8.3000",
+          orders: 1,
+        },
+        estimatedRoyalty: "4.0000",
+        economicsMissing: false,
+      },
+      {
+        id: "farm tractors",
+        name: "farm tractors",
+        state: "n/a",
+        totals: {
+          impressions: 2,
+          clicks: 1,
+          cost: "0.5000",
+          sales: "0.0000",
+          orders: 1,
+        },
+        estimatedRoyalty: null,
+        economicsMissing: true,
+      },
+    ]);
     vi.mocked(dashboard.listNegativeKeywordRows).mockResolvedValue([
       {
         id: "negative-1",
@@ -152,6 +183,7 @@ describe("campaign profitability", () => {
       "amazon-campaign",
       "2026-08-07",
       "2026-08-13",
+      null,
     );
     expect(result).toMatchObject({
       dateRange: { start: "2026-08-07", end: "2026-08-13" },
@@ -179,6 +211,20 @@ describe("campaign profitability", () => {
           adGroupName: "Exact ad group",
         },
       ],
+      searchTerms: [
+        {
+          name: "tractor gifts",
+          estimatedRoyalty: "4.0000",
+          estimatedAdProfit: "3.5000",
+          economicsMissing: false,
+        },
+        {
+          name: "farm tractors",
+          estimatedRoyalty: null,
+          estimatedAdProfit: null,
+          economicsMissing: true,
+        },
+      ],
     });
   });
 
@@ -190,6 +236,7 @@ describe("campaign profitability", () => {
       "workspace-pk",
       "2026-08-07",
       "2026-08-13",
+      null,
     );
     expect(result).toEqual([
       expect.objectContaining({
@@ -238,5 +285,85 @@ describe("campaign profitability", () => {
     expect(result?.campaign.totals.estimatedRoyalty).toBeNull();
     expect(result?.campaign.totals.estimatedAdProfit).toBeNull();
     expect(result?.daily[1]?.estimatedAdProfit).toBeNull();
+  });
+
+  it("forwards the product filter to the campaign list query", async () => {
+    vi.mocked(books.getBook).mockResolvedValue({
+      id: "7",
+      workspaceId: "workspace-pk",
+    } as never);
+
+    await service().listCampaigns("workspace-pk", 7, ["7"]);
+
+    expect(dashboard.listCampaignRows).toHaveBeenCalledWith(
+      expect.anything(),
+      "workspace-pk",
+      "2026-08-07",
+      "2026-08-13",
+      [7n],
+    );
+  });
+
+  it("forwards the product filter to every campaign detail query", async () => {
+    vi.mocked(books.getBook).mockResolvedValue({
+      id: "7",
+      workspaceId: "workspace-pk",
+    } as never);
+
+    await service().getCampaignDetail("workspace-pk", "amazon-campaign", 7, [
+      "7",
+    ]);
+
+    expect(dashboard.listCampaignRows).toHaveBeenCalledWith(
+      expect.anything(),
+      "workspace-pk",
+      "2026-08-07",
+      "2026-08-13",
+      [7n],
+    );
+    expect(dashboard.listAdGroupRows).toHaveBeenCalledWith(
+      expect.anything(),
+      "campaign-pk",
+      "2026-08-07",
+      "2026-08-13",
+      [7n],
+    );
+    expect(dashboard.listTargetRows).toHaveBeenCalledWith(
+      expect.anything(),
+      "campaign-pk",
+      "2026-08-07",
+      "2026-08-13",
+      [7n],
+    );
+    expect(dashboard.listSearchTermRows).toHaveBeenCalledWith(
+      expect.anything(),
+      "profile-pk",
+      "amazon-campaign",
+      "2026-08-07",
+      "2026-08-13",
+      [7n],
+    );
+    expect(dashboard.listNegativeKeywordRows).toHaveBeenCalledWith(
+      expect.anything(),
+      "campaign-pk",
+      [7n],
+    );
+    expect(dashboard.campaignDailySeries).toHaveBeenCalledWith(
+      expect.anything(),
+      "profile-pk",
+      "amazon-campaign",
+      "2026-08-07",
+      "2026-08-13",
+      [7n],
+    );
+  });
+
+  it("rejects an unknown book id with 404 before reading metrics", async () => {
+    vi.mocked(books.getBook).mockResolvedValue(null);
+
+    await expect(
+      service().listCampaigns("workspace-pk", 7, ["42"]),
+    ).rejects.toMatchObject({ statusCode: 404 });
+    expect(dashboard.listCampaignRows).not.toHaveBeenCalled();
   });
 });

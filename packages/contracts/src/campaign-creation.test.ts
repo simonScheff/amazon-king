@@ -72,6 +72,36 @@ describe("campaignCreationCreateSchema", () => {
         .success,
     ).toBe(false);
   });
+
+  it("accepts an AUTO campaign with no keywords or targets", () => {
+    const parsed = campaignCreationCreateSchema.parse({
+      ...baseInput,
+      campaign: { ...baseInput.campaign, targetingType: "AUTO" },
+    });
+    expect(parsed.keywords).toEqual([]);
+    expect(parsed.targets).toBeUndefined();
+  });
+
+  it("rejects keywords or product targets on an AUTO campaign", () => {
+    const autoInput = {
+      ...baseInput,
+      campaign: { ...baseInput.campaign, targetingType: "AUTO" },
+    } as const;
+    // Amazon: "Only negative keywords and negative product targets are
+    // allowed in auto-targeting campaigns".
+    expect(
+      campaignCreationCreateSchema.safeParse({
+        ...autoInput,
+        keywords: [keyword],
+      }).success,
+    ).toBe(false);
+    expect(
+      campaignCreationCreateSchema.safeParse({
+        ...autoInput,
+        targets: [target],
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe("campaignCreationTargetSchema", () => {

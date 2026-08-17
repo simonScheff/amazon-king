@@ -232,13 +232,16 @@ interface TotalsRow {
 /**
  * Totals over a date range for a profile (dashboard summary). Aggregating
  * across currencies is refused with MixedCurrencyError; returns null when
- * there is no data in the range.
+ * there is no data in the range. `bookIds` (null or empty = no filter) keeps
+ * only facts of campaigns with at least one ad group advertising any of the
+ * selected books.
  */
 export async function dashboardTotals(
   db: Db,
   profileId: string,
   dateStart: string,
   dateEnd: string,
+  bookIds: bigint[] | null = null,
 ): Promise<MetricTotals | null> {
   const result = await db.query<TotalsRow>(
     `select currency,
@@ -247,10 +250,24 @@ export async function dashboardTotals(
             sum(cost)::text as cost,
             sum(sales)::text as sales,
             sum(orders)::text as orders
-     from campaign_metrics_daily
-     where profile_id = $1 and metric_date between $2 and $3
+     from campaign_metrics_daily m
+     where m.profile_id = $1 and m.metric_date between $2 and $3
+       and (coalesce(cardinality($4::bigint[]), 0) = 0 or exists (
+         select 1
+         from campaigns fc
+         join ad_groups fg on fg.campaign_id = fc.id
+         join ads fa
+           on fa.profile_id = fg.profile_id and fa.ad_group_id = fg.id
+         join book_profile_links fb
+           on fb.profile_id = fg.profile_id
+          and fb.marketplace_asin = fa.asin
+          and fb.enabled = true
+         where fc.profile_id = m.profile_id
+           and fc.amazon_campaign_id = m.campaign_id
+           and fb.book_id = any($4)
+       ))
      group by currency`,
-    [profileId, dateStart, dateEnd],
+    [profileId, dateStart, dateEnd, bookIds],
   );
   if (result.rows.length === 0) {
     return null;

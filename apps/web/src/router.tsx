@@ -2,6 +2,8 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  retainSearchParams,
+  stringifySearchWith,
 } from "@tanstack/react-router";
 import {
   recommendationStateSchema,
@@ -29,9 +31,35 @@ const loginRoute = createRoute({
   component: LoginPage,
 });
 
+/**
+ * Global product filter: the `books` search param is a comma-separated list of
+ * external book ids (`?books=3,7`). Validated once here on the layout route so
+ * every child inherits it. Accepts the raw comma string, an already-validated
+ * array (which is what retention passes back in), and the number JSON-parsing
+ * produces for a bare numeric id (`?books=3`).
+ */
+function validateAppSearch(search: Record<string, unknown>): {
+  books?: string[];
+} {
+  const raw = search.books;
+  const entries = Array.isArray(raw)
+    ? raw
+    : typeof raw === "string" || typeof raw === "number"
+      ? String(raw).split(",")
+      : [];
+  const books = entries
+    .map((id) => String(id).trim())
+    .filter((id) => id !== "");
+  return books.length > 0 ? { books } : {};
+}
+
 const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "app",
+  validateSearch: validateAppSearch,
+  // This router version resets search params on navigation unless told
+  // otherwise; retain the product filter across all app routes.
+  search: { middlewares: [retainSearchParams(["books"])] },
   component: AppLayout,
 });
 
@@ -125,17 +153,12 @@ const campaignDetailRoute = createRoute({
 const searchTermsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/search-terms",
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): { book?: string; country?: string } => {
+  validateSearch: (search: Record<string, unknown>): { country?: string } => {
     const country =
       typeof search.country === "string"
         ? search.country.trim().toUpperCase()
         : undefined;
     return {
-      ...(typeof search.book === "string" && search.book !== ""
-        ? { book: search.book }
-        : {}),
       ...(country !== undefined && /^[A-Z]{2}$/.test(country)
         ? { country }
         : {}),
@@ -149,7 +172,7 @@ const searchTermDetailRoute = createRoute({
   path: "/search-terms/$term",
   validateSearch: (
     search: Record<string, unknown>,
-  ): { days?: number; book?: string; country?: string } => {
+  ): { days?: number; country?: string } => {
     const days = Number(search.days);
     const country =
       typeof search.country === "string"
@@ -157,9 +180,6 @@ const searchTermDetailRoute = createRoute({
         : undefined;
     return {
       ...(Number.isFinite(days) && days > 0 ? { days } : {}),
-      ...(typeof search.book === "string" && search.book !== ""
-        ? { book: search.book }
-        : {}),
       ...(country !== undefined && /^[A-Z]{2}$/.test(country)
         ? { country }
         : {}),
@@ -203,7 +223,18 @@ const routeTree = rootRoute.addChildren([
   ]),
 ]);
 
-export const router = createRouter({ routeTree });
+export const router = createRouter({
+  routeTree,
+  // Keep the product filter's URL form (`?books=3,7`) stable: the validated
+  // value is a string array, which the default serializer would JSON-encode.
+  stringifySearch: stringifySearchWith(
+    (value) =>
+      Array.isArray(value) && value.every((item) => typeof item === "string")
+        ? value.join(",")
+        : JSON.stringify(value),
+    JSON.parse,
+  ),
+});
 
 declare module "@tanstack/react-router" {
   interface Register {

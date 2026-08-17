@@ -4,6 +4,7 @@ import { ApiError } from "../api/client";
 import { useDashboardSummary, useLogout, useSession } from "../api/endpoints";
 import { ToastProvider, useToast } from "./toast";
 import { InstallBanner } from "./install-banner";
+import { ProductFilter } from "./product-filter";
 import { Loading } from "./states";
 
 type IconProps = { className?: string };
@@ -214,38 +215,37 @@ function Sidebar({
         </span>
         {isCollapsed && !logout.isPending && <IconTooltip label="Sign out" />}
       </button>
+      <div aria-hidden="true" className="flex-1" />
+      <ProductFilter collapsed={isCollapsed} />
       {onToggleCollapse && (
-        <>
-          <div aria-hidden="true" className="flex-1" />
-          <button
-            type="button"
-            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-expanded={!isCollapsed}
-            onClick={onToggleCollapse}
-            className={`group relative hidden w-full items-center gap-3 rounded-lg px-3 py-2 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100 md:flex ${
-              isCollapsed ? "md:justify-center md:px-0" : ""
-            }`}
+        <button
+          type="button"
+          aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-expanded={!isCollapsed}
+          onClick={onToggleCollapse}
+          className={`group relative hidden w-full items-center gap-3 rounded-lg px-3 py-2 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100 md:flex ${
+            isCollapsed ? "md:justify-center md:px-0" : ""
+          }`}
+        >
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={`h-5 w-5 shrink-0 transition-transform ${isCollapsed ? "rotate-180" : ""}`}
           >
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className={`h-5 w-5 shrink-0 transition-transform ${isCollapsed ? "rotate-180" : ""}`}
-            >
-              <path d="m15 18-6-6 6-6" />
-            </svg>
-            <span
-              className={`text-sm font-medium ${isCollapsed ? "md:hidden" : ""}`}
-            >
-              Collapse
-            </span>
-            {isCollapsed && <IconTooltip label="Expand sidebar" />}
-          </button>
-        </>
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+          <span
+            className={`text-sm font-medium ${isCollapsed ? "md:hidden" : ""}`}
+          >
+            Collapse
+          </span>
+          {isCollapsed && <IconTooltip label="Expand sidebar" />}
+        </button>
       )}
     </nav>
   );

@@ -95,6 +95,13 @@ function fillAdGroupStep() {
   });
 }
 
+// Manual keywords/product targets are only valid in MANUAL campaigns.
+function switchToManualTargeting() {
+  fireEvent.change(screen.getByLabelText("Targeting type"), {
+    target: { value: "MANUAL" },
+  });
+}
+
 describe("CampaignNewPage", () => {
   afterEach(() => cleanup());
 
@@ -160,6 +167,7 @@ describe("CampaignNewPage", () => {
     fireEvent.click(screen.getByLabelText("United States market"));
     next();
     fillCampaignStep();
+    switchToManualTargeting();
     next();
     fillAdGroupStep();
     next();
@@ -381,6 +389,7 @@ describe("CampaignNewPage", () => {
     fireEvent.click(screen.getByLabelText("United States market"));
     next();
     fillCampaignStep();
+    switchToManualTargeting();
     next();
     fillAdGroupStep();
     next();
@@ -445,6 +454,7 @@ describe("CampaignNewPage", () => {
     fireEvent.click(screen.getByLabelText("United States market"));
     next();
     fillCampaignStep();
+    switchToManualTargeting();
     next();
     fillAdGroupStep();
     next();
@@ -474,5 +484,127 @@ describe("CampaignNewPage", () => {
       targets: [{ asin: "B0DE000001", bid: "0.50" }],
     });
     expect(campaignCreationCreateSchema.safeParse(payload).success).toBe(true);
+  });
+
+  it("submits an automatic campaign when no keywords or targets are entered", () => {
+    render(<CampaignNewPage />);
+
+    fireEvent.click(screen.getByLabelText("United States market"));
+    next();
+    fillCampaignStep();
+    // Targeting type stays AUTO (the default without a prefill term).
+    expect(screen.getByLabelText("Targeting type")).toHaveValue("AUTO");
+    next();
+    fillAdGroupStep();
+    next();
+    fireEvent.change(screen.getByLabelText("Book"), {
+      target: { value: "book-1" },
+    });
+    next();
+
+    // The keywords step explains that Amazon targets auto campaigns itself.
+    expect(
+      screen.getByText(/Automatic targeting is selected/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
+    next();
+
+    expect(
+      screen.getAllByText(/Automatic — Amazon creates and manages the targets/)
+        .length,
+    ).toBeGreaterThan(0);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create draft change sets" }),
+    );
+
+    expect(mocks.mutate).toHaveBeenCalledTimes(1);
+    const [payload] = mocks.mutate.mock.calls[0]!;
+    expect(payload).toMatchObject({
+      campaign: { targetingType: "AUTO" },
+      keywords: [],
+    });
+    expect(payload.targets).toBeUndefined();
+    expect(campaignCreationCreateSchema.safeParse(payload).success).toBe(true);
+  });
+
+  it("switches to manual targeting when a product target is entered", () => {
+    render(<CampaignNewPage />);
+
+    fireEvent.click(screen.getByLabelText("United States market"));
+    next();
+    fillCampaignStep();
+    expect(screen.getByLabelText("Targeting type")).toHaveValue("AUTO");
+    next();
+    fillAdGroupStep();
+    next();
+    fireEvent.change(screen.getByLabelText("Book"), {
+      target: { value: "book-1" },
+    });
+    next();
+
+    // Typing an ASIN is intent for a manual product-targeting campaign.
+    fireEvent.click(screen.getByRole("button", { name: "Add product target" }));
+    fireEvent.change(screen.getByLabelText("Product target 1 ASIN"), {
+      target: { value: "B0CRHVCT1T" },
+    });
+
+    // The campaign step now shows manual targeting.
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByLabelText("Targeting type")).toHaveValue("MANUAL");
+    next();
+    next();
+    next();
+    next();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create draft change sets" }),
+    );
+
+    expect(mocks.mutate).toHaveBeenCalledTimes(1);
+    const [payload] = mocks.mutate.mock.calls[0]!;
+    expect(payload).toMatchObject({
+      campaign: { targetingType: "MANUAL" },
+      keywords: [],
+      targets: [{ asin: "B0CRHVCT1T", bid: "0.50" }],
+    });
+    expect(campaignCreationCreateSchema.safeParse(payload).success).toBe(true);
+  });
+
+  it("blocks an automatic campaign with filled keyword rows instead of dropping them", () => {
+    render(<CampaignNewPage />);
+
+    fireEvent.click(screen.getByLabelText("United States market"));
+    next();
+    fillCampaignStep();
+    next();
+    fillAdGroupStep();
+    next();
+    fireEvent.change(screen.getByLabelText("Book"), {
+      target: { value: "book-1" },
+    });
+    next();
+
+    // Entering a keyword flips to manual; flipping back to automatic with the
+    // row still filled is blocked with an explanation, not silent data loss.
+    fireEvent.change(screen.getByLabelText("Keyword 1 text"), {
+      target: { value: "coloring book" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.change(screen.getByLabelText("Targeting type"), {
+      target: { value: "AUTO" },
+    });
+    next();
+    next();
+    next();
+
+    expect(
+      screen.getByText(/Automatic targeting can't carry keywords/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
   });
 });

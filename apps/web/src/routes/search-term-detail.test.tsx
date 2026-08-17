@@ -180,11 +180,20 @@ describe("SearchTermDetailPage", () => {
     expect(market).toHaveValue("US");
 
     fireEvent.change(market, { target: { value: "GB" } });
-    expect(mocks.navigate).toHaveBeenCalledWith({
-      to: "/search-terms/$term",
-      params: { term: "fantasy books" },
-      search: { days: 7, country: "GB" },
-      replace: true,
+    const call = mocks.navigate.mock.calls.at(-1)?.[0] as {
+      to: string;
+      params: { term: string };
+      search: (prev: Record<string, unknown>) => Record<string, unknown>;
+      replace: boolean;
+    };
+    expect(call.to).toBe("/search-terms/$term");
+    expect(call.params).toEqual({ term: "fantasy books" });
+    expect(call.replace).toBe(true);
+    // The functional update preserves inherited params such as books.
+    expect(call.search({ days: 7, books: ["3"] })).toEqual({
+      days: 7,
+      books: ["3"],
+      country: "GB",
     });
   });
 

@@ -88,9 +88,13 @@ export function RecommendationsPage() {
   const search = useSearch({ strict: false }) as {
     type?: RecommendationType;
     state?: RecommendationState;
+    books?: string[];
   };
   const navigate = useNavigate();
-  const recs = useRecommendations({ type: search.type, state: search.state });
+  const recs = useRecommendations(
+    { type: search.type, state: search.state },
+    search.books,
+  );
 
   function setFilter(patch: Partial<typeof search>) {
     void navigate({

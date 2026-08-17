@@ -445,6 +445,25 @@ export async function findCampaignByAmazonId(
     : null;
 }
 
+/**
+ * Write a verified campaign state/name change through to the local mirror so
+ * the dashboard reflects it immediately instead of waiting for the next
+ * structure sync. State is stored in Amazon's format (e.g. "PAUSED").
+ */
+export async function updateCampaignAttributes(
+  db: Db,
+  campaignPk: string,
+  attrs: { name?: string; state?: string },
+): Promise<void> {
+  if (attrs.name === undefined && attrs.state === undefined) return;
+  await db.query(
+    `update campaigns
+     set name = coalesce($2, name), state = coalesce($3, state)
+     where id = $1`,
+    [campaignPk, attrs.name ?? null, attrs.state ?? null],
+  );
+}
+
 export interface AdGroupRow {
   id: string;
   profileId: string;

@@ -127,6 +127,18 @@ export const negativeKeywordRowSchema = z.object({
 export type NegativeKeywordRow = z.infer<typeof negativeKeywordRowSchema>;
 
 /**
+ * One search term within a campaign, with KDP royalty estimated through the
+ * ad group's book (same single-book attribution as campaign rows) — never
+ * guessed when economics are missing.
+ */
+export const campaignSearchTermRowSchema = namedMetricRowSchema.extend({
+  estimatedRoyalty: nonNegativeDecimalStringSchema.nullable(),
+  estimatedAdProfit: decimalStringSchema.nullable(),
+  economicsMissing: z.boolean(),
+});
+export type CampaignSearchTermRow = z.infer<typeof campaignSearchTermRowSchema>;
+
+/**
  * GET /api/search-terms row: one shopper search term aggregated across every
  * campaign of the workspace over the requested window. Royalty/profit follow
  * the same rules as campaign rows — never guessed when economics are missing.
@@ -220,7 +232,7 @@ export const campaignDetailSchema = z.object({
   ),
   adGroups: z.array(namedMetricRowSchema).default([]),
   targets: z.array(namedMetricRowSchema).default([]),
-  searchTerms: z.array(namedMetricRowSchema).default([]),
+  searchTerms: z.array(campaignSearchTermRowSchema).default([]),
   negativeKeywords: z.array(negativeKeywordRowSchema).default([]),
 });
 export type CampaignDetail = z.infer<typeof campaignDetailSchema>;

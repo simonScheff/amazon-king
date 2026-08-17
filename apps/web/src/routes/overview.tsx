@@ -37,24 +37,26 @@ export function OverviewPage() {
   const search = useSearch({ strict: false }) as {
     days?: number;
     country?: string;
+    books?: string[];
   };
   const days = DAY_OPTIONS.includes(search.days as 7)
     ? Number(search.days)
     : 30;
+  const bookIds = search.books;
   const navigate = useNavigate();
 
   const profiles = useProfiles();
-  const marketplaces = useSpendSortedMarketplaces(days);
+  const marketplaces = useSpendSortedMarketplaces(days, bookIds);
   const country = resolveCountry(search.country, marketplaces);
   const selectedMarketplace = marketplaces.find(
     (marketplace) => marketplace.countryCode === country,
   );
   const selectedProfileIds = new Set(selectedMarketplace?.profileIds ?? []);
 
-  const summary = useDashboardSummary(days, country);
+  const summary = useDashboardSummary(days, country, bookIds);
   const freshness = useDataFreshness();
   const status = useAmazonStatus();
-  const top = useRecommendations({ state: "pending" });
+  const top = useRecommendations({ state: "pending" }, bookIds);
 
   const visibleRecommendations = (top.data ?? []).filter(
     (recommendation) =>
@@ -107,7 +109,7 @@ export function OverviewPage() {
               onChange={(countryCode) =>
                 navigate({
                   to: "/",
-                  search: { days, country: countryCode },
+                  search: (prev) => ({ ...prev, days, country: countryCode }),
                   replace: true,
                 })
               }
@@ -122,7 +124,7 @@ export function OverviewPage() {
                 onClick={() =>
                   navigate({
                     to: "/",
-                    search: { days: d, country },
+                    search: (prev) => ({ ...prev, days: d, country }),
                     replace: true,
                   })
                 }

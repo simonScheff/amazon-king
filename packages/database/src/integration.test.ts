@@ -34,6 +34,7 @@ import {
 } from "./repositories/books.js";
 import {
   insertRecommendation,
+  listRecommendationsByWorkspace,
   transitionRecommendationState,
   expireStaleRecommendations,
 } from "./repositories/recommendations.js";
@@ -715,7 +716,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       workspaceId,
       "2026-08-13",
       "2026-08-14",
-      book!.id,
+      [BigInt(book!.id)],
     );
     expect(filtered.map((row) => row.searchTerm)).toEqual([
       "fantasy books",
@@ -728,7 +729,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       "unmapped series",
       "2026-08-13",
       "2026-08-14",
-      book!.id,
+      [BigInt(book!.id)],
     );
     expect(filteredBreakdown).toEqual([]);
 
@@ -799,6 +800,309 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     expect(unmappedDaily).toEqual([
       expect.objectContaining({ estimatedRoyalty: null }),
     ]);
+  });
+
+  it("filters dashboard rows and recommendations by selected books", async () => {
+    const profileId = await seedProfile(pool);
+    const workspace = await pool.query<{ workspace_id: string }>(
+      `select c.workspace_id::text
+       from amazon_profiles p join amazon_connections c on c.id = p.connection_id
+       where p.id = $1`,
+      [profileId],
+    );
+    const workspaceId = workspace.rows[0]!.workspace_id;
+
+    // Campaign A advertises book A, campaign B advertises book B; a third
+    // book has no enabled link to any advertised ASIN.
+    const pks: Record<string, { campaignId: string; adGroupId: string }> = {};
+    for (const suffix of ["a", "b"]) {
+      const campaign = await upsertCampaign(pool, {
+        profileId,
+        amazonCampaignId: `amzn-campaign-bf-${suffix}`,
+        name: `BF campaign ${suffix}`,
+        state: "enabled",
+      });
+      const adGroup = await upsertAdGroup(pool, {
+        profileId,
+        campaignId: campaign.id,
+        amazonAdGroupId: `amzn-ad-group-bf-${suffix}`,
+        name: `BF ad group ${suffix}`,
+        state: "enabled",
+      });
+      await upsertAd(pool, {
+        profileId,
+        adGroupId: adGroup.id,
+        amazonAdId: `amzn-ad-bf-${suffix}`,
+        asin: `B0BF${suffix.toUpperCase()}0001`,
+        state: "enabled",
+      });
+      pks[suffix] = { campaignId: campaign.id, adGroupId: adGroup.id };
+    }
+    const bookA = await mapAdvertisedProductToBook(pool, {
+      workspaceId,
+      profileIds: [profileId],
+      asin: "B0BFA0001",
+      title: "Filter book A",
+      format: "ebook",
+    });
+    const bookB = await mapAdvertisedProductToBook(pool, {
+      workspaceId,
+      profileIds: [profileId],
+      asin: "B0BFB0001",
+      title: "Filter book B",
+      format: "ebook",
+    });
+    const unadvertised = await pool.query<{ id: string }>(
+      `insert into books (workspace_id, asin, title, format)
+       values ($1, 'B0BFNONE01', 'Unadvertised book', 'ebook')
+       returning id::text as id`,
+      [workspaceId],
+    );
+    const aOnly = [BigInt(bookA!.id)];
+    const both = [BigInt(bookA!.id), BigInt(bookB!.id)];
+    const noMatch = [BigInt(unadvertised.rows[0]!.id)];
+
+    const metricValues = {
+      impressions: 100,
+      clicks: 10,
+      purchases7d: 2,
+      sales7d: "20.00",
+      purchases14d: 2,
+      sales14d: "20.00",
+      currency: "USD",
+    };
+    await upsertCampaignMetrics(pool, [
+      {
+        ...metricValues,
+        profileId,
+        campaignId: "amzn-campaign-bf-a",
+        metricDate: "2026-08-13",
+        cost: "10.00",
+        sales: "40.00",
+        orders: 4,
+      },
+      {
+        ...metricValues,
+        profileId,
+        campaignId: "amzn-campaign-bf-b",
+        metricDate: "2026-08-13",
+        cost: "30.00",
+        sales: "90.00",
+        orders: 9,
+      },
+    ]);
+    await upsertSearchTermMetrics(pool, [
+      {
+        ...metricValues,
+        profileId,
+        campaignId: "amzn-campaign-bf-a",
+        adGroupId: "amzn-ad-group-bf-a",
+        targetId: "amzn-target-bf-a",
+        searchTerm: "alpha term",
+        metricDate: "2026-08-13",
+        cost: "10.00",
+        sales: "40.00",
+        orders: 4,
+      },
+      {
+        ...metricValues,
+        profileId,
+        campaignId: "amzn-campaign-bf-b",
+        adGroupId: "amzn-ad-group-bf-b",
+        targetId: "amzn-target-bf-b",
+        searchTerm: "beta term",
+        metricDate: "2026-08-13",
+        cost: "30.00",
+        sales: "90.00",
+        orders: 9,
+      },
+    ]);
+
+    // Campaign rows: no filter, single book, union of two, no match, and an
+    // empty selection behaving like no filter.
+    const unfiltered = await listCampaignRows(
+      pool,
+      workspaceId,
+      "2026-08-13",
+      "2026-08-14",
+    );
+    expect(unfiltered).toHaveLength(2);
+
+    const onlyA = await listCampaignRows(
+      pool,
+      workspaceId,
+      "2026-08-13",
+      "2026-08-14",
+      aOnly,
+    );
+    expect(onlyA.map((row) => row.amazonCampaignId)).toEqual([
+      "amzn-campaign-bf-a",
+    ]);
+    expect(onlyA[0]!.totals.cost).toBe("10.0000");
+
+    const union = await listCampaignRows(
+      pool,
+      workspaceId,
+      "2026-08-13",
+      "2026-08-14",
+      both,
+    );
+    expect(union.map((row) => row.amazonCampaignId).sort()).toEqual([
+      "amzn-campaign-bf-a",
+      "amzn-campaign-bf-b",
+    ]);
+
+    const emptySelection = await listCampaignRows(
+      pool,
+      workspaceId,
+      "2026-08-13",
+      "2026-08-14",
+      [],
+    );
+    expect(emptySelection).toHaveLength(2);
+
+    await expect(
+      listCampaignRows(pool, workspaceId, "2026-08-13", "2026-08-14", noMatch),
+    ).resolves.toEqual([]);
+
+    // Cross-campaign search terms follow the same selection.
+    const termsA = await listSearchTermRollupRows(
+      pool,
+      workspaceId,
+      "2026-08-13",
+      "2026-08-14",
+      aOnly,
+    );
+    expect(termsA.map((row) => row.searchTerm)).toEqual(["alpha term"]);
+    expect(termsA[0]!.totals.cost).toBe("10.0000");
+
+    const termsBoth = await listSearchTermRollupRows(
+      pool,
+      workspaceId,
+      "2026-08-13",
+      "2026-08-14",
+      both,
+    );
+    expect(termsBoth.map((row) => row.searchTerm).sort()).toEqual([
+      "alpha term",
+      "beta term",
+    ]);
+
+    await expect(
+      listSearchTermRollupRows(
+        pool,
+        workspaceId,
+        "2026-08-13",
+        "2026-08-14",
+        noMatch,
+      ),
+    ).resolves.toEqual([]);
+
+    await expect(
+      listSearchTermCampaignRows(
+        pool,
+        workspaceId,
+        "beta term",
+        "2026-08-13",
+        "2026-08-14",
+        aOnly,
+      ),
+    ).resolves.toEqual([]);
+    const betaBoth = await listSearchTermCampaignRows(
+      pool,
+      workspaceId,
+      "beta term",
+      "2026-08-13",
+      "2026-08-14",
+      both,
+    );
+    expect(betaBoth.map((row) => row.amazonCampaignId)).toEqual([
+      "amzn-campaign-bf-b",
+    ]);
+
+    const dailyA = await searchTermDailySeries(
+      pool,
+      workspaceId,
+      "alpha term",
+      "US",
+      "2026-08-13",
+      "2026-08-14",
+      aOnly,
+    );
+    expect(dailyA).toHaveLength(1);
+    await expect(
+      searchTermDailySeries(
+        pool,
+        workspaceId,
+        "beta term",
+        "US",
+        "2026-08-13",
+        "2026-08-14",
+        aOnly,
+      ),
+    ).resolves.toEqual([]);
+
+    // The overview summary totals follow the same filter.
+    await expect(
+      dashboardTotals(pool, profileId, "2026-08-13", "2026-08-14", aOnly),
+    ).resolves.toMatchObject({ cost: "10.0000", orders: 4 });
+    await expect(
+      dashboardTotals(pool, profileId, "2026-08-13", "2026-08-14", both),
+    ).resolves.toMatchObject({ cost: "40.0000", orders: 13 });
+    await expect(
+      dashboardTotals(pool, profileId, "2026-08-13", "2026-08-14", noMatch),
+    ).resolves.toBeNull();
+
+    // Recommendations: campaign-linked, ad-group-linked, and one without any
+    // book attribution (stays listed under every selection).
+    const recDefaults = {
+      profileId,
+      type: "expensive_target" as const,
+      priority: 2,
+      evidenceWindowStart: "2026-08-01",
+      evidenceWindowEnd: "2026-08-13",
+      rationale: "book filter coverage",
+      confidence: "0.8",
+      ruleVersion: "expensive_target@1",
+      dataFreshnessAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+      evidenceInputs: {},
+    };
+    const recCampaignA = await insertRecommendation(pool, {
+      ...recDefaults,
+      campaignId: pks["a"]!.campaignId,
+    });
+    const recCampaignB = await insertRecommendation(pool, {
+      ...recDefaults,
+      campaignId: pks["b"]!.campaignId,
+    });
+    const recAdGroupA = await insertRecommendation(pool, {
+      ...recDefaults,
+      campaignId: pks["a"]!.campaignId,
+      adGroupId: pks["a"]!.adGroupId,
+    });
+    const recProfileLevel = await insertRecommendation(pool, recDefaults);
+
+    const recsA = await listRecommendationsByWorkspace(pool, workspaceId, {
+      bookIds: aOnly,
+    });
+    expect(recsA.map((rec) => rec.id).sort()).toEqual(
+      [recCampaignA.id, recAdGroupA.id, recProfileLevel.id].map(String).sort(),
+    );
+
+    const recsBoth = await listRecommendationsByWorkspace(pool, workspaceId, {
+      bookIds: both,
+    });
+    expect(recsBoth.map((rec) => rec.id).sort()).toEqual(
+      [recCampaignA.id, recCampaignB.id, recAdGroupA.id, recProfileLevel.id]
+        .map(String)
+        .sort(),
+    );
+
+    const recsNone = await listRecommendationsByWorkspace(pool, workspaceId, {
+      bookIds: noMatch,
+    });
+    expect(recsNone.map((rec) => rec.id)).toEqual([String(recProfileLevel.id)]);
   });
 
   it("recommendations store immutable evidence and expire stale rows", async () => {

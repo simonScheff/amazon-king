@@ -21,7 +21,12 @@ export interface ChangeSet {
   fingerprint: string;
   createdAt: string;
   appliedAt: string | null;
-  kind: "recommendation" | "max_cpc" | "rollback" | "campaign_creation";
+  kind:
+    | "recommendation"
+    | "max_cpc"
+    | "rollback"
+    | "campaign_creation"
+    | "campaign_update";
   metadata: Record<string, unknown>;
 }
 
@@ -34,7 +39,12 @@ interface ChangeSetRow {
   fingerprint: string;
   created_at: string;
   applied_at: string | null;
-  kind: "recommendation" | "max_cpc" | "rollback" | "campaign_creation";
+  kind:
+    | "recommendation"
+    | "max_cpc"
+    | "rollback"
+    | "campaign_creation"
+    | "campaign_update";
   metadata: Record<string, unknown>;
 }
 
@@ -214,7 +224,12 @@ export async function createChangeSet(
     fingerprint: string;
     guardrailResult?: unknown;
     actions: readonly ChangeActionInsert[];
-    kind?: "recommendation" | "max_cpc" | "rollback" | "campaign_creation";
+    kind?:
+      | "recommendation"
+      | "max_cpc"
+      | "rollback"
+      | "campaign_creation"
+      | "campaign_update";
     metadata?: Record<string, unknown>;
   },
 ): Promise<CreatedChangeSet> {

@@ -22,6 +22,7 @@ import {
   buildCampaignBiddingUpdateBody,
   buildCampaignCreateBody,
   buildCampaignNegativeKeywordCreateBody,
+  buildCampaignUpdateBody,
   buildKeywordBidUpdateBody,
   buildKeywordCreateBody,
   buildNegativeKeywordCreateBody,
@@ -34,6 +35,7 @@ import {
   createTargets,
   deleteCampaignNegativeKeywords,
   disableOptimizationRules,
+  updateCampaigns,
   updateKeywordBids,
   updateTargetBids,
 } from "../src/adapters/sp-writes.js";
@@ -586,6 +588,33 @@ describe("SP write request bodies", () => {
       ],
     });
     expect(
+      buildCampaignUpdateBody([
+        {
+          actionId: "c1",
+          kind: "update_campaign_state",
+          campaignId: "66",
+          state: "paused",
+        },
+      ]),
+    ).toEqual({
+      campaigns: [{ campaignId: "66", state: "PAUSED" }],
+    });
+    expect(
+      buildCampaignUpdateBody([
+        {
+          actionId: "c2",
+          kind: "update_campaign_name",
+          campaignId: "66",
+          name: "Renamed campaign",
+          state: "ENABLED",
+        },
+      ]),
+    ).toEqual({
+      campaigns: [
+        { campaignId: "66", name: "Renamed campaign", state: "ENABLED" },
+      ],
+    });
+    expect(
       buildOptimizationRuleUpdateBody([
         {
           actionId: "r1",
@@ -890,6 +919,131 @@ describe("SP target writes", () => {
         status: "failed",
         code: "INVALID_VALUE",
         message: "The expression ASIN is not targetable in this marketplace",
+        amazonEntityId: undefined,
+      },
+    ]);
+  });
+
+  it("surfaces Amazon's nested per-item error detail instead of an opaque ERROR", async () => {
+    // Live shape observed from POST /sp/targets: the error detail is nested
+    // under errors[].errorValue, with no top-level code or message.
+    const { http } = makeHttp({
+      handler: () =>
+        jsonResponse(
+          {
+            targetingClauses: {
+              success: [],
+              error: [
+                {
+                  index: 0,
+                  errors: [
+                    {
+                      errorType: "otherError",
+                      errorValue: {
+                        otherError: {
+                          cause: {},
+                          message:
+                            "Only negative keywords and negative product targets are allowed in auto-targeting campaigns",
+                          reason: "OTHER_ERROR",
+                        },
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          { status: 207 },
+        ),
+    });
+    const results = await createTargets(http, TEST_CONTEXT, [
+      {
+        actionId: "t1",
+        kind: "create_target",
+        adGroupActionId: "g1",
+        expressionAsin: "B0CRHVCT1T",
+        bid: "0.70",
+        state: "enabled",
+        resolvedCampaignId: "4567890123",
+        resolvedAdGroupId: "3456789012",
+      },
+    ]);
+    expect(results).toEqual([
+      {
+        actionId: "t1",
+        status: "failed",
+        code: "otherError",
+        message:
+          "Only negative keywords and negative product targets are allowed in auto-targeting campaigns",
+        amazonEntityId: undefined,
+      },
+    ]);
+  });
+
+  it("pauses and renames campaigns, mapping the per-item 207 results", async () => {
+    const { http, calls } = makeHttp({
+      handler: () =>
+        jsonResponse(
+          {
+            campaigns: {
+              success: [{ index: 0, campaignId: 660123456 }],
+              error: [
+                {
+                  index: 1,
+                  errors: [
+                    {
+                      errorType: "otherError",
+                      errorValue: {
+                        otherError: {
+                          message: "Campaign is archived and cannot be edited",
+                          reason: "OTHER_ERROR",
+                        },
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          { status: 207 },
+        ),
+    });
+    const results = await updateCampaigns(http, TEST_CONTEXT, [
+      {
+        actionId: "c1",
+        kind: "update_campaign_state",
+        campaignId: "660123456",
+        state: "paused",
+      },
+      {
+        actionId: "c2",
+        kind: "update_campaign_name",
+        campaignId: "770123456",
+        name: "New name",
+        state: "ENABLED",
+      },
+    ]);
+    expect(calls[0].method).toBe("PUT");
+    expect(calls[0].url).toContain("/sp/campaigns");
+    expect(JSON.parse(calls[0].body as string)).toEqual({
+      campaigns: [
+        { campaignId: "660123456", state: "PAUSED" },
+        { campaignId: "770123456", name: "New name", state: "ENABLED" },
+      ],
+    });
+    expect(results).toEqual([
+      {
+        actionId: "c1",
+        status: "applied",
+        code: "SUCCESS",
+        message: undefined,
+        amazonEntityId: "660123456",
+      },
+      {
+        actionId: "c2",
+        status: "failed",
+        code: "otherError",
+        message: "Campaign is archived and cannot be edited",
         amazonEntityId: undefined,
       },
     ]);

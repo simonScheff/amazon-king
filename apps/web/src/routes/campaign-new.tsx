@@ -204,13 +204,20 @@ export function CampaignNewPage() {
       ISO_DATE_RE.test(startDate),
     adgroup: effectiveAdGroupName !== "" && DECIMAL_RE.test(defaultBid.trim()),
     book: selectedBook !== undefined,
+    // AUTO campaigns are targeted by Amazon itself (it rejects manual
+    // clauses), so automatic targeting is only valid with no rows filled in;
+    // typing a keyword or ASIN flips the campaign to MANUAL via the row
+    // handlers, which leaves AUTO + filled rows reachable only by switching
+    // back deliberately — block that instead of silently dropping the rows.
     keywords:
-      (effectiveKeywords.length >= 1 &&
-        effectiveKeywords.every((k) => DECIMAL_RE.test(k.bid))) ||
-      (effectiveTargets.length >= 1 &&
-        effectiveTargets.every(
-          (t) => isAsin(t.asin) && DECIMAL_RE.test(t.bid),
-        )),
+      targetingType === "AUTO"
+        ? effectiveKeywords.length === 0 && effectiveTargets.length === 0
+        : (effectiveKeywords.length >= 1 &&
+            effectiveKeywords.every((k) => DECIMAL_RE.test(k.bid))) ||
+          (effectiveTargets.length >= 1 &&
+            effectiveTargets.every(
+              (t) => isAsin(t.asin) && DECIMAL_RE.test(t.bid),
+            )),
     review: true,
   };
 
@@ -226,8 +233,10 @@ export function CampaignNewPage() {
       },
       adGroup: { name: effectiveAdGroupName, defaultBid: defaultBid.trim() },
       bookId,
-      keywords: effectiveKeywords,
-      ...(effectiveTargets.length > 0 ? { targets: effectiveTargets } : {}),
+      keywords: targetingType === "AUTO" ? [] : effectiveKeywords,
+      ...(targetingType === "MANUAL" && effectiveTargets.length > 0
+        ? { targets: effectiveTargets }
+        : {}),
       ...(prefill.recommendationId
         ? { cannibalization: { recommendationId: prefill.recommendationId } }
         : {}),
@@ -248,12 +257,16 @@ export function CampaignNewPage() {
     setKeywords((rows) =>
       rows.map((row) => (row.id === id ? { ...row, ...patch } : row)),
     );
+    // Entering a keyword is intent for manual targeting — never let an AUTO
+    // campaign silently swallow it (Amazon rejects manual clauses there).
+    if (patch.text?.trim()) setTargetingType("MANUAL");
   }
 
   function updateTarget(id: number, patch: Partial<Omit<TargetRow, "id">>) {
     setTargets((rows) =>
       rows.map((row) => (row.id === id ? { ...row, ...patch } : row)),
     );
+    if (patch.asin?.trim()) setTargetingType("MANUAL");
   }
 
   function submit() {
@@ -486,6 +499,22 @@ export function CampaignNewPage() {
 
           {step === "keywords" && (
             <>
+              {targetingType === "AUTO" ? (
+                effectiveKeywords.length > 0 || effectiveTargets.length > 0 ? (
+                  <p role="alert" className="text-sm leading-6 text-amber-400">
+                    Automatic targeting can&apos;t carry keywords or product
+                    targets — switch the campaign to Manual on the Campaign
+                    step, or remove these rows.
+                  </p>
+                ) : (
+                  <p className="text-sm leading-6 text-zinc-400">
+                    Automatic targeting is selected — Amazon creates the close
+                    match, loose match, substitutes, and complements targets
+                    itself. Entering a keyword or product target below switches
+                    the campaign to manual targeting.
+                  </p>
+                )
+              ) : null}
               {keywords.map((row, index) => (
                 <div key={row.id} className="flex flex-wrap items-center gap-2">
                   <Input
@@ -660,18 +689,26 @@ export function CampaignNewPage() {
                         ? `${selectedBook.title} (${selectedBook.format})`
                         : "—"}
                     </p>
-                    <div>
-                      <span className="text-zinc-500">Keywords: </span>
-                      <ul className="mt-1 list-inside list-disc">
-                        {effectiveKeywords.map((keyword, index) => (
-                          <li key={index}>
-                            {keyword.text} · {keyword.matchType.toLowerCase()} ·
-                            bid {keyword.bid}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    {targets.some((row) => row.asin.trim() !== "") ? (
+                    {targetingType === "AUTO" ? (
+                      <p>
+                        <span className="text-zinc-500">Targeting: </span>
+                        Automatic — Amazon creates and manages the targets
+                      </p>
+                    ) : (
+                      <div>
+                        <span className="text-zinc-500">Keywords: </span>
+                        <ul className="mt-1 list-inside list-disc">
+                          {effectiveKeywords.map((keyword, index) => (
+                            <li key={index}>
+                              {keyword.text} · {keyword.matchType.toLowerCase()}{" "}
+                              · bid {keyword.bid}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {targetingType === "MANUAL" &&
+                    targets.some((row) => row.asin.trim() !== "") ? (
                       <div>
                         <span className="text-zinc-500">Product targets: </span>
                         <ul className="mt-1 list-inside list-disc">

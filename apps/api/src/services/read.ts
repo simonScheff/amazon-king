@@ -114,6 +114,23 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
     return book.id;
   }
 
+  /**
+   * Resolve the product filter's external book ids to workspace-owned
+   * internal PKs (bigint for the repositories). Null/empty = no filter;
+   * an unknown or foreign book id is a 404, exactly like a single id.
+   */
+  async function requireBookPks(
+    workspaceId: string,
+    bookIds: string[] | null | undefined,
+  ): Promise<bigint[] | null> {
+    if (!bookIds || bookIds.length === 0) return null;
+    const pks: bigint[] = [];
+    for (const bookId of bookIds) {
+      pks.push(BigInt((await requireBook(workspaceId, bookId))!));
+    }
+    return pks;
+  }
+
   return {
     async listProfiles(workspaceId) {
       const rows = await profiles.listProfilesByWorkspace(db, workspaceId);
@@ -233,8 +250,10 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       workspaceId,
       days,
       countryCode,
+      bookIds,
     ): Promise<DashboardSummary> {
       const { start, end } = dateRange(now(), days);
+      const bookPks = await requireBookPks(workspaceId, bookIds);
       const all = await profiles.listProfilesByWorkspace(db, workspaceId);
       const enabled = all.filter(
         (p) => p.enabled && p.countryCode === countryCode,
@@ -254,7 +273,13 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       for (const profile of enabled) {
         let totals: metrics.MetricTotals | null;
         try {
-          totals = await metrics.dashboardTotals(db, profile.id, start, end);
+          totals = await metrics.dashboardTotals(
+            db,
+            profile.id,
+            start,
+            end,
+            bookPks,
+          );
         } catch (error) {
           if (error instanceof metrics.MixedCurrencyError) {
             throw conflict(
@@ -316,6 +341,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         enabled.map((p) => p.id),
         start,
         end,
+        bookPks,
       );
       const dailyCurrencies = new Set(dailyRows.map((row) => row.currency));
       if (dailyCurrencies.size > 1) {
@@ -399,8 +425,13 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       };
     },
 
-    async dashboardCountrySpend(workspaceId, days): Promise<CountrySpend> {
+    async dashboardCountrySpend(
+      workspaceId,
+      days,
+      bookIds,
+    ): Promise<CountrySpend> {
       const { start, end } = dateRange(now(), days);
+      const bookPks = await requireBookPks(workspaceId, bookIds);
       const all = await profiles.listProfilesByWorkspace(db, workspaceId);
       const enabled = all.filter((p) => p.enabled);
 
@@ -411,7 +442,13 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       for (const profile of enabled) {
         let totals: metrics.MetricTotals | null;
         try {
-          totals = await metrics.dashboardTotals(db, profile.id, start, end);
+          totals = await metrics.dashboardTotals(
+            db,
+            profile.id,
+            start,
+            end,
+            bookPks,
+          );
         } catch (error) {
           if (error instanceof metrics.MixedCurrencyError) {
             throw conflict(
@@ -449,10 +486,11 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       };
     },
 
-    async listCampaigns(workspaceId, days) {
+    async listCampaigns(workspaceId, days, bookIds) {
       const { start, end } = dateRange(now(), days);
+      const bookPks = await requireBookPks(workspaceId, bookIds);
       const [rows, profileRows] = await Promise.all([
-        dashboard.listCampaignRows(db, workspaceId, start, end),
+        dashboard.listCampaignRows(db, workspaceId, start, end, bookPks),
         profiles.listProfilesByWorkspace(db, workspaceId),
       ]);
       const consoleUrlByProfile = new Map(
@@ -496,7 +534,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       });
     },
 
-    async getCampaignDetail(workspaceId, amazonCampaignId, days) {
+    async getCampaignDetail(workspaceId, amazonCampaignId, days, bookIds) {
       const campaign = await structure.findCampaignByAmazonId(
         db,
         workspaceId,
@@ -504,6 +542,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       );
       if (!campaign) return null;
       const { start, end } = dateRange(now(), days);
+      const bookPks = await requireBookPks(workspaceId, bookIds);
       const [
         profile,
         rows,
@@ -514,23 +553,25 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         dailyRows,
       ] = await Promise.all([
         profiles.getProfile(db, campaign.profileId),
-        dashboard.listCampaignRows(db, workspaceId, start, end),
-        dashboard.listAdGroupRows(db, campaign.id, start, end),
-        dashboard.listTargetRows(db, campaign.id, start, end),
+        dashboard.listCampaignRows(db, workspaceId, start, end, bookPks),
+        dashboard.listAdGroupRows(db, campaign.id, start, end, bookPks),
+        dashboard.listTargetRows(db, campaign.id, start, end, bookPks),
         dashboard.listSearchTermRows(
           db,
           campaign.profileId,
           amazonCampaignId,
           start,
           end,
+          bookPks,
         ),
-        dashboard.listNegativeKeywordRows(db, campaign.id),
+        dashboard.listNegativeKeywordRows(db, campaign.id, bookPks),
         dashboard.campaignDailySeries(
           db,
           campaign.profileId,
           amazonCampaignId,
           start,
           end,
+          bookPks,
         ),
       ]);
       if (!profile) return null;
@@ -616,7 +657,28 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         }),
         adGroups,
         targets,
-        searchTerms,
+        searchTerms: searchTerms.map((term) => {
+          const termCostMicros = microsFromDecimalString(term.totals.cost);
+          const termRoyaltyMicros =
+            term.estimatedRoyalty === null
+              ? null
+              : microsFromDecimalString(term.estimatedRoyalty);
+          return {
+            id: term.id,
+            name: term.name,
+            state: term.state,
+            totals: term.totals,
+            estimatedRoyalty:
+              termRoyaltyMicros === null
+                ? null
+                : microsToDecimalString(termRoyaltyMicros),
+            estimatedAdProfit:
+              termRoyaltyMicros === null
+                ? null
+                : microsToDecimalString(termRoyaltyMicros - termCostMicros),
+            economicsMissing: term.economicsMissing,
+          };
+        }),
         negativeKeywords,
       };
     },
@@ -624,17 +686,17 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
     async listSearchTerms(
       workspaceId,
       days,
-      bookId = null,
+      bookIds = null,
       countryCode = null,
     ): Promise<SearchTermListRow[]> {
       const { start, end } = dateRange(now(), days);
-      const bookPk = await requireBook(workspaceId, bookId);
+      const bookPks = await requireBookPks(workspaceId, bookIds);
       const rows = await dashboard.listSearchTermRollupRows(
         db,
         workspaceId,
         start,
         end,
-        bookPk,
+        bookPks,
         countryCode,
       );
       if (rows.some((row) => row.mixedCurrency)) {
@@ -677,18 +739,18 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       workspaceId,
       searchTerm,
       days,
-      bookId = null,
+      bookIds = null,
       countryCode = null,
     ): Promise<SearchTermDetail | null> {
       const { start, end } = dateRange(now(), days);
-      const bookPk = await requireBook(workspaceId, bookId);
+      const bookPks = await requireBookPks(workspaceId, bookIds);
       const allRows = await dashboard.listSearchTermCampaignRows(
         db,
         workspaceId,
         searchTerm,
         start,
         end,
-        bookPk,
+        bookPks,
       );
       if (allRows.length === 0) return null;
 
@@ -714,7 +776,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         selectedCountryCode,
         start,
         end,
-        bookPk,
+        bookPks,
       );
 
       if (rows.some((row) => row.mixedCurrency)) {
@@ -998,10 +1060,11 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
     },
 
     async listRecommendations(workspaceId, filter) {
+      const bookPks = await requireBookPks(workspaceId, filter.bookIds);
       const rows = await recommendations.listRecommendationsByWorkspace(
         db,
         workspaceId,
-        filter,
+        { type: filter.type, state: filter.state, bookIds: bookPks },
       );
       return rows.map(toContractRecommendation);
     },

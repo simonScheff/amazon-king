@@ -106,6 +106,22 @@ export function toContractChangeSet(
   };
 }
 
+/** Render the before/after detail for campaign attribute update actions. */
+function campaignUpdateDetail(state: unknown): string | null {
+  if (state === null || typeof state !== "object" || Array.isArray(state)) {
+    return null;
+  }
+  const record = state as Record<string, unknown>;
+  if (typeof record.state === "string") return `State: ${record.state}`;
+  if (typeof record.name === "string") return record.name;
+  return null;
+}
+
+const CAMPAIGN_UPDATE_TYPES = new Set([
+  "update_campaign_state",
+  "update_campaign_name",
+]);
+
 export function toContractChangeAction(
   row: changes.ChangeAction,
 ): ChangeAction {
@@ -139,8 +155,9 @@ export function toContractChangeAction(
     searchTerm: row.searchTerm,
     campaignName: row.campaignName,
     amazonCampaignId: row.amazonCampaignId,
-    beforeDetail:
-      row.actionType === "add_negative_exact"
+    beforeDetail: CAMPAIGN_UPDATE_TYPES.has(row.actionType)
+      ? campaignUpdateDetail(row.beforeState)
+      : row.actionType === "add_negative_exact"
         ? "No matching campaign negative exact"
         : row.actionType === "add_negative_target"
           ? "No matching campaign negative ASIN target"
@@ -161,8 +178,9 @@ export function toContractChangeAction(
                         : row.actionType === "create_target"
                           ? "No product target"
                           : null,
-    afterDetail:
-      row.actionType === "add_negative_exact"
+    afterDetail: CAMPAIGN_UPDATE_TYPES.has(row.actionType)
+      ? campaignUpdateDetail(row.afterState)
+      : row.actionType === "add_negative_exact"
         ? "Campaign-level negative exact enabled"
         : row.actionType === "add_negative_target"
           ? "Campaign-level negative ASIN target enabled"
@@ -185,7 +203,9 @@ export function toContractChangeAction(
                           : null,
     rollbackAvailable:
       (row.actionType === "update_bid" && row.beforeValue !== null) ||
-      (row.actionType === "add_negative_exact" && row.amazonEntityId !== null),
+      (row.actionType === "add_negative_exact" &&
+        row.amazonEntityId !== null) ||
+      CAMPAIGN_UPDATE_TYPES.has(row.actionType),
     status: row.status,
     amazonRequestId: row.amazonRequestId,
     errorMessage:

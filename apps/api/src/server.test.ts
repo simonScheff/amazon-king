@@ -260,6 +260,123 @@ describe("POST /api/change-sets/:id/apply", () => {
   });
 });
 
+describe("GET metric endpoints: books query param", () => {
+  let app: FastifyInstance | null = null;
+  afterEach(async () => {
+    await app?.close();
+    app = null;
+  });
+
+  async function start() {
+    const session = {
+      authenticate: vi.fn(async () => AUTH),
+      verifyCsrf: vi.fn(() => true),
+      isRecentAuth: vi.fn(() => true),
+    } as unknown as SessionService;
+    const read = {
+      dashboardSummary: vi.fn(async () => ({ ok: true })),
+      dashboardCountrySpend: vi.fn(async () => ({ ok: true })),
+      listCampaigns: vi.fn(async () => []),
+      getCampaignDetail: vi.fn(async () => ({ ok: true })),
+      listSearchTerms: vi.fn(async () => []),
+      getSearchTermDetail: vi.fn(async () => ({ ok: true })),
+      listRecommendations: vi.fn(async () => []),
+    };
+    const services = {
+      session,
+      changes: {},
+      amazon: {},
+      read,
+    } as unknown as ApiServices;
+    app = await buildServer({
+      config: testConfig(),
+      logger: createLogger("test", { level: "silent" }),
+      services,
+    });
+    return { read };
+  }
+
+  it("parses a comma-separated list, trimming and dropping empties", async () => {
+    const { read } = await start();
+
+    const response = await app!.inject({
+      method: "GET",
+      url: "/api/campaigns?days=7&books=7,%209,,",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(read.listCampaigns).toHaveBeenCalledWith("1", 7, ["7", "9"]);
+  });
+
+  it("threads the filter through every metric endpoint", async () => {
+    const { read } = await start();
+
+    await app!.inject({ method: "GET", url: "/api/dashboard/summary?books=7" });
+    expect(read.dashboardSummary).toHaveBeenCalledWith("1", 30, "US", ["7"]);
+
+    await app!.inject({
+      method: "GET",
+      url: "/api/dashboard/country-spend?books=7,9",
+    });
+    expect(read.dashboardCountrySpend).toHaveBeenCalledWith("1", 30, [
+      "7",
+      "9",
+    ]);
+
+    await app!.inject({ method: "GET", url: "/api/campaigns/camp-1?books=7" });
+    expect(read.getCampaignDetail).toHaveBeenCalledWith("1", "camp-1", 30, [
+      "7",
+    ]);
+
+    await app!.inject({
+      method: "GET",
+      url: "/api/search-terms?books=7&country=de",
+    });
+    expect(read.listSearchTerms).toHaveBeenCalledWith("1", 30, ["7"], "DE");
+
+    await app!.inject({
+      method: "GET",
+      url: "/api/search-terms/fantasy%20books?books=7,9",
+    });
+    expect(read.getSearchTermDetail).toHaveBeenCalledWith(
+      "1",
+      "fantasy books",
+      30,
+      ["7", "9"],
+      null,
+    );
+
+    await app!.inject({ method: "GET", url: "/api/recommendations?books=9" });
+    expect(read.listRecommendations).toHaveBeenCalledWith("1", {
+      type: undefined,
+      state: undefined,
+      bookIds: ["9"],
+    });
+  });
+
+  it("leaves the filter unset when the param is absent", async () => {
+    const { read } = await start();
+
+    await app!.inject({ method: "GET", url: "/api/campaigns" });
+    expect(read.listCampaigns).toHaveBeenCalledWith("1", 30, undefined);
+
+    await app!.inject({ method: "GET", url: "/api/search-terms" });
+    expect(read.listSearchTerms).toHaveBeenCalledWith("1", 30, null, null);
+  });
+
+  it("ignores the retired single book param on search terms", async () => {
+    const { read } = await start();
+
+    const response = await app!.inject({
+      method: "GET",
+      url: "/api/search-terms?book=7",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(read.listSearchTerms).toHaveBeenCalledWith("1", 30, null, null);
+  });
+});
+
 describe("POST /api/session/login", () => {
   let app: FastifyInstance | null = null;
   afterEach(async () => {

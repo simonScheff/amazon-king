@@ -31,6 +31,7 @@ import {
   disableOptimizationRules,
   updateAdGroupDefaultBids,
   updateCampaignBidding,
+  updateCampaigns,
   updateKeywordBids,
   updateTargetBids,
   type ResolvedCreateAdGroupAction,
@@ -245,6 +246,8 @@ export function createAmazonAdsGateway(
           "update_bid",
           "update_ad_group_default_bid",
           "update_campaign_bidding",
+          "update_campaign_state",
+          "update_campaign_name",
           "update_optimization_rule",
           "add_negative_exact",
           "remove_negative_exact",
@@ -269,6 +272,12 @@ export function createAmazonAdsGateway(
       );
       const campaignActions = changeSet.actions.filter(
         (action) => action.kind === "update_campaign_bidding",
+      );
+      const campaignStateActions = changeSet.actions.filter(
+        (action) => action.kind === "update_campaign_state",
+      );
+      const campaignNameActions = changeSet.actions.filter(
+        (action) => action.kind === "update_campaign_name",
       );
       const ruleActions = changeSet.actions.filter(
         (action) => action.kind === "update_optimization_rule",
@@ -458,6 +467,18 @@ export function createAmazonAdsGateway(
       if (campaignActions.length > 0) {
         results.push(
           ...(await updateCampaignBidding(http, context, campaignActions)),
+        );
+      }
+      // State and name updates go in separate batches: one request must not
+      // carry two items for the same campaignId.
+      if (campaignStateActions.length > 0) {
+        results.push(
+          ...(await updateCampaigns(http, context, campaignStateActions)),
+        );
+      }
+      if (campaignNameActions.length > 0) {
+        results.push(
+          ...(await updateCampaigns(http, context, campaignNameActions)),
         );
       }
       if (ruleActions.length > 0) {

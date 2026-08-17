@@ -87,16 +87,15 @@ export function SearchTermDetailPage() {
   const { term } = useParams({ strict: false }) as { term: string };
   const search = useSearch({ strict: false }) as {
     days?: number;
-    book?: string;
+    books?: string[];
     country?: string;
   };
   const days = DAY_OPTIONS.includes(search.days as 7)
     ? Number(search.days)
     : DEFAULT_DAYS;
-  const book = search.book;
   const navigate = useNavigate();
-  const detail = useSearchTerm(term, days, book, search.country);
-  const marketplaces = useSpendSortedMarketplaces(days);
+  const detail = useSearchTerm(term, days, search.books, search.country);
+  const marketplaces = useSpendSortedMarketplaces(days, search.books);
   const [sort, setSort] = useState<Sort<SortKey>>({
     key: "cost",
     direction: "desc",
@@ -136,11 +135,7 @@ export function SearchTermDetailPage() {
   return (
     <div className="flex max-w-6xl flex-col gap-4">
       <p className="text-sm">
-        <Link
-          to="/search-terms"
-          search={book ? { book } : {}}
-          className="text-sky-400 hover:underline"
-        >
+        <Link to="/search-terms" className="text-sky-400 hover:underline">
           ← Search terms
         </Link>
       </p>
@@ -160,18 +155,17 @@ export function SearchTermDetailPage() {
             <Select
               aria-label="Market"
               value={data.countryCode}
-              onChange={(event) =>
+              onChange={(event) => {
+                // Read the value now: the functional search updater runs
+                // later, after React has cleared event.currentTarget.
+                const country = event.currentTarget.value;
                 void navigate({
                   to: "/search-terms/$term",
                   params: { term },
-                  search: {
-                    days,
-                    country: event.currentTarget.value,
-                    ...(book ? { book } : {}),
-                  },
+                  search: (prev) => ({ ...prev, days, country }),
                   replace: true,
-                })
-              }
+                });
+              }}
             >
               {data.availableCountryCodes.map((countryCode) => (
                 <option key={countryCode} value={countryCode}>
@@ -218,11 +212,11 @@ export function SearchTermDetailPage() {
                     navigate({
                       to: "/search-terms/$term",
                       params: { term },
-                      search: {
+                      search: (prev) => ({
+                        ...prev,
                         days: option,
                         country: data.countryCode,
-                        ...(book ? { book } : {}),
-                      },
+                      }),
                       replace: true,
                     })
                   }

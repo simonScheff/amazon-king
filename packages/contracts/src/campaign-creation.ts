@@ -71,9 +71,26 @@ export const campaignCreationCreateSchema = z
       .object({ recommendationId: z.string().min(1) })
       .optional(),
   })
-  .refine((value) => value.keywords.length + (value.targets?.length ?? 0) > 0, {
-    message: "Provide at least one keyword or product target",
-  });
+  // Amazon creates the four default auto targets (close/loose match,
+  // substitutes, complements) for AUTO campaigns itself and rejects manual
+  // keywords or product targets in them ("Only negative keywords and negative
+  // product targets are allowed in auto-targeting campaigns"), so manual
+  // targeting clauses are only valid — and required — for MANUAL campaigns.
+  .refine(
+    (value) =>
+      value.campaign.targetingType === "AUTO" ||
+      value.keywords.length + (value.targets?.length ?? 0) > 0,
+    { message: "Provide at least one keyword or product target" },
+  )
+  .refine(
+    (value) =>
+      value.campaign.targetingType === "MANUAL" ||
+      (value.keywords.length === 0 && (value.targets?.length ?? 0) === 0),
+    {
+      message:
+        "Automatic campaigns are targeted by Amazon — keywords and product targets require manual targeting",
+    },
+  );
 export type CampaignCreationCreate = z.infer<
   typeof campaignCreationCreateSchema
 >;

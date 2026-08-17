@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children: ReactNode }) => <a href="#">{children}</a>,
+  useSearch: () => ({}) as { books?: string[] },
 }));
 
 vi.mock("../api/endpoints", () => ({
@@ -114,7 +115,7 @@ describe("CampaignsPage seven-day profitability", () => {
   it("shows the requested seven-day result for every campaign", () => {
     render(<CampaignsPage />);
 
-    expect(mocks.useCampaigns).toHaveBeenCalledWith(7);
+    expect(mocks.useCampaigns).toHaveBeenCalledWith(7, undefined);
     expect(
       screen.getByRole("columnheader", { name: "7-day profit" }),
     ).toBeInTheDocument();

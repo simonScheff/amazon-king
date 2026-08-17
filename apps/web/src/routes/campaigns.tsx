@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useSearch } from "@tanstack/react-router";
 import type { CampaignListRow } from "@amazon-king/contracts";
 import { useCampaigns, useProfiles } from "../api/endpoints";
 import { Badge } from "../components/ui/badge";
@@ -67,7 +67,8 @@ function sortValue(row: CampaignListRow, key: SortKey): number | string | null {
 }
 
 export function CampaignsPage() {
-  const campaigns = useCampaigns(PROFITABILITY_DAYS);
+  const search = useSearch({ strict: false }) as { books?: string[] };
+  const campaigns = useCampaigns(PROFITABILITY_DAYS, search.books);
   const profiles = useProfiles();
   const [sort, setSort] = useState<Sort<SortKey>>({
     key: "cost",

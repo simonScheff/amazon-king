@@ -14,6 +14,8 @@ import type {
   UpdateAdGroupDefaultBidAction,
   UpdateBidAction,
   UpdateCampaignBiddingAction,
+  UpdateCampaignNameAction,
+  UpdateCampaignStateAction,
   UpdateOptimizationRuleAction,
 } from "../types.js";
 import { SP_MEDIA_TYPES } from "./sp-media-types.js";
@@ -97,6 +99,24 @@ export function buildCampaignBiddingUpdateBody(
             }
           : {}),
       },
+    })),
+  };
+}
+
+/** PUT /sp/campaigns body for state (pause/enable) and name updates. */
+export function buildCampaignUpdateBody(
+  actions: (UpdateCampaignStateAction | UpdateCampaignNameAction)[],
+): Record<string, unknown> {
+  return {
+    campaigns: actions.map((action) => ({
+      campaignId: asSpV3Id(action.campaignId),
+      ...(action.kind === "update_campaign_state"
+        ? { state: asAmazonState(action.state) }
+        : {
+            name: action.name,
+            // Rename carries the current Amazon state through, like bidding.
+            ...(action.state ? { state: action.state } : {}),
+          }),
     })),
   };
 }
@@ -263,9 +283,23 @@ export function buildNegativeTargetCreateBody(
   };
 }
 
+/**
+ * Amazon's per-item write errors nest the detail one level down:
+ * `{"index":0,"errors":[{"errorType":"otherError","errorValue":{"otherError":
+ * {"message":"...","reason":"..."}}}]}` — there is no top-level code/message,
+ * so without this shape every failure surfaced as `ERROR` with a null message.
+ */
+const nestedWriteErrorSchema = z.looseObject({
+  errorType: z.string().optional(),
+  errorValue: z
+    .record(z.string(), z.looseObject({ message: z.string().optional() }))
+    .optional(),
+});
+
 const writeResultItemSchema = z.looseObject({
   code: z.string().optional(),
   errorCode: z.string().optional(),
+  errors: z.array(nestedWriteErrorSchema).optional(),
   index: z.number().int().nonnegative().optional(),
   message: z.string().optional(),
   keywordId: z.union([z.number(), z.string()]).optional(),
@@ -331,6 +365,19 @@ const optimizationRuleWriteResponseSchema = z.looseObject({
 
 type WriteResultItem = z.infer<typeof writeResultItemSchema>;
 
+/** Extract code/message from Amazon's nested per-item error detail. */
+function nestedWriteError(item: WriteResultItem): {
+  code: string | undefined;
+  message: string | undefined;
+} {
+  const first = item.errors?.[0];
+  if (!first) return { code: undefined, message: undefined };
+  const detail = first.errorValue
+    ? Object.values(first.errorValue)[0]
+    : undefined;
+  return { code: first.errorType, message: detail?.message };
+}
+
 function flattenWriteResults(
   collection: z.infer<typeof writeResultCollectionSchema>,
 ): WriteResultItem[] {
@@ -339,7 +386,8 @@ function flattenWriteResults(
     ...collection.success.map((item) => ({ code: "SUCCESS", ...item })),
     ...collection.error.map((item) => ({
       ...item,
-      code: item.code ?? item.errorCode ?? "ERROR",
+      code:
+        item.code ?? item.errorCode ?? nestedWriteError(item).code ?? "ERROR",
     })),
   ];
 }
@@ -362,7 +410,8 @@ export function mapWriteResults(
         message: "Amazon returned no per-item result for this action",
       };
     }
-    const code = item.code ?? item.errorCode ?? "UNKNOWN";
+    const code =
+      item.code ?? item.errorCode ?? nestedWriteError(item).code ?? "UNKNOWN";
     const applied = code === "SUCCESS";
     const entityId =
       item.keywordId ??
@@ -379,7 +428,7 @@ export function mapWriteResults(
       actionId: action.actionId,
       status: applied ? "applied" : "failed",
       code,
-      message: item.message,
+      message: item.message ?? nestedWriteError(item).message,
       amazonEntityId: entityId !== undefined ? String(entityId) : undefined,
     };
   });
@@ -478,6 +527,29 @@ export async function updateCampaignBidding(
       context,
       mediaType: SP_MEDIA_TYPES.campaigns,
       body: buildCampaignBiddingUpdateBody(batch),
+    });
+    const data = parseWith(
+      campaignWriteResponseSchema,
+      response.data,
+      "PUT /sp/campaigns",
+    );
+    return mapWriteResults(batch, flattenWriteResults(data.campaigns));
+  });
+}
+
+/** PUT /sp/campaigns — pause/enable or rename, returning per-item results. */
+export async function updateCampaigns(
+  http: AdsHttpClient,
+  context: AdsRequestContext,
+  actions: (UpdateCampaignStateAction | UpdateCampaignNameAction)[],
+): Promise<ActionResult[]> {
+  return inBatches(actions, async (batch) => {
+    const response = await http.request({
+      method: "PUT",
+      path: "/sp/campaigns",
+      context,
+      mediaType: SP_MEDIA_TYPES.campaigns,
+      body: buildCampaignUpdateBody(batch),
     });
     const data = parseWith(
       campaignWriteResponseSchema,

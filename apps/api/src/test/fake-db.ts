@@ -1010,6 +1010,17 @@ export class FakeDb {
         handle: (p) => this.ok(t.campaigns.filter((r) => r.id === p[0])),
       },
       {
+        match: "update campaigns",
+        handle: (p) => {
+          const row = t.campaigns.find((r) => r.id === p[0]);
+          if (row) {
+            if (p[1] !== null) row.name = String(p[1]);
+            if (p[2] !== null) row.state = String(p[2]);
+          }
+          return this.ok([]);
+        },
+      },
+      {
         match: "from ad_groups where id = $1",
         handle: (p) => this.ok(t.adGroups.filter((r) => r.id === p[0])),
       },

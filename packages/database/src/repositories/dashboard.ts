@@ -53,13 +53,17 @@ export interface CampaignRowData {
 /**
  * Campaigns of a workspace with metric totals and KDP royalty over a date
  * range. Profitability is calculated in one batched query so the campaigns
- * page does not issue one query per campaign.
+ * page does not issue one query per campaign. `bookIds` (null or empty = no
+ * filter) keeps only campaigns with at least one ad group advertising any of
+ * the selected books; the royalty CTEs are computed per campaign, so they
+ * stay consistent with the filtered rows.
  */
 export async function listCampaignRows(
   db: Db,
   workspaceId: string,
   dateStart: string,
   dateEnd: string,
+  bookIds: bigint[] | null = null,
 ): Promise<CampaignRowData[]> {
   const result = await db.query<
     RawTotals & {
@@ -208,8 +212,20 @@ export async function listCampaignRows(
        on rr.profile_id = c.profile_id
       and rr.campaign_id = c.amazon_campaign_id
      where conn.workspace_id = $1
+       and (coalesce(cardinality($4::bigint[]), 0) = 0 or exists (
+         select 1
+         from ad_groups fg
+         join ads fa
+           on fa.profile_id = fg.profile_id and fa.ad_group_id = fg.id
+         join book_profile_links fb
+           on fb.profile_id = fg.profile_id
+          and fb.marketplace_asin = fa.asin
+          and fb.enabled = true
+         where fg.campaign_id = c.id
+           and fb.book_id = any($4)
+       ))
      order by coalesce(cr.cost::numeric, 0) desc, c.id`,
-    [workspaceId, dateStart, dateEnd],
+    [workspaceId, dateStart, dateEnd, bookIds],
   );
   return result.rows.map((row) => ({
     campaignPk: row.id,
@@ -244,12 +260,17 @@ export interface NegativeKeywordRowData {
   state: string;
 }
 
-/** Ad groups of a campaign with totals aggregated from target-grain facts. */
+/**
+ * Ad groups of a campaign with totals aggregated from target-grain facts.
+ * `bookIds` (null or empty = no filter) keeps only ad groups advertising any
+ * of the selected books.
+ */
 export async function listAdGroupRows(
   db: Db,
   campaignPk: string,
   dateStart: string,
   dateEnd: string,
+  bookIds: bigint[] | null = null,
 ): Promise<NamedMetricRowData[]> {
   const result = await db.query<
     RawTotals & {
@@ -270,9 +291,19 @@ export async function listAdGroupRows(
       and m.ad_group_id = g.amazon_ad_group_id
       and m.metric_date between $2 and $3
      where g.campaign_id = $1
+       and (coalesce(cardinality($4::bigint[]), 0) = 0 or exists (
+         select 1
+         from ads fa
+         join book_profile_links fb
+           on fb.profile_id = fa.profile_id
+          and fb.marketplace_asin = fa.asin
+          and fb.enabled = true
+         where fa.ad_group_id = g.id
+           and fb.book_id = any($4)
+       ))
      group by g.id
      order by coalesce(sum(m.cost), 0) desc, g.id`,
-    [campaignPk, dateStart, dateEnd],
+    [campaignPk, dateStart, dateEnd, bookIds],
   );
   return result.rows.map((row) => ({
     id: row.amazon_ad_group_id,
@@ -282,12 +313,17 @@ export async function listAdGroupRows(
   }));
 }
 
-/** Targets (keywords/product targets) of a campaign with metric totals. */
+/**
+ * Targets (keywords/product targets) of a campaign with metric totals.
+ * `bookIds` (null or empty = no filter) keeps only targets whose ad group
+ * advertises any of the selected books.
+ */
 export async function listTargetRows(
   db: Db,
   campaignPk: string,
   dateStart: string,
   dateEnd: string,
+  bookIds: bigint[] | null = null,
 ): Promise<NamedMetricRowData[]> {
   const result = await db.query<
     RawTotals & {
@@ -310,9 +346,19 @@ export async function listTargetRows(
       and m.target_id = t.amazon_target_id
       and m.metric_date between $2 and $3
      where t.campaign_id = $1
+       and (coalesce(cardinality($4::bigint[]), 0) = 0 or exists (
+         select 1
+         from ads fa
+         join book_profile_links fb
+           on fb.profile_id = fa.profile_id
+          and fb.marketplace_asin = fa.asin
+          and fb.enabled = true
+         where fa.ad_group_id = t.ad_group_id
+           and fb.book_id = any($4)
+       ))
      group by t.id
      order by coalesce(sum(m.cost), 0) desc, t.id`,
-    [campaignPk, dateStart, dateEnd],
+    [campaignPk, dateStart, dateEnd, bookIds],
   );
   return result.rows.map((row) => ({
     id: row.amazon_target_id,
@@ -322,40 +368,134 @@ export async function listTargetRows(
   }));
 }
 
-/** Search terms of a campaign with metric totals (search terms have no state). */
+export interface SearchTermRowData extends NamedMetricRowData {
+  /** Null when orders exist but royalty economics are incomplete. */
+  estimatedRoyalty: string | null;
+  economicsMissing: boolean;
+}
+
+/**
+ * Search terms of a campaign with metric totals (search terms have no state)
+ * and KDP royalty estimated per ad group (single-book attribution, as in
+ * listCampaignRows): only when every ad in the ad group maps to one book with
+ * in-effect, currency-matching economics. `estimatedRoyalty` is null for a
+ * term whenever any ad-group-day with orders lacks attributable economics —
+ * profit is never guessed. `bookIds` (null or empty = no filter) keeps only
+ * facts whose ad group advertises any of the selected books.
+ */
 export async function listSearchTermRows(
   db: Db,
   profilePk: string,
   amazonCampaignId: string,
   dateStart: string,
   dateEnd: string,
-): Promise<NamedMetricRowData[]> {
-  const result = await db.query<RawTotals & { search_term: string }>(
-    `select m.search_term,
-            sum(m.impressions)::text as impressions,
-            sum(m.clicks)::text as clicks,
-            sum(m.cost)::text as cost,
-            sum(m.sales)::text as sales,
-            sum(m.orders)::text as orders
-     from search_term_metrics_daily m
-     where m.profile_id = $1 and m.campaign_id = $2
-       and m.metric_date between $3 and $4
-     group by m.search_term
-     order by sum(m.cost) desc, m.search_term`,
-    [profilePk, amazonCampaignId, dateStart, dateEnd],
+  bookIds: bigint[] | null = null,
+): Promise<SearchTermRowData[]> {
+  const result = await db.query<
+    RawTotals & {
+      search_term: string;
+      estimated_royalty: string | null;
+      economics_missing: boolean;
+    }
+  >(
+    `with st_daily as (
+       select m.ad_group_id, m.search_term, m.metric_date,
+              sum(m.impressions) as impressions,
+              sum(m.clicks) as clicks,
+              sum(m.cost) as cost,
+              sum(m.sales) as sales,
+              sum(m.orders) as orders,
+              min(m.currency)::text as currency
+       from search_term_metrics_daily m
+       where m.profile_id = $1 and m.campaign_id = $2
+         and m.metric_date between $3 and $4
+         and (coalesce(cardinality($5::bigint[]), 0) = 0 or exists (
+           select 1
+           from ad_groups fg
+           join ads fa
+             on fa.profile_id = fg.profile_id and fa.ad_group_id = fg.id
+           join book_profile_links fb
+             on fb.profile_id = fg.profile_id
+            and fb.marketplace_asin = fa.asin
+            and fb.enabled = true
+           where fg.profile_id = m.profile_id
+             and fg.amazon_ad_group_id = m.ad_group_id
+             and fb.book_id = any($5)
+         ))
+       group by m.ad_group_id, m.search_term, m.metric_date
+     ),
+     single_book_ad_groups as (
+       select g.amazon_ad_group_id, min(bpl.book_id) as book_id
+       from ad_groups g
+       join ads a on a.profile_id = g.profile_id and a.ad_group_id = g.id
+       left join book_profile_links bpl
+         on bpl.profile_id = g.profile_id
+        and bpl.marketplace_asin = a.asin
+        and bpl.enabled = true
+       where g.profile_id = $1
+       group by g.amazon_ad_group_id
+       having count(distinct bpl.book_id) = 1
+          and count(*) filter (where bpl.book_id is null) = 0
+     ),
+     royalty_daily as (
+       select d.ad_group_id, d.search_term, d.metric_date,
+              d.orders * economics.estimated_royalty_per_sale
+                as estimated_royalty
+       from st_daily d
+       join single_book_ad_groups s
+         on s.amazon_ad_group_id = d.ad_group_id
+       join lateral (
+         select be.estimated_royalty_per_sale
+         from book_economics be
+         where be.book_id = s.book_id
+           and be.profile_id = $1
+           and be.currency = d.currency
+           and be.effective_from <= d.metric_date
+         order by be.effective_from desc, be.id desc
+         limit 1
+       ) economics on true
+       where d.orders > 0
+     )
+     select d.search_term,
+            sum(d.impressions)::text as impressions,
+            sum(d.clicks)::text as clicks,
+            sum(d.cost)::text as cost,
+            sum(d.sales)::text as sales,
+            sum(d.orders)::text as orders,
+            bool_or(d.orders > 0 and r.ad_group_id is null) as economics_missing,
+            case
+              when bool_or(d.orders > 0 and r.ad_group_id is null) then null
+              else coalesce(sum(r.estimated_royalty), 0)::text
+            end as estimated_royalty
+     from st_daily d
+     left join royalty_daily r
+       on r.ad_group_id = d.ad_group_id
+      and r.search_term = d.search_term
+      and r.metric_date = d.metric_date
+     group by d.search_term
+     order by sum(d.cost) desc, d.search_term`,
+    [profilePk, amazonCampaignId, dateStart, dateEnd, bookIds],
   );
   return result.rows.map((row) => ({
     id: row.search_term,
     name: row.search_term,
     state: "n/a",
     totals: toTotals(row),
+    estimatedRoyalty: row.estimated_royalty,
+    economicsMissing: row.economics_missing,
   }));
 }
 
-/** Current campaign- and ad-group-level negative keywords for a campaign. */
+/**
+ * Current campaign- and ad-group-level negative keywords for a campaign.
+ * `bookIds` (null or empty = no filter) keeps a negative only when its scope
+ * advertises any of the selected books: ad-group-level negatives follow their
+ * ad group, campaign-level negatives follow the whole campaign.
+ */
 export async function listNegativeKeywordRows(
   db: Db,
   campaignPk: string,
+  bookIds: bigint[] | null = null,
 ): Promise<NegativeKeywordRowData[]> {
   const result = await db.query<{
     amazon_negative_keyword_id: string;
@@ -370,8 +510,23 @@ export async function listNegativeKeywordRows(
      from negative_keywords n
      left join ad_groups g on g.id = n.ad_group_id
      where n.campaign_id = $1
+       and (coalesce(cardinality($2::bigint[]), 0) = 0 or exists (
+         select 1
+         from ad_groups fg
+         join ads fa
+           on fa.profile_id = fg.profile_id and fa.ad_group_id = fg.id
+         join book_profile_links fb
+           on fb.profile_id = fg.profile_id
+          and fb.marketplace_asin = fa.asin
+          and fb.enabled = true
+         where fb.book_id = any($2)
+           and (
+             fg.id = n.ad_group_id
+             or (n.ad_group_id is null and fg.campaign_id = n.campaign_id)
+           )
+       ))
      order by lower(n.keyword_text), n.id`,
-    [campaignPk],
+    [campaignPk, bookIds],
   );
   return result.rows.map((row) => ({
     id: row.amazon_negative_keyword_id,
@@ -390,8 +545,9 @@ export async function listNegativeKeywordRows(
  * attributed through the ad group's book exactly like single-book campaigns
  * (plan §9): only when every ad in the ad group maps to one book with
  * in-effect, currency-matching economics. $4 optionally pins one search term;
- * $5 optionally restricts the facts to ad groups advertising one book; $6
- * optionally restricts them to one marketplace country code.
+ * $5 optionally restricts the facts to ad groups advertising any of the
+ * selected books (null or empty array = no filter); $6 optionally restricts
+ * them to one marketplace country code.
  */
 const SEARCH_TERM_CTES = `with st_daily as (
        select m.profile_id, m.search_term, m.campaign_id, m.ad_group_id,
@@ -410,7 +566,7 @@ const SEARCH_TERM_CTES = `with st_daily as (
          and m.metric_date between $2 and $3
          and ($4::text is null or m.search_term = $4)
          and ($6::text is null or p.country_code = $6)
-         and ($5::bigint is null or exists (
+         and (coalesce(cardinality($5::bigint[]), 0) = 0 or exists (
            select 1
            from ad_groups fg
            join ads fa
@@ -421,7 +577,7 @@ const SEARCH_TERM_CTES = `with st_daily as (
             and fb.enabled = true
            where fg.profile_id = m.profile_id
              and fg.amazon_ad_group_id = m.ad_group_id
-             and fb.book_id = $5
+             and fb.book_id = any($5)
          ))
        group by m.profile_id, m.search_term, m.campaign_id, m.ad_group_id,
                 m.metric_date
@@ -486,7 +642,7 @@ export async function listSearchTermRollupRows(
   workspaceId: string,
   dateStart: string,
   dateEnd: string,
-  bookId: string | null = null,
+  bookIds: bigint[] | null = null,
   countryCode: string | null = null,
 ): Promise<SearchTermRollupRowData[]> {
   const result = await db.query<
@@ -528,7 +684,7 @@ export async function listSearchTermRollupRows(
       and r.metric_date = d.metric_date
      group by d.search_term
      order by sum(d.cost) desc, d.search_term`,
-    [workspaceId, dateStart, dateEnd, null, bookId, countryCode],
+    [workspaceId, dateStart, dateEnd, null, bookIds, countryCode],
   );
   return result.rows.map((row) => ({
     searchTerm: row.search_term,
@@ -564,7 +720,7 @@ export async function listSearchTermCampaignRows(
   searchTerm: string,
   dateStart: string,
   dateEnd: string,
-  bookId: string | null = null,
+  bookIds: bigint[] | null = null,
 ): Promise<SearchTermCampaignRowData[]> {
   const result = await db.query<
     RawTotals & {
@@ -610,7 +766,7 @@ export async function listSearchTermCampaignRows(
       and r.metric_date = d.metric_date
      group by p.profile_id, p.country_code, d.campaign_id, c.name, c.state
      order by sum(d.cost) desc, d.campaign_id`,
-    [workspaceId, dateStart, dateEnd, searchTerm, bookId, null],
+    [workspaceId, dateStart, dateEnd, searchTerm, bookIds, null],
   );
   return result.rows.map((row) => ({
     amazonProfileId: row.amazon_profile_id,
@@ -651,7 +807,7 @@ export async function searchTermDailySeries(
   countryCode: string,
   dateStart: string,
   dateEnd: string,
-  bookId: string | null = null,
+  bookIds: bigint[] | null = null,
 ): Promise<SearchTermDailyPoint[]> {
   const result = await db.query<{
     metric_date: string;
@@ -682,7 +838,7 @@ export async function searchTermDailySeries(
      where ap.country_code = $6
      group by d.metric_date
      order by d.metric_date`,
-    [workspaceId, dateStart, dateEnd, searchTerm, bookId, countryCode],
+    [workspaceId, dateStart, dateEnd, searchTerm, bookIds, countryCode],
   );
   return result.rows.map((row) => ({
     date: row.metric_date,
@@ -711,6 +867,8 @@ export interface CampaignDailyPoint {
  * books use each book's own effective-dated economics. When Amazon's product
  * report omits a day for a campaign whose current ads all map to one book, the
  * campaign orders use that single book's in-effect royalty as a safe fallback.
+ * `bookIds` (null or empty = no filter) drops the campaign entirely unless at
+ * least one of its ad groups advertises any of the selected books.
  */
 export async function campaignDailySeries(
   db: Db,
@@ -718,6 +876,7 @@ export async function campaignDailySeries(
   amazonCampaignId: string,
   dateStart: string,
   dateEnd: string,
+  bookIds: bigint[] | null = null,
 ): Promise<CampaignDailyPoint[]> {
   const result = await db.query<{
     metric_date: string;
@@ -733,6 +892,20 @@ export async function campaignDailySeries(
        from campaign_metrics_daily
        where profile_id = $1 and campaign_id = $2
          and metric_date between $3 and $4
+         and (coalesce(cardinality($5::bigint[]), 0) = 0 or exists (
+           select 1
+           from campaigns fc
+           join ad_groups fg on fg.campaign_id = fc.id
+           join ads fa
+             on fa.profile_id = fg.profile_id and fa.ad_group_id = fg.id
+           join book_profile_links fb
+             on fb.profile_id = fg.profile_id
+            and fb.marketplace_asin = fa.asin
+            and fb.enabled = true
+           where fc.profile_id = $1
+             and fc.amazon_campaign_id = $2
+             and fb.book_id = any($5)
+         ))
        group by metric_date, currency
      ),
      royalty_daily as (
@@ -802,7 +975,7 @@ export async function campaignDailySeries(
        limit 1
      ) fallback on r.metric_date is null
      order by c.metric_date`,
-    [profilePk, amazonCampaignId, dateStart, dateEnd],
+    [profilePk, amazonCampaignId, dateStart, dateEnd, bookIds],
   );
   return result.rows.map((row) => ({
     date: row.metric_date,
@@ -827,13 +1000,15 @@ export interface DailyPoint {
  * Per-day cost/sales/orders for each given profile (trend chart). Rows remain
  * separate by profile so the caller can apply profile-specific royalty
  * economics before combining them. The caller must refuse to merge differing
- * currencies.
+ * currencies. `bookIds` (null or empty = no filter) keeps only facts of
+ * campaigns with at least one ad group advertising any of the selected books.
  */
 export async function dailySeries(
   db: Db,
   profilePks: readonly string[],
   dateStart: string,
   dateEnd: string,
+  bookIds: bigint[] | null = null,
 ): Promise<DailyPoint[]> {
   if (profilePks.length === 0) {
     return [];
@@ -852,12 +1027,26 @@ export async function dailySeries(
             sum(sales)::text as sales,
             sum(orders)::text as orders,
             currency
-     from campaign_metrics_daily
-     where profile_id = any($1::bigint[])
-       and metric_date between $2 and $3
+     from campaign_metrics_daily m
+     where m.profile_id = any($1::bigint[])
+       and m.metric_date between $2 and $3
+       and (coalesce(cardinality($4::bigint[]), 0) = 0 or exists (
+         select 1
+         from campaigns fc
+         join ad_groups fg on fg.campaign_id = fc.id
+         join ads fa
+           on fa.profile_id = fg.profile_id and fa.ad_group_id = fg.id
+         join book_profile_links fb
+           on fb.profile_id = fg.profile_id
+          and fb.marketplace_asin = fa.asin
+          and fb.enabled = true
+         where fc.profile_id = m.profile_id
+           and fc.amazon_campaign_id = m.campaign_id
+           and fb.book_id = any($4)
+       ))
      group by metric_date, profile_id, currency
      order by metric_date, profile_id`,
-    [profilePks.map(String), dateStart, dateEnd],
+    [profilePks.map(String), dateStart, dateEnd, bookIds],
   );
   return result.rows.map((row) => ({
     date: row.metric_date,

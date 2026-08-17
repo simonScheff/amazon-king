@@ -38,6 +38,8 @@ Spend-changing actions require a sign-in no older than 15 minutes. Affected
 endpoints return `401 REAUTH_REQUIRED` when the session is too old:
 
 - `POST /api/campaigns/:campaignId/max-cpc`
+- `POST /api/campaigns/:campaignId/state`
+- `POST /api/campaigns/:campaignId/name`
 - `POST /api/campaign-creation-change-sets`
 - `POST /api/change-sets/:id/apply` — except when retrying a `failed` change
   set, which replays an already-approved payload through the same guarded path
@@ -256,9 +258,13 @@ Response `200`: SyncRun; `404 NOT_FOUND` when unknown.
 ## Dashboard & metrics
 
 All endpoints here take a shared `days` query parameter: integer 1–90,
-default `30`.
+default `30`. They also accept a shared `books` query parameter: a
+comma-separated list of book ids (e.g. `?books=3,7`) restricting the view to
+ad groups that advertise any of the selected books (union; a multi-book ad
+group contributes its whole numbers). Absent or empty means all products. An
+unknown book id fails the whole request with `404 NOT_FOUND`.
 
-### `GET /api/dashboard/summary?days&country`
+### `GET /api/dashboard/summary?days&country&books`
 
 `country` is a two-letter country code (`/^[A-Za-z]{2}$/`, upper-cased),
 default `US`.
@@ -277,7 +283,7 @@ Response `200` (DashboardSummary):
 
 Errors: `409 MIXED_CURRENCY` when the selected window spans currencies.
 
-### `GET /api/campaigns?days`
+### `GET /api/campaigns?days&books`
 
 Response `200`: array of campaign rows.
 
@@ -290,7 +296,7 @@ Response `200`: array of campaign rows.
 | amazonConsoleUrl | string \| null | Campaign Manager link; null when no account id on file   |
 | profitability    | object         | `{dateRange, currency, estimatedRoyalty, estimatedAdProfit, economicsMissing, dataCurrentThrough}`; money fields null when economics are missing |
 
-### `GET /api/campaigns/:id?days`
+### `GET /api/campaigns/:id?days&books`
 
 Response `200` (CampaignDetail); `404 NOT_FOUND` when unknown.
 
@@ -304,7 +310,7 @@ Response `200` (CampaignDetail); `404 NOT_FOUND` when unknown.
 | daily            | array     | Per-day `{date, cost, sales, estimatedRoyalty, estimatedAdProfit}` |
 | adGroups         | array     | `{id, name, state, totals}`                                        |
 | targets          | array     | Same shape                                                         |
-| searchTerms      | array     | Same shape                                                         |
+| searchTerms      | array     | Same shape plus `estimatedRoyalty`, `estimatedAdProfit`, `economicsMissing` per term |
 | negativeKeywords | array     | `{id, keywordText, matchType, level: "campaign" \| "ad_group", adGroupId, adGroupName, state}` |
 
 ---
@@ -314,18 +320,18 @@ Response `200` (CampaignDetail); `404 NOT_FOUND` when unknown.
 Cross-campaign views over shopper search terms. Royalty and profit fields are
 null — never guessed — when book economics are missing.
 
-### `GET /api/search-terms?days&book`
+### `GET /api/search-terms?days&books`
 
 | Param | Type   | Notes                                  |
 | ----- | ------ | -------------------------------------- |
 | days  | int    | 1–90, default 30                       |
-| book  | string | Optional book id; restricts the aggregate to that book |
+| books | string | Optional comma-separated book ids; restricts the aggregate to ad groups advertising any of them (union semantics) |
 
 Response `200`: array of rows — `{searchTerm, campaignCount, countryCodes[],
 currency, totals (with acos), estimatedRoyalty, estimatedAdProfit,
 economicsMissing, dataCurrentThrough}`.
 
-### `GET /api/search-terms/:term?days&book&country`
+### `GET /api/search-terms/:term?days&books&country`
 
 Per-term drill-down. `country` (two-letter code) selects the marketplace view.
 
@@ -411,12 +417,13 @@ profile.
 
 ## Recommendations
 
-### `GET /api/recommendations?type&state`
+### `GET /api/recommendations?type&state&books`
 
 | Param | Type | Values                                                                                                            |
 | ----- | ---- | ----------------------------------------------------------------------------------------------------------------- |
 | type  | enum | `wasteful_search_term`, `expensive_target`, `profitable_target`, `search_term_harvest`, `budget_constrained_winner`, `high_ctr_poor_conversion`, `low_impressions`, `placement_opportunity`, `cannibalization_conflict` |
 | state | enum | `pending`, `approved`, `rejected`, `expired`, `applied`, `protected`                                               |
+| books | string | Optional comma-separated book ids; keeps findings whose campaign/ad group advertises any of them |
 
 Response `200`: array of Recommendation:
 
@@ -521,6 +528,35 @@ adjustments and bid rules).
 
 ---
 
+## Campaign state & rename
+
+One-click guarded updates from the campaign detail page. Each call drafts a
+single-action `campaign_update` change set (`update_campaign_state` /
+`update_campaign_name`) and immediately runs the guarded apply (fresh Amazon
+re-read, before-state compare, guardrails, post-write verification); the
+verified change is written through to the local mirror. Both action types are
+rollbackable (the before-state is restored). There is no campaign delete:
+Amazon only offers terminal `ARCHIVED`, which the app deliberately does not
+expose.
+
+### `POST /api/campaigns/:campaignId/state`
+
+- **Auth:** session + CSRF + **recent-auth**. **Rate:** WRITE.
+- Body: `{ "state": "enabled" | "paused" }`.
+- Response `200`: `{changeSet, actions}` (the applied set).
+- Errors: `403 WRITES_DISABLED`, `404 NOT_FOUND` (unknown campaign),
+  `409 STALE_BEFORE_STATE` (campaign state changed on Amazon since the last
+  sync; the set is `blocked`), `401 REAUTH_REQUIRED`.
+
+### `POST /api/campaigns/:campaignId/name`
+
+- **Auth:** session + CSRF + **recent-auth**. **Rate:** WRITE.
+- Body: `{ "name": "…" }` — trimmed, 1–128 chars.
+- Response `200`: `{changeSet, actions}` (the applied set).
+- Errors: same as above.
+
+---
+
 ## Campaign creation
 
 ### `POST /api/campaign-creation-change-sets`
@@ -547,8 +583,11 @@ until the sets are applied.
 | targets                | array    | Optional `{asin, bid?}`; ASIN matches `/^B0[A-Z0-9]{8}$/i`, applied as `ASIN_SAME_AS` product targets |
 | cannibalization        | object   | Optional `{recommendationId}` — see below                     |
 
-At least one keyword or product target is required
-(`400 VALIDATION_ERROR` otherwise).
+At least one keyword or product target is required for `MANUAL` campaigns
+(`400 VALIDATION_ERROR` otherwise). `AUTO` campaigns must not carry keywords
+or product targets at all — Amazon creates the default auto targets itself
+and rejects manual targeting clauses in auto campaigns
+(`400 VALIDATION_ERROR` when the combination is submitted).
 
 Response `200`: `{ "changeSets": [ChangeSet, …] }`.
 
