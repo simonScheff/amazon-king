@@ -250,12 +250,12 @@ export function buildTargetCreateBody(
   };
 }
 
-/** POST /sp/negativeTargets body for campaign-level negative ASIN targets. */
+/** POST /sp/campaignNegativeTargets body for campaign-level negative ASIN targets. */
 export function buildNegativeTargetCreateBody(
   actions: AddNegativeTargetAction[],
 ): Record<string, unknown> {
   return {
-    negativeTargetingClauses: actions.map((action) => ({
+    campaignNegativeTargetingClauses: actions.map((action) => ({
       campaignId: asSpV3Id(action.campaignId),
       expression: [{ type: "ASIN_SAME_AS", value: action.expressionAsin }],
       state: "ENABLED",
@@ -272,6 +272,9 @@ const writeResultItemSchema = z.looseObject({
   negativeKeywordId: z.union([z.number(), z.string()]).optional(),
   campaignNegativeKeywordId: z.union([z.number(), z.string()]).optional(),
   negativeTargetId: z.union([z.number(), z.string()]).optional(),
+  campaignNegativeTargetingClauseId: z
+    .union([z.number(), z.string()])
+    .optional(),
   targetId: z.union([z.number(), z.string()]).optional(),
   adId: z.union([z.number(), z.string()]).optional(),
   adGroupId: z.union([z.number(), z.string()]).optional(),
@@ -303,7 +306,7 @@ const targetWriteResponseSchema = z.looseObject({
   targetingClauses: writeResultCollectionSchema,
 });
 const negativeTargetWriteResponseSchema = z.looseObject({
-  negativeTargetingClauses: writeResultCollectionSchema,
+  campaignNegativeTargetingClauses: writeResultCollectionSchema,
 });
 const adGroupWriteResponseSchema = z.looseObject({
   adGroups: writeResultCollectionSchema,
@@ -365,6 +368,7 @@ export function mapWriteResults(
       item.keywordId ??
       item.negativeKeywordId ??
       item.campaignNegativeKeywordId ??
+      item.campaignNegativeTargetingClauseId ??
       item.negativeTargetId ??
       item.targetId ??
       item.adId ??
@@ -754,7 +758,7 @@ export async function createTargets(
   });
 }
 
-/** POST /sp/negativeTargets — create campaign-level negative ASIN targets. */
+/** POST /sp/campaignNegativeTargets — create campaign-level negative ASIN targets. */
 export async function createNegativeTargets(
   http: AdsHttpClient,
   context: AdsRequestContext,
@@ -766,19 +770,19 @@ export async function createNegativeTargets(
   return inBatches(actions, async (batch) => {
     const response = await http.request({
       method: "POST",
-      path: "/sp/negativeTargets",
+      path: "/sp/campaignNegativeTargets",
       context,
-      mediaType: SP_MEDIA_TYPES.negativeTargets,
+      mediaType: SP_MEDIA_TYPES.campaignNegativeTargets,
       body: buildNegativeTargetCreateBody(batch),
     });
     const data = parseWith(
       negativeTargetWriteResponseSchema,
       response.data,
-      "POST /sp/negativeTargets",
+      "POST /sp/campaignNegativeTargets",
     );
     return mapWriteResults(
       batch,
-      flattenWriteResults(data.negativeTargetingClauses),
+      flattenWriteResults(data.campaignNegativeTargetingClauses),
     );
   });
 }

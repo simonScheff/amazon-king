@@ -110,17 +110,22 @@ const spTargetSchema = z.looseObject({
 
 const spNegativeTargetSchema = z
   .looseObject({
-    // SP v3 currently calls this `targetId`. Accept the older descriptive
-    // alias as well so already-captured fixtures remain readable.
+    // SP v3 currently calls this `targetId`. Accept the descriptive aliases
+    // as well so already-captured fixtures remain readable; campaign-level
+    // clauses may report `campaignNegativeTargetingClauseId`.
     targetId: idField.optional(),
     negativeTargetId: idField.optional(),
+    campaignNegativeTargetingClauseId: idField.optional(),
     campaignId: idField,
     state: z.string(),
     expression: spExpressionSchema.optional(),
     resolvedExpression: spExpressionSchema.optional(),
   })
   .refine(
-    (row) => row.targetId !== undefined || row.negativeTargetId !== undefined,
+    (row) =>
+      row.targetId !== undefined ||
+      row.negativeTargetId !== undefined ||
+      row.campaignNegativeTargetingClauseId !== undefined,
     { path: ["targetId"], message: "Expected Amazon negative target id" },
   );
 
@@ -327,21 +332,31 @@ export async function listTargets(
   }));
 }
 
-/** List campaign-level negative product targets (ASIN_SAME_AS exclusions). */
+/** List both ad-group- and campaign-level negative product targets (ASIN_SAME_AS exclusions). */
 export async function listNegativeTargets(
   http: AdsHttpClient,
   context: AdsRequestContext,
 ): Promise<NegativeTarget[]> {
-  const rows = await listAllPages(http, context, {
-    path: "/sp/negativeTargets/list",
-    // The SP v3 negative-targeting endpoint uses this envelope name even
-    // though the resource path and our internal model call them negative targets.
-    key: "negativeTargetingClauses",
-    mediaType: SP_MEDIA_TYPES.negativeTargets,
-    itemSchema: spNegativeTargetSchema,
-  });
-  return rows.map((raw) => ({
-    negativeTargetId: raw.targetId ?? (raw.negativeTargetId as string),
+  const [adGroupRows, campaignRows] = await Promise.all([
+    listAllPages(http, context, {
+      path: "/sp/negativeTargets/list",
+      // The SP v3 negative-targeting endpoint uses this envelope name even
+      // though the resource path and our internal model call them negative targets.
+      key: "negativeTargetingClauses",
+      mediaType: SP_MEDIA_TYPES.negativeTargets,
+      itemSchema: spNegativeTargetSchema,
+    }),
+    listAllPages(http, context, {
+      path: "/sp/campaignNegativeTargets/list",
+      key: "campaignNegativeTargetingClauses",
+      mediaType: SP_MEDIA_TYPES.campaignNegativeTargets,
+      itemSchema: spNegativeTargetSchema,
+    }),
+  ]);
+  return [...adGroupRows, ...campaignRows].map((raw) => ({
+    negativeTargetId: (raw.targetId ??
+      raw.negativeTargetId ??
+      raw.campaignNegativeTargetingClauseId) as string,
     campaignId: raw.campaignId,
     state: raw.state,
     expression: raw.resolvedExpression ?? raw.expression ?? [],

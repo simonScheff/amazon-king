@@ -1,0 +1,9 @@
+{
+  "campaignNegativeTargetingClauses": [
+    {
+      "campaignNegativeTargetingClauseId": 770123456,
+      "code": "SUCCESS",
+      "index": 0
+    }
+  ]
+}

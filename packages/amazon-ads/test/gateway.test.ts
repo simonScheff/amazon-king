@@ -74,6 +74,9 @@ describe("gateway.syncCampaignStructure", () => {
         "sp-campaignNegativeKeywords-list.json",
       ),
       "/sp/negativeTargets/list": fixture("sp-negativeTargets-list.json"),
+      "/sp/campaignNegativeTargets/list": fixture(
+        "sp-campaignNegativeTargets-list.json",
+      ),
     };
     const { gateway } = makeGateway((request) => {
       const path = new URL(request.url).pathname;
@@ -721,12 +724,15 @@ describe("gateway.applyActions entity creation", () => {
     ]);
   });
 
-  it("applies add_negative_target via the negative-targeting resource", async () => {
+  it("applies add_negative_target via the campaign negative-targeting resource", async () => {
     const { gateway, calls } = makeGateway((request) => {
-      if (request.url.endsWith("/sp/negativeTargets")) {
-        return jsonResponse(fixture("sp-negativeTargets-create-207.json"), {
-          status: 207,
-        });
+      if (request.url.endsWith("/sp/campaignNegativeTargets")) {
+        return jsonResponse(
+          fixture("sp-campaignNegativeTargets-create-207.json"),
+          {
+            status: 207,
+          },
+        );
       }
       throw new Error(`unexpected call: ${request.url}`);
     });
@@ -744,7 +750,7 @@ describe("gateway.applyActions entity creation", () => {
     });
     expect(calls).toHaveLength(1);
     expect(JSON.parse(calls[0].body as string)).toEqual({
-      negativeTargetingClauses: [
+      campaignNegativeTargetingClauses: [
         {
           campaignId: "901234567",
           expression: [{ type: "ASIN_SAME_AS", value: "B0COMPET01" }],

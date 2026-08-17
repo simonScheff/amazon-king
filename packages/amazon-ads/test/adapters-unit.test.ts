@@ -124,7 +124,9 @@ describe("SP list pagination", () => {
           jsonResponse(
             request.url.endsWith("/sp/campaignNegativeKeywords/list")
               ? { campaignNegativeKeywords: [] }
-              : { [responseKey]: [] },
+              : request.url.endsWith("/sp/campaignNegativeTargets/list")
+                ? { campaignNegativeTargetingClauses: [] }
+                : { [responseKey]: [] },
           ),
       });
 
@@ -503,7 +505,7 @@ describe("SP create request bodies", () => {
         },
       ]),
     ).toEqual({
-      negativeTargetingClauses: [
+      campaignNegativeTargetingClauses: [
         {
           campaignId: "901234567",
           expression: [{ type: "ASIN_SAME_AS", value: "B0COMPET01" }],
@@ -789,10 +791,16 @@ describe("SP target and negative-target reads", () => {
 
   it("parses campaign-level negative targets with their ASIN expression", async () => {
     const { http, calls } = makeHttp({
-      handler: () => jsonResponse(fixture("sp-negativeTargets-list.json")),
+      handler: (request) =>
+        request.url.endsWith("/sp/campaignNegativeTargets/list")
+          ? jsonResponse({ campaignNegativeTargetingClauses: [] })
+          : jsonResponse(fixture("sp-negativeTargets-list.json")),
     });
     const negativeTargets = await listNegativeTargets(http, TEST_CONTEXT);
-    expect(calls[0].url).toContain("/sp/negativeTargets/list");
+    expect(calls.map((call) => new URL(call.url).pathname).sort()).toEqual([
+      "/sp/campaignNegativeTargets/list",
+      "/sp/negativeTargets/list",
+    ]);
     expect(negativeTargets).toHaveLength(1);
     expect(negativeTargets[0]).toMatchObject({
       negativeTargetId: "770123456",
@@ -802,9 +810,39 @@ describe("SP target and negative-target reads", () => {
     });
   });
 
+  it("parses campaign negative targeting clauses from the campaign-level endpoint", async () => {
+    const { http } = makeHttp({
+      handler: (request) =>
+        request.url.endsWith("/sp/campaignNegativeTargets/list")
+          ? jsonResponse({
+              campaignNegativeTargetingClauses: [
+                {
+                  campaignNegativeTargetingClauseId: 770123999,
+                  campaignId: 901234567,
+                  state: "ENABLED",
+                  resolvedExpression: [
+                    { type: "ASIN_SAME_AS", value: "B0COMPET02" },
+                  ],
+                },
+              ],
+            })
+          : jsonResponse({ negativeTargetingClauses: [] }),
+    });
+    const negativeTargets = await listNegativeTargets(http, TEST_CONTEXT);
+    expect(negativeTargets).toHaveLength(1);
+    expect(negativeTargets[0]).toMatchObject({
+      negativeTargetId: "770123999",
+      campaignId: "901234567",
+      expression: [{ type: "ASIN_SAME_AS", value: "B0COMPET02" }],
+    });
+  });
+
   it("treats a profile without negative targets as an empty list", async () => {
     const { http } = makeHttp({
-      handler: () => jsonResponse({ negativeTargetingClauses: [] }),
+      handler: (request) =>
+        request.url.endsWith("/sp/campaignNegativeTargets/list")
+          ? jsonResponse({ campaignNegativeTargetingClauses: [] })
+          : jsonResponse({ negativeTargetingClauses: [] }),
     });
     await expect(listNegativeTargets(http, TEST_CONTEXT)).resolves.toEqual([]);
   });
@@ -860,7 +898,7 @@ describe("SP target writes", () => {
   it("creates campaign-level negative targets and extracts negativeTargetId", async () => {
     const { http, calls } = makeHttp({
       handler: () =>
-        jsonResponse(fixture("sp-negativeTargets-create-207.json"), {
+        jsonResponse(fixture("sp-campaignNegativeTargets-create-207.json"), {
           status: 207,
         }),
     });
@@ -873,9 +911,9 @@ describe("SP target writes", () => {
       },
     ]);
     expect(calls[0].method).toBe("POST");
-    expect(calls[0].url).toContain("/sp/negativeTargets");
+    expect(calls[0].url).toContain("/sp/campaignNegativeTargets");
     expect(JSON.parse(calls[0].body as string)).toEqual({
-      negativeTargetingClauses: [
+      campaignNegativeTargetingClauses: [
         {
           campaignId: "901234567",
           expression: [{ type: "ASIN_SAME_AS", value: "B0COMPET01" }],
