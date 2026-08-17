@@ -94,7 +94,8 @@ describe("dashboard country filtering", () => {
     const result = await service.dashboardSummary("workspace-1", 30, "US");
 
     expect(result.currency).toBe("USD");
-    expect(metrics.dashboardTotals).toHaveBeenCalledOnce();
+    // Current window plus the immediately preceding window of the same length.
+    expect(metrics.dashboardTotals).toHaveBeenCalledTimes(2);
     expect(metrics.dashboardTotals).toHaveBeenCalledWith(
       expect.anything(),
       US_PROFILE.id,
@@ -102,6 +103,26 @@ describe("dashboard country filtering", () => {
       "2026-08-13",
       null,
     );
+    expect(metrics.dashboardTotals).toHaveBeenCalledWith(
+      expect.anything(),
+      US_PROFILE.id,
+      "2026-06-15",
+      "2026-07-14",
+      null,
+    );
+    expect(result.previous).toEqual({
+      dateRange: { start: "2026-06-15", end: "2026-07-14" },
+      totals: {
+        impressions: 100,
+        clicks: 10,
+        cost: "5.0000",
+        sales: "20.0000",
+        orders: 2,
+        acos: 0.25,
+        estimatedRoyalty: null,
+        estimatedAdProfit: null,
+      },
+    });
     expect(dashboard.dailySeries).toHaveBeenCalledWith(
       expect.anything(),
       [US_PROFILE.id],
@@ -139,6 +160,7 @@ describe("dashboard country filtering", () => {
 
     expect(result.daily?.[0]?.estimatedRoyalty).toBe("8.5000");
     expect(result.totals.estimatedRoyalty).toBe("8.5000");
+    expect(result.previous.totals.estimatedRoyalty).toBe("8.5000");
   });
 
   it("forwards the product filter to the totals and daily series", async () => {

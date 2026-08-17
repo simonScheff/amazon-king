@@ -28,6 +28,28 @@ export function formatCount(n: number | null | undefined): string {
   return new Intl.NumberFormat("en-US").format(n);
 }
 
+/**
+ * Period-over-period change as a fraction of |previous| (0.12 = +12%).
+ * Null when the previous value is zero or unknown — a percentage change has
+ * no meaningful base then.
+ */
+export function percentChange(
+  current: number | null | undefined,
+  previous: number | null | undefined,
+): number | null {
+  if (current == null || previous == null) return null;
+  if (!Number.isFinite(current) || !Number.isFinite(previous)) return null;
+  if (previous === 0) return null;
+  return (current - previous) / Math.abs(previous);
+}
+
+/** Format a fractional change as a signed percentage, e.g. 0.123 → "+12.3%". */
+export function formatPercentChange(fraction: number): string {
+  const pct = fraction * 100;
+  const rounded = Math.abs(pct) < 0.05 ? 0 : pct; // avoid "-0.0%"
+  return `${rounded > 0 ? "+" : ""}${rounded.toFixed(1)}%`;
+}
+
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);

@@ -253,67 +253,102 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       bookIds,
     ): Promise<DashboardSummary> {
       const { start, end } = dateRange(now(), days);
+      // The immediately preceding window of the same length (7d vs the 7d
+      // before), used for period-over-period comparison.
+      const previous = dateRange(
+        new Date(new Date(`${start}T00:00:00.000Z`).getTime() - DAY_MS),
+        days,
+      );
       const bookPks = await requireBookPks(workspaceId, bookIds);
       const all = await profiles.listProfilesByWorkspace(db, workspaceId);
       const enabled = all.filter(
         (p) => p.enabled && p.countryCode === countryCode,
       );
 
-      let currency: string | null = null;
-      let impressions = 0;
-      let clicks = 0;
-      let orders = 0;
-      let costMicros = 0;
-      let salesMicros = 0;
-      const totalsByProfile = new Map<
-        string,
-        { orders: number; costMicros: number }
-      >();
+      async function aggregateWindow(windowStart: string, windowEnd: string) {
+        let currency: string | null = null;
+        let impressions = 0;
+        let clicks = 0;
+        let orders = 0;
+        let costMicros = 0;
+        let salesMicros = 0;
+        const totalsByProfile = new Map<
+          string,
+          { orders: number; costMicros: number }
+        >();
 
-      for (const profile of enabled) {
-        let totals: metrics.MetricTotals | null;
-        try {
-          totals = await metrics.dashboardTotals(
-            db,
-            profile.id,
-            start,
-            end,
-            bookPks,
-          );
-        } catch (error) {
-          if (error instanceof metrics.MixedCurrencyError) {
+        for (const profile of enabled) {
+          let totals: metrics.MetricTotals | null;
+          try {
+            totals = await metrics.dashboardTotals(
+              db,
+              profile.id,
+              windowStart,
+              windowEnd,
+              bookPks,
+            );
+          } catch (error) {
+            if (error instanceof metrics.MixedCurrencyError) {
+              throw conflict(
+                "MIXED_CURRENCY",
+                "Profile data mixes currencies; refusing to aggregate (plan §9)",
+              );
+            }
+            throw error;
+          }
+          if (!totals) continue;
+          if (currency === null) {
+            currency = totals.currency;
+          } else if (currency !== totals.currency) {
             throw conflict(
               "MIXED_CURRENCY",
-              "Profile data mixes currencies; refusing to aggregate (plan §9)",
+              "Profiles use different currencies; refusing to aggregate (plan §9)",
             );
           }
-          throw error;
+          impressions += totals.impressions;
+          clicks += totals.clicks;
+          orders += totals.orders;
+          costMicros += microsFromDecimalString(totals.cost);
+          salesMicros += microsFromDecimalString(totals.sales);
+          totalsByProfile.set(profile.id, {
+            orders: totals.orders,
+            costMicros: microsFromDecimalString(totals.cost),
+          });
         }
-        if (!totals) continue;
-        if (currency === null) {
-          currency = totals.currency;
-        } else if (currency !== totals.currency) {
-          throw conflict(
-            "MIXED_CURRENCY",
-            "Profiles use different currencies; refusing to aggregate (plan §9)",
-          );
-        }
-        impressions += totals.impressions;
-        clicks += totals.clicks;
-        orders += totals.orders;
-        costMicros += microsFromDecimalString(totals.cost);
-        salesMicros += microsFromDecimalString(totals.sales);
-        totalsByProfile.set(profile.id, {
-          orders: totals.orders,
-          costMicros: microsFromDecimalString(totals.cost),
-        });
+        return {
+          currency,
+          impressions,
+          clicks,
+          orders,
+          costMicros,
+          salesMicros,
+          totalsByProfile,
+        };
+      }
+
+      const current = await aggregateWindow(start, end);
+      const previousWindow = await aggregateWindow(
+        previous.start,
+        previous.end,
+      );
+      const currency = current.currency ?? previousWindow.currency;
+      if (
+        current.currency !== null &&
+        previousWindow.currency !== null &&
+        current.currency !== previousWindow.currency
+      ) {
+        throw conflict(
+          "MIXED_CURRENCY",
+          "Profiles use different currencies; refusing to aggregate (plan §9)",
+        );
       }
 
       // Profit requires user-entered economics for EVERY enabled profile;
       // otherwise it is reported as missing, never guessed (plan §9).
+      const profilePks = enabled.map((p) => p.id);
       const economics = await dashboard.latestEconomicsForProfiles(
         db,
-        enabled.map((p) => p.id),
+        profilePks,
         end,
       );
       const economicsByProfile = new Map(
@@ -323,18 +358,51 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         enabled.length === 0 ||
         enabled.some((p) => !economicsByProfile.has(p.id));
 
-      let estimatedRoyaltyMicros: number | null = null;
-      if (!economicsMissing) {
-        estimatedRoyaltyMicros = 0;
+      // Previous-window royalty uses the economics in effect at that window's
+      // end; if none existed yet, the previous royalty is missing too.
+      const previousEconomics = await dashboard.latestEconomicsForProfiles(
+        db,
+        profilePks,
+        previous.end,
+      );
+      const previousEconomicsByProfile = new Map(
+        previousEconomics.map((row) => [row.profilePk, row]),
+      );
+      const previousEconomicsMissing =
+        enabled.length === 0 ||
+        enabled.some((p) => !previousEconomicsByProfile.has(p.id));
+
+      function royaltyMicros(
+        missing: boolean,
+        windowTotalsByProfile: Map<
+          string,
+          { orders: number; costMicros: number }
+        >,
+        economicsForWindow: Map<string, { estimatedRoyaltyPerSale: string }>,
+      ): number | null {
+        if (missing) return null;
+        let total = 0;
         for (const profile of enabled) {
-          const totals = totalsByProfile.get(profile.id);
-          const econ = economicsByProfile.get(profile.id);
+          const totals = windowTotalsByProfile.get(profile.id);
+          const econ = economicsForWindow.get(profile.id);
           if (!totals || !econ) continue;
-          estimatedRoyaltyMicros +=
+          total +=
             totals.orders *
             microsFromDecimalString(econ.estimatedRoyaltyPerSale);
         }
+        return total;
       }
+
+      const estimatedRoyaltyMicros = royaltyMicros(
+        economicsMissing,
+        current.totalsByProfile,
+        economicsByProfile,
+      );
+      const previousEstimatedRoyaltyMicros = royaltyMicros(
+        previousEconomicsMissing,
+        previousWindow.totalsByProfile,
+        previousEconomicsByProfile,
+      );
 
       const dailyRows = await dashboard.dailySeries(
         db,
@@ -393,12 +461,15 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
           enabled[0]?.currencyCode ??
           "USD") as DashboardSummary["currency"],
         totals: {
-          impressions,
-          clicks,
-          cost: microsToDecimalString(costMicros),
-          sales: microsToDecimalString(salesMicros),
-          orders,
-          acos: salesMicros > 0 ? costMicros / salesMicros : null,
+          impressions: current.impressions,
+          clicks: current.clicks,
+          cost: microsToDecimalString(current.costMicros),
+          sales: microsToDecimalString(current.salesMicros),
+          orders: current.orders,
+          acos:
+            current.salesMicros > 0
+              ? current.costMicros / current.salesMicros
+              : null,
           estimatedRoyalty:
             estimatedRoyaltyMicros === null
               ? null
@@ -406,7 +477,33 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
           estimatedAdProfit:
             estimatedRoyaltyMicros === null
               ? null
-              : microsToDecimalString(estimatedRoyaltyMicros - costMicros),
+              : microsToDecimalString(
+                  estimatedRoyaltyMicros - current.costMicros,
+                ),
+        },
+        previous: {
+          dateRange: { start: previous.start, end: previous.end },
+          totals: {
+            impressions: previousWindow.impressions,
+            clicks: previousWindow.clicks,
+            cost: microsToDecimalString(previousWindow.costMicros),
+            sales: microsToDecimalString(previousWindow.salesMicros),
+            orders: previousWindow.orders,
+            acos:
+              previousWindow.salesMicros > 0
+                ? previousWindow.costMicros / previousWindow.salesMicros
+                : null,
+            estimatedRoyalty:
+              previousEstimatedRoyaltyMicros === null
+                ? null
+                : microsToDecimalString(previousEstimatedRoyaltyMicros),
+            estimatedAdProfit:
+              previousEstimatedRoyaltyMicros === null
+                ? null
+                : microsToDecimalString(
+                    previousEstimatedRoyaltyMicros - previousWindow.costMicros,
+                  ),
+          },
         },
         economicsMissing,
         dataCurrentThrough: `${lastDataDate ?? start}T00:00:00.000Z`,

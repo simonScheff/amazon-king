@@ -27,6 +27,7 @@ import {
   formatDateTime,
   formatMoney,
   labelize,
+  percentChange,
 } from "../lib/format";
 import { resolveCountry } from "../lib/marketplaces";
 import { useSpendSortedMarketplaces } from "../lib/use-spend-sorted-marketplaces";
@@ -69,6 +70,12 @@ export function OverviewPage() {
 
   const currency = summary.data?.currency ?? "USD";
   const totals = summary.data?.totals;
+  const previousTotals = summary.data?.previous.totals;
+  const deltaLabel = `vs previous ${days}d`;
+
+  // Display-only conversion of decimal strings for the delta calculation.
+  const num = (value: string | null | undefined): number | null =>
+    value == null ? null : Number(value);
 
   // KPI cards double as toggles for the trend chart series.
   const [visibleSeries, setVisibleSeries] = useState<ReadonlySet<TrendSeries>>(
@@ -172,33 +179,59 @@ export function OverviewPage() {
             <KpiCard
               label="Spend"
               value={formatMoney(totals?.cost, currency)}
+              delta={percentChange(
+                num(totals?.cost),
+                num(previousTotals?.cost),
+              )}
+              deltaGoodWhenUp={false}
+              deltaLabel={deltaLabel}
               {...seriesProps("spend")}
             />
             <KpiCard
               label="Sales"
               value={formatMoney(totals?.sales, currency)}
+              delta={percentChange(
+                num(totals?.sales),
+                num(previousTotals?.sales),
+              )}
+              deltaLabel={deltaLabel}
               {...seriesProps("sales")}
             />
             <KpiCard
               label="Orders"
               value={formatCount(totals?.orders)}
+              delta={percentChange(totals?.orders, previousTotals?.orders)}
+              deltaLabel={deltaLabel}
               {...seriesProps("orders")}
             />
             <KpiCard
               label="ACoS"
               value={formatAcos(totals?.acos)}
+              delta={percentChange(totals?.acos, previousTotals?.acos)}
+              deltaGoodWhenUp={false}
+              deltaLabel={deltaLabel}
               {...seriesProps("acos")}
             />
             <KpiCard
               label="Est. royalty"
               value={formatMoney(totals?.estimatedRoyalty, currency)}
               missing={summary.data.economicsMissing}
+              delta={percentChange(
+                num(totals?.estimatedRoyalty),
+                num(previousTotals?.estimatedRoyalty),
+              )}
+              deltaLabel={deltaLabel}
               {...seriesProps("royalty", summary.data.economicsMissing)}
             />
             <KpiCard
               label="Est. ad profit"
               value={formatMoney(totals?.estimatedAdProfit, currency)}
               missing={summary.data.economicsMissing}
+              delta={percentChange(
+                num(totals?.estimatedAdProfit),
+                num(previousTotals?.estimatedAdProfit),
+              )}
+              deltaLabel={deltaLabel}
               {...seriesProps("profit", summary.data.economicsMissing)}
             />
           </div>

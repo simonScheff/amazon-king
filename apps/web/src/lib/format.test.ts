@@ -5,7 +5,9 @@ import {
   formatDate,
   formatDateTime,
   formatMoney,
+  formatPercentChange,
   labelize,
+  percentChange,
 } from "./format";
 
 describe("formatMoney", () => {
@@ -57,5 +59,39 @@ describe("formatDate / formatDateTime", () => {
 describe("labelize", () => {
   it("turns enum values into labels", () => {
     expect(labelize("wasteful_search_term")).toBe("Wasteful Search Term");
+  });
+});
+
+describe("percentChange", () => {
+  it("returns the change as a fraction of |previous|", () => {
+    expect(percentChange(112, 100)).toBeCloseTo(0.12);
+    expect(percentChange(90, 100)).toBeCloseTo(-0.1);
+    expect(percentChange(100, 100)).toBe(0);
+  });
+
+  it("keeps the direction sensible for negative bases (profit)", () => {
+    // -50 vs -100 is a 50% improvement, not -50%.
+    expect(percentChange(-50, -100)).toBeCloseTo(0.5);
+    expect(percentChange(-150, -100)).toBeCloseTo(-0.5);
+  });
+
+  it("returns null when there is no meaningful previous base", () => {
+    expect(percentChange(10, 0)).toBeNull();
+    expect(percentChange(10, null)).toBeNull();
+    expect(percentChange(null, 10)).toBeNull();
+    expect(percentChange(undefined, 10)).toBeNull();
+    expect(percentChange(Number.NaN, 10)).toBeNull();
+  });
+});
+
+describe("formatPercentChange", () => {
+  it("renders a signed percentage", () => {
+    expect(formatPercentChange(0.1234)).toBe("+12.3%");
+    expect(formatPercentChange(-0.041)).toBe("-4.1%");
+    expect(formatPercentChange(0)).toBe("0.0%");
+  });
+
+  it("never renders '-0.0%'", () => {
+    expect(formatPercentChange(-0.0001)).toBe("0.0%");
   });
 });

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { formatPercentChange } from "../lib/format";
 
 interface KpiCardProps {
   label: string;
@@ -6,6 +7,15 @@ interface KpiCardProps {
   hint?: ReactNode;
   /** When true, show an "economics missing" placeholder instead of a value. */
   missing?: boolean;
+  /**
+   * Period-over-period change as a fraction (0.12 = +12%); null/undefined
+   * hides the delta (no previous-period base).
+   */
+  delta?: number | null;
+  /** Whether an increase is the good outcome. False for spend/ACoS. */
+  deltaGoodWhenUp?: boolean;
+  /** Comparison label shown after the delta, e.g. "vs previous 7d". */
+  deltaLabel?: string;
   /** Series color shown next to the label when the card toggles a chart line. */
   swatch?: string;
   /** Whether the linked chart series is currently visible. */
@@ -19,6 +29,9 @@ export function KpiCard({
   value,
   hint,
   missing = false,
+  delta,
+  deltaGoodWhenUp = true,
+  deltaLabel,
   swatch,
   active = true,
   onToggle,
@@ -30,6 +43,15 @@ export function KpiCard({
       : "border-zinc-800/60 bg-zinc-900/50 opacity-55 hover:border-zinc-700 hover:opacity-80",
     onToggle ? "cursor-pointer" : "",
   ].join(" ");
+
+  const showDelta = !missing && delta !== null && delta !== undefined;
+  const deltaTone = !showDelta
+    ? ""
+    : Math.abs(delta) < 0.0005
+      ? "text-zinc-500"
+      : delta > 0 === deltaGoodWhenUp
+        ? "text-emerald-300"
+        : "text-red-300";
 
   const body = (
     <>
@@ -52,6 +74,15 @@ export function KpiCard({
           {value}
         </p>
       )}
+      {showDelta ? (
+        <p className={`mt-1 text-xs font-medium ${deltaTone}`}>
+          <span aria-hidden>{delta > 0 ? "▲" : delta < 0 ? "▼" : "•"}</span>{" "}
+          {formatPercentChange(delta)}
+          {deltaLabel ? (
+            <span className="font-normal text-zinc-500"> {deltaLabel}</span>
+          ) : null}
+        </p>
+      ) : null}
       {hint ? <p className="mt-1 text-xs text-zinc-500">{hint}</p> : null}
     </>
   );

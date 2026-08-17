@@ -181,7 +181,9 @@ cors, rate-limit. All §11 routes plus the frontend's contract extensions
 (`GET /api/change-sets`, cannibalization comparison + campaign-level
 negative-exact/negative-target draft creation, `csrfToken` on the session
 response, dashboard
-`daily` series + `writesDisabled`, `amazonConsoleUrl` on campaign
+`daily` series + `writesDisabled` + `previous` (totals for the immediately
+preceding window of the same length, powering the period-over-period
+percentage deltas on the overview KPI cards), `amazonConsoleUrl` on campaign
 list/detail payloads (built from the profile's `account_id` entity id, null
 when absent), and the cross-campaign search-term
 screens: `GET /api/search-terms` + `GET /api/search-terms/:term` (detail
