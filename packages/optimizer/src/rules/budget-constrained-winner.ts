@@ -1,4 +1,4 @@
-import { estimatedAdProfit } from "../calc.js";
+import { estimatedAdProfit, royaltyCopies } from "../calc.js";
 import {
   formatMoney,
   microsToDecimalString,
@@ -13,7 +13,7 @@ import {
 } from "./types.js";
 
 export const BUDGET_CONSTRAINED_WINNER_RULE_VERSION =
-  "budget_constrained_winner@1";
+  "budget_constrained_winner@2";
 
 export interface BudgetConstrainedWinnerInput {
   campaignId: string;
@@ -25,10 +25,11 @@ export interface BudgetConstrainedWinnerInput {
 }
 
 /**
- * budget_constrained_winner@1 — a profitable campaign is regularly budget
+ * budget_constrained_winner@2 — a profitable campaign is regularly budget
  * constrained (spend >= 90% of daily budget on enough days) → suggest a
  * budget increase, capped by the configured increase percentage and the
- * profile's max daily budget (docs/plan.md §9).
+ * profile's max daily budget (docs/plan.md §9). Version 2 values royalty on
+ * copies sold instead of orders.
  *
  * Profitability requires KDP economics — it is never inferred from revenue
  * alone, so the rule does not fire when economics are missing.
@@ -48,8 +49,9 @@ export function evaluateBudgetConstrainedWinner(
   ).length;
   if (constrainedDays < minConstrainedDays) return null;
 
+  const copies = royaltyCopies(input.metrics.orders, input.metrics.units);
   const profitMicros = estimatedAdProfit(
-    input.metrics.orders,
+    copies,
     ctx.royaltyPerSaleMicros,
     input.metrics.costMicros,
   );
@@ -92,6 +94,8 @@ export function evaluateBudgetConstrainedWinner(
       minConstrainedDays,
       increasePct,
       orders: input.metrics.orders,
+      units: input.metrics.units ?? 0,
+      royaltyCopies: copies,
       costMicros: input.metrics.costMicros,
       royaltyPerSaleMicros: ctx.royaltyPerSaleMicros,
       profitMicros,

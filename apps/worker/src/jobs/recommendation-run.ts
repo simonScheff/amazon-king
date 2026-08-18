@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   aggregateWindow,
   addDays,
+  blockedCampaignIds,
   formatIsoDate,
   microsFromDecimalString,
   rankRecommendations,
@@ -107,7 +108,7 @@ export function createRecommendationRunHandler(deps: JobDeps): JobHandler {
       ).toISOString(),
     );
 
-    const drafts = evaluateAllRules({
+    const { drafts, resolvedCannibalizationTerms } = evaluateAllRules({
       profile,
       structure,
       facts,
@@ -117,6 +118,18 @@ export function createRecommendationRunHandler(deps: JobDeps): JobHandler {
       endDate,
       nowIso,
     });
+
+    let resolved = 0;
+    for (const searchTerm of resolvedCannibalizationTerms) {
+      resolved += await deps.store.expirePendingRecommendations({
+        profileId: profile.id,
+        type: "cannibalization_conflict",
+        campaignId: null,
+        adGroupId: null,
+        targetId: null,
+        searchTerm,
+      });
+    }
 
     // Dedupe across windows: same rule + same entity keeps the highest impact.
     const deduped = new Map<string, RecommendationDraft>();
@@ -131,6 +144,7 @@ export function createRecommendationRunHandler(deps: JobDeps): JobHandler {
 
     let inserted = 0;
     let skippedExisting = 0;
+    let skippedDismissed = 0;
     for (const draft of ranked) {
       const identity = {
         profileId: profile.id,
@@ -140,6 +154,10 @@ export function createRecommendationRunHandler(deps: JobDeps): JobHandler {
         targetId: draft.targetId,
         searchTerm: draft.searchTerm,
       };
+      if (await deps.store.recommendationDismissed(identity)) {
+        skippedDismissed += 1;
+        continue;
+      }
       if (await deps.store.pendingRecommendationExists(identity)) {
         skippedExisting += 1;
         continue;
@@ -174,7 +192,15 @@ export function createRecommendationRunHandler(deps: JobDeps): JobHandler {
       inserted += 1;
     }
     logger.info(
-      { profileId, expired, drafts: ranked.length, inserted, skippedExisting },
+      {
+        profileId,
+        expired,
+        resolved,
+        drafts: ranked.length,
+        inserted,
+        skippedExisting,
+        skippedDismissed,
+      },
       "Recommendation run completed",
     );
   };
@@ -207,14 +233,24 @@ function toDailyRows(facts: readonly DailyFact[]): DailyMetricRow[] {
     impressions: fact.impressions,
     clicks: fact.clicks,
     orders: fact.orders,
+    units: fact.units,
     costMicros: fact.costMicros,
     salesMicros: fact.salesMicros,
   }));
 }
 
-export function evaluateAllRules(
-  inputs: EvaluationInputs,
-): RecommendationDraft[] {
+export interface EvaluationResult {
+  drafts: RecommendationDraft[];
+  /**
+   * Search terms that would have been cannibalization conflicts if negatives
+   * did not already block enough campaigns. Findings raised by earlier runs
+   * are expired so a resolved conflict leaves the inbox immediately instead of
+   * lingering until `expires_at`.
+   */
+  resolvedCannibalizationTerms: string[];
+}
+
+export function evaluateAllRules(inputs: EvaluationInputs): EvaluationResult {
   const { structure, facts, economics, currency, endDate, nowIso } = inputs;
   // TODO(protected-entities): the schema has no `protected_entities` table yet
   // (checked migrations/0001_initial.sql). Until one exists, the protected
@@ -296,6 +332,7 @@ export function evaluateAllRules(
   const push = (draft: RecommendationDraft | null): void => {
     if (draft) drafts.push(draft);
   };
+  const resolvedTerms = new Set<string>();
 
   const exactKeywordTerms = new Set(
     structure.targets
@@ -427,14 +464,24 @@ export function evaluateAllRules(
     );
     for (const [term, rows] of termsAcrossCampaigns) {
       if (term === "") continue;
-      const perCampaign = groupBy(
-        rows.filter((row) => row.costMicros > 0 || row.orders > 0),
-        (row) => row.campaignAmazonId,
+      // Only spend inside this evidence window counts: a campaign that stopped
+      // serving the term must drop out of the conflict as the window moves on.
+      const windowRows = rows.filter(
+        (row) => inWindow(row) && (row.costMicros > 0 || row.orders > 0),
       );
+      if (windowRows.length === 0) continue;
+      const perCampaign = groupBy(windowRows, (row) => row.campaignAmazonId);
+      const servingAdGroups = new Map<string, Set<string>>();
       const campaigns = [...perCampaign.entries()]
         .map(([amazonCampaignId, campaignRows]) => {
           const campaign = campaignByAmazonId.get(amazonCampaignId);
           if (!campaign) return null;
+          const adGroupIds = new Set<string>();
+          for (const row of campaignRows) {
+            const adGroupId = targetByAmazonId.get(row.entityKey)?.adGroupId;
+            if (adGroupId) adGroupIds.add(adGroupId);
+          }
+          servingAdGroups.set(campaign.id, adGroupIds);
           const totals = aggregate(campaignRows);
           return {
             campaignId: campaign.id,
@@ -443,9 +490,26 @@ export function evaluateAllRules(
           };
         })
         .filter((entry) => entry !== null);
+      const searchTerm = windowRows[0]!.subKey ?? term;
+      const blocked = blockedCampaignIds(
+        searchTerm,
+        structure.negativeKeywords,
+        servingAdGroups,
+      );
+      const withBlocked = campaigns.map((entry) => ({
+        ...entry,
+        blockedByNegative: blocked.has(entry.campaignId),
+      }));
+      if (
+        blocked.size > 0 &&
+        withBlocked.filter((entry) => !entry.blockedByNegative).length <
+          config.cannibalizationConflict.minCampaigns
+      ) {
+        resolvedTerms.add(searchTerm);
+      }
       push(
         evaluateCannibalizationConflict(
-          { searchTerm: rows[0]!.subKey ?? term, campaigns },
+          { searchTerm, campaigns: withBlocked },
           contextFor(null, window),
         ),
       );
@@ -508,7 +572,19 @@ export function evaluateAllRules(
     }
   }
 
-  return drafts;
+  // A term still flagged in any window is not resolved, however quiet the
+  // shorter windows are.
+  const flaggedTerms = new Set(
+    drafts
+      .filter((draft) => draft.type === "cannibalization_conflict")
+      .map((draft) => draft.searchTerm),
+  );
+  return {
+    drafts,
+    resolvedCannibalizationTerms: [...resolvedTerms].filter(
+      (term) => !flaggedTerms.has(term),
+    ),
+  };
 }
 
 function groupBy<T>(

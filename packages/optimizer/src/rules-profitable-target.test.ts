@@ -149,6 +149,30 @@ describe("evaluateProfitableTarget", () => {
     expect(draft).toBeNull();
   });
 
+  it("earns a royalty per copy, not per order", () => {
+    // 10 orders shipping 16 copies at $4 royalty against $20 spend: valuing
+    // orders reports $20 of profit, valuing copies the real $44.
+    const metrics = makeMetrics({
+      clicks: 50,
+      orders: 10,
+      units: 16,
+      costMicros: 20_000_000,
+      salesMicros: 100_000_000,
+    });
+    const draft = evaluateProfitableTarget(
+      { ...baseInput, metrics },
+      makeContext(),
+    )!;
+    expect(draft).not.toBeNull();
+    expect(draft.impactMicros).toBe(44_000_000);
+    expect(draft.evidenceInputs).toMatchObject({
+      orders: 10,
+      units: 16,
+      royaltyCopies: 16,
+      profitMicros: 44_000_000,
+    });
+  });
+
   it("never proposes a bid change on a protected campaign", () => {
     const ctx = makeContext({}, { protectedCampaignIds: ["camp-1"] });
     expect(evaluateProfitableTarget(baseInput, ctx)).toBeNull();

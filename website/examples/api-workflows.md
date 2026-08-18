@@ -155,7 +155,7 @@ curl -s -b ak.cookies \
     "confidence": 0.82,
     "evidenceWindow": { "start": "2026-07-17", "end": "2026-08-15" },
     "dataFreshness": "2026-08-16T06:12:44.000Z",
-    "ruleVersion": "expensive_target@1",
+    "ruleVersion": "expensive_target@2",
     "expiresAt": "2026-08-19T06:12:44.000Z",
     "createdAt": "2026-08-16T06:12:44.000Z"
   }

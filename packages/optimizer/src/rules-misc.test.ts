@@ -451,4 +451,49 @@ describe("evaluateCannibalizationConflict", () => {
     )!;
     expect(four.confidence).toBe(1);
   });
+
+  it("does not fire once a negative leaves only one competing campaign", () => {
+    expect(
+      evaluateCannibalizationConflict(
+        {
+          ...baseInput,
+          campaigns: [
+            baseInput.campaigns[0]!,
+            { ...baseInput.campaigns[1]!, blockedByNegative: true },
+          ],
+        },
+        makeContext(),
+      ),
+    ).toBeNull();
+  });
+
+  it("excludes blocked campaigns from spend, rationale, and evidence", () => {
+    const draft = evaluateCannibalizationConflict(
+      {
+        ...baseInput,
+        campaigns: [
+          ...baseInput.campaigns,
+          { campaignId: "camp-3", orders: 0, costMicros: 5_000_000 },
+          {
+            campaignId: "camp-4",
+            orders: 2,
+            costMicros: 7_000_000,
+            blockedByNegative: true,
+          },
+        ],
+      },
+      makeContext(),
+    )!;
+    expect(draft.impactMicros).toBe(23_000_000);
+    expect(draft.rationale).toContain("3 campaigns");
+    expect(draft.rationale).not.toContain("camp-4");
+    expect(draft.evidenceInputs.excludedCampaigns).toEqual([
+      {
+        campaignId: "camp-4",
+        orders: 2,
+        costMicros: 7_000_000,
+        blockedByNegative: true,
+      },
+    ]);
+  });
 });

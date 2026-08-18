@@ -35,18 +35,33 @@ export function conversionRate(orders: number, clicks: number): number | null {
 }
 
 /**
- * Estimated ad profit = (orders x royalty per sale) - ad cost, in micros.
- * Exact integer arithmetic; may be negative.
+ * Estimated ad profit = (copies x royalty per sale) - ad cost, in micros.
+ * Exact integer arithmetic; may be negative. Pass `royaltyCopies(...)` rather
+ * than raw orders: KDP pays per copy, so a multi-copy order earns a royalty
+ * per copy.
  */
 export function estimatedAdProfit(
-  orders: number,
+  copies: number,
   royaltyPerSaleMicros: number,
   costMicros: number,
 ): number {
-  assertNonNegative(orders, "orders");
+  assertNonNegative(copies, "copies");
   assertNonNegative(royaltyPerSaleMicros, "royaltyPerSaleMicros");
   assertNonNegative(costMicros, "costMicros");
-  return orders * royaltyPerSaleMicros - costMicros;
+  return copies * royaltyPerSaleMicros - costMicros;
+}
+
+/**
+ * Copies a royalty is earned on over a window. Amazon reports orders and units
+ * separately and never fewer units than orders, so an order of three copies
+ * shows one order and three units. Units are absent (0 while orders are
+ * positive) on facts imported before the units columns existed, in which case
+ * this degrades to orders rather than erasing the royalty entirely.
+ */
+export function royaltyCopies(orders: number, units = 0): number {
+  assertNonNegative(orders, "orders");
+  assertNonNegative(units, "units");
+  return Math.max(orders, units);
 }
 
 /**
@@ -198,6 +213,8 @@ export interface DailyMetricRow {
   impressions: number;
   clicks: number;
   orders: number;
+  /** Copies sold; 0 on facts imported before the units columns existed. */
+  units?: number;
   costMicros: number;
   salesMicros: number;
 }
@@ -209,6 +226,7 @@ export interface WindowTotals {
   impressions: number;
   clicks: number;
   orders: number;
+  units: number;
   costMicros: number;
   salesMicros: number;
 }
@@ -252,6 +270,7 @@ export function aggregateWindow(
     impressions: 0,
     clicks: 0,
     orders: 0,
+    units: 0,
     costMicros: 0,
     salesMicros: 0,
   };
@@ -262,6 +281,7 @@ export function aggregateWindow(
     totals.impressions += row.impressions;
     totals.clicks += row.clicks;
     totals.orders += row.orders;
+    totals.units += row.units ?? 0;
     totals.costMicros += row.costMicros;
     totals.salesMicros += row.salesMicros;
   }

@@ -315,8 +315,8 @@ export function CannibalizationResolution({
                 </label>
               </div>
               <p className="border-t border-zinc-800 bg-zinc-900/40 px-4 py-2.5 text-xs text-zinc-500">
-                ACoS is not present in the version 1 rule evidence, so this
-                screen does not automatically suggest a winner.
+                ACoS is not present in the rule evidence, so this screen does
+                not automatically suggest a winner.
               </p>
             </div>
           </section>

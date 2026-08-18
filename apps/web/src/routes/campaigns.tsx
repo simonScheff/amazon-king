@@ -162,7 +162,7 @@ export function CampaignsPage() {
                 : "No campaigns imported yet. Connect Amazon Ads and run a sync first."}
           </EmptyState>
         ) : (
-          <Table>
+          <Table stickyHeader>
             <thead>
               <tr>
                 <SortableTh

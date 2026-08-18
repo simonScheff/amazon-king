@@ -21,7 +21,7 @@ function recommendation(
     confidence: 0.5,
     evidenceWindow: { start: "2026-06-14", end: "2026-08-12" },
     dataFreshness: "2026-08-13T02:01:00.000Z",
-    ruleVersion: "cannibalization_conflict@1",
+    ruleVersion: "cannibalization_conflict@2",
     expiresAt: "2026-08-16T02:01:00.000Z",
     createdAt: "2026-08-13T02:01:00.000Z",
     ...overrides,

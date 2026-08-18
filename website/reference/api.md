@@ -443,7 +443,7 @@ Response `200`: array of Recommendation:
 | confidence                       | number 0–1        |                                           |
 | evidenceWindow                   | `{start, end}`    | ISO dates                                 |
 | dataFreshness, expiresAt, createdAt | timestamp      |                                           |
-| ruleVersion                      | string            | e.g. `expensive_target@1`                 |
+| ruleVersion                      | string            | e.g. `expensive_target@2`                 |
 
 ### `GET /api/recommendations/:id`
 

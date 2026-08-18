@@ -20,8 +20,8 @@ new advice.
 
 Each run:
 
-1. Loads the profile's structure, daily metrics, your
-   [book economics](/guide/book-economics), and recent applied changes
+1. Loads the profile's structure, its synced negative keywords, daily metrics,
+   your [book economics](/guide/book-economics), and recent applied changes
    (cooldowns).
 2. Evaluates all **nine versioned rules** over four evidence windows —
    7, 14, 30, and 60 days.
@@ -29,9 +29,12 @@ Each run:
    keeps only the highest-impact draft.
 4. Skips any identity that already has a **pending** recommendation, so the
    queue never piles up duplicates of a finding you have not reviewed yet.
-5. Expires stale pending recommendations first: each recommendation is
+5. Skips any identity you **rejected**, for 60 days after the rejection.
+6. Expires stale pending recommendations first: each recommendation is
    created with `expires_at` three days out and transitions
-   `pending → expired` once stale.
+   `pending → expired` once stale. A pending cannibalization finding is also
+   expired as soon as a negative keyword resolves it, rather than waiting out
+   those three days.
 
 Every stored recommendation records its rule version, exact evidence inputs,
 evidence window, and data-freshness timestamp, so any finding can be traced
@@ -104,7 +107,10 @@ be created" and offers **Dismiss finding**.
   moves to `approved` and the new draft waits in the
   [Change center](/guide/applying-changes). Nothing has been sent to Amazon
   at this point.
-- **Reject** — the finding moves to `rejected`; no change set is created.
+- **Reject** — the finding moves to `rejected`; no change set is created. The
+  finding is also recorded as dismissed, so later runs stay quiet about that
+  exact identity for 60 days (the longest evidence window) instead of raising
+  it again from the same metrics.
 - **Dismiss finding** — the review-only equivalent of reject.
 
 All transitions are audited.

@@ -165,7 +165,7 @@ export function SearchTermsPage() {
                   : "No search terms imported yet. Connect Amazon Ads and run a sync first."}
           </EmptyState>
         ) : (
-          <Table>
+          <Table stickyHeader>
             <thead>
               <tr>
                 <SortableTh

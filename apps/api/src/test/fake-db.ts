@@ -23,6 +23,7 @@ export interface FakeTables {
   targets: FakeRow[];
   recommendations: FakeRow[];
   recommendationEvidence: FakeRow[];
+  recommendationDismissals: FakeRow[];
   changeSets: FakeRow[];
   changeActions: FakeRow[];
   campaignBidPolicies: FakeRow[];
@@ -48,6 +49,7 @@ function emptyTables(): FakeTables {
     targets: [],
     recommendations: [],
     recommendationEvidence: [],
+    recommendationDismissals: [],
     changeSets: [],
     changeActions: [],
     campaignBidPolicies: [],
@@ -774,6 +776,56 @@ export class FakeDb {
           if (!row) return { rows: [], rowCount: 0 };
           row.state = p[2];
           return { rows: [row], rowCount: 1 };
+        },
+      },
+      {
+        match: "insert into recommendation_dismissals",
+        handle: (p) => {
+          const searchTerm =
+            typeof p[5] === "string" ? p[5].trim().toLowerCase() || null : null;
+          const identity = {
+            profile_id: p[0],
+            type: p[1],
+            campaign_id: p[2],
+            ad_group_id: p[3],
+            target_id: p[4],
+            search_term: searchTerm,
+          };
+          const existing = t.recommendationDismissals.find((row) =>
+            Object.entries(identity).every(
+              ([key, value]) => row[key] === value,
+            ),
+          );
+          const dismissal = {
+            ...identity,
+            recommendation_id: p[6],
+            dismissed_at: new Date(),
+            dismissed_until: p[7],
+          };
+          if (existing) Object.assign(existing, dismissal);
+          else t.recommendationDismissals.push(dismissal);
+          return this.ok();
+        },
+      },
+      {
+        match: "from recommendation_dismissals",
+        handle: (p) => {
+          const searchTerm =
+            typeof p[5] === "string" ? p[5].trim().toLowerCase() || null : null;
+          const now = p[6] ? new Date(p[6] as string) : new Date();
+          return this.ok(
+            t.recommendationDismissals.filter(
+              (row) =>
+                row.profile_id === p[0] &&
+                row.type === p[1] &&
+                row.campaign_id === p[2] &&
+                row.ad_group_id === p[3] &&
+                row.target_id === p[4] &&
+                row.search_term === searchTerm &&
+                (row.dismissed_until === null ||
+                  new Date(row.dismissed_until as string) > now),
+            ),
+          );
         },
       },
 

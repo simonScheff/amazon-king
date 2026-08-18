@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { ApiError } from "../api/client";
 import { useDashboardSummary, useLogout, useSession } from "../api/endpoints";
@@ -83,6 +83,19 @@ const SignOutIcon = makeIcon(
     <path d="M21 12H9" />
   </>,
 );
+const MenuIcon = makeIcon(
+  <>
+    <path d="M4 7h16" />
+    <path d="M4 12h16" />
+    <path d="M4 17h16" />
+  </>,
+);
+const CloseIcon = makeIcon(
+  <>
+    <path d="M6 6l12 12" />
+    <path d="M18 6 6 18" />
+  </>,
+);
 
 const navItems = [
   { to: "/", label: "Overview", Icon: OverviewIcon },
@@ -128,10 +141,12 @@ function Sidebar({
   collapsed,
   onToggleCollapse,
   onNavigate,
+  onClose,
 }: {
   collapsed?: boolean;
   onToggleCollapse?: () => void;
   onNavigate?: () => void;
+  onClose?: () => void;
 }) {
   const logout = useLogout();
   const navigate = useNavigate();
@@ -164,6 +179,16 @@ function Sidebar({
         >
           Amazon King
         </p>
+        {onClose && (
+          <button
+            type="button"
+            aria-label="Close navigation"
+            onClick={onClose}
+            className="-mr-1 ml-auto flex h-9 w-9 items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 md:hidden"
+          >
+            <CloseIcon />
+          </button>
+        )}
       </div>
       {navItems.map(({ to, label, Icon }) => (
         <Link
@@ -294,6 +319,22 @@ export function AppLayout() {
       localStorage.setItem(COLLAPSED_STORAGE_KEY, next ? "1" : "0");
       return next;
     });
+  const closeNav = useCallback(() => setNavOpen(false), []);
+
+  useEffect(() => {
+    if (!navOpen) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setNavOpen(false);
+    }
+    document.addEventListener("keydown", onKeyDown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [navOpen]);
+
   return (
     <ToastProvider>
       <SessionGate>
@@ -302,22 +343,34 @@ export function AppLayout() {
           <div className="flex">
             <button
               type="button"
-              aria-label="Toggle navigation"
+              aria-label="Open navigation"
+              aria-controls="app-sidebar"
               aria-expanded={navOpen}
-              onClick={() => setNavOpen((v) => !v)}
-              className="fixed left-3 top-3 z-40 rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-sm shadow-sm md:hidden"
+              onClick={() => setNavOpen(true)}
+              className={`fixed left-3 top-3 z-40 h-10 w-10 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-300 shadow-sm md:hidden ${
+                navOpen ? "hidden" : "flex"
+              }`}
             >
-              ☰
+              <MenuIcon />
             </button>
+            {navOpen && (
+              <div
+                aria-hidden="true"
+                onClick={closeNav}
+                className="fixed inset-0 z-20 bg-black/60 md:hidden"
+              />
+            )}
             <aside
-              className={`fixed inset-y-0 left-0 z-30 border-r border-zinc-800 bg-zinc-900/95 backdrop-blur transition-[transform,width] md:translate-x-0 ${
-                navOpen ? "translate-x-0" : "-translate-x-full"
+              id="app-sidebar"
+              className={`fixed inset-y-0 left-0 z-30 border-r border-zinc-800 bg-zinc-900/95 backdrop-blur transition-[transform,width,visibility] md:visible md:translate-x-0 ${
+                navOpen ? "translate-x-0" : "invisible -translate-x-full"
               } w-60 ${sidebarCollapsed ? "md:w-16" : "md:w-60"}`}
             >
               <Sidebar
                 collapsed={sidebarCollapsed}
                 onToggleCollapse={toggleSidebar}
-                onNavigate={() => setNavOpen(false)}
+                onNavigate={closeNav}
+                onClose={closeNav}
               />
             </aside>
             <div

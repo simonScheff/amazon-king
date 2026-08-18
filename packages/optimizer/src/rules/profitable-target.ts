@@ -2,6 +2,7 @@ import {
   acos,
   estimatedAdProfit,
   proposedBid,
+  royaltyCopies,
   smoothedConversionRate,
 } from "../calc.js";
 import { formatMoney, microsToDecimalString } from "../money.js";
@@ -15,7 +16,7 @@ import {
   type RuleContext,
 } from "./types.js";
 
-export const PROFITABLE_TARGET_RULE_VERSION = "profitable_target@1";
+export const PROFITABLE_TARGET_RULE_VERSION = "profitable_target@2";
 
 export interface ProfitableTargetInput {
   targetId: string;
@@ -27,10 +28,11 @@ export interface ProfitableTargetInput {
 }
 
 /**
- * profitable_target@1 — multiple orders, positive estimated ad profit, and
+ * profitable_target@2 — multiple orders, positive estimated ad profit, and
  * ACoS safely (<= 0.8x) below target → raise the bid cautiously, clamped to
  * at most +15% and capped by the profit-ceiling CPC and the configured max
- * bid (docs/plan.md §9).
+ * bid (docs/plan.md §9). Version 2 values royalty on copies sold instead of
+ * orders, so multi-copy orders are no longer treated as a single royalty.
  *
  * Requires KDP book economics — never infers profitability from revenue
  * alone. Suppressed for protected campaigns and during the cooldown after a
@@ -49,7 +51,7 @@ export function evaluateProfitableTarget(
   }
 
   const { minClicks, minOrders, acosMultiplier } = ctx.config.profitableTarget;
-  const { clicks, orders, costMicros, salesMicros } = input.metrics;
+  const { clicks, orders, units, costMicros, salesMicros } = input.metrics;
   if (clicks < minClicks || orders < minOrders) return null;
 
   const targetAcos = ctx.targetAcos as number;
@@ -58,8 +60,9 @@ export function evaluateProfitableTarget(
   if (observedAcos === null || observedAcos > acosMultiplier * targetAcos) {
     return null;
   }
+  const copies = royaltyCopies(orders, units);
   const profitMicros = estimatedAdProfit(
-    orders,
+    copies,
     royaltyPerSaleMicros,
     costMicros,
   );
@@ -114,6 +117,8 @@ export function evaluateProfitableTarget(
       currentBidMicros: input.currentBidMicros,
       clicks,
       orders,
+      units: units ?? 0,
+      royaltyCopies: copies,
       costMicros,
       salesMicros,
       observedAcos,

@@ -69,12 +69,14 @@ export class FakeStore implements WorkerStore {
   syncRuns: SyncRunRecord[] = [];
   jobs: QueuedJob[] = [];
   recommendations: RecommendationInsertInput[] = [];
+  dismissals: RecommendationIdentity[] = [];
   refreshTokens = new Map<string, { ciphertext: Buffer; keyVersion: number }>();
   structure: StructureData = {
     campaigns: [],
     adGroups: [],
     ads: [],
     targets: [],
+    negativeKeywords: [],
   };
   facts = {
     campaign: [] as DailyFact[],
@@ -336,19 +338,46 @@ export class FakeStore implements WorkerStore {
     return this.expiredCount;
   }
   async pendingRecommendationExists(identity: RecommendationIdentity) {
-    return this.recommendations.some(
-      (rec) =>
-        rec.profileId === identity.profileId &&
-        rec.type === identity.type &&
-        (rec.campaignId ?? null) === identity.campaignId &&
-        (rec.adGroupId ?? null) === identity.adGroupId &&
-        (rec.targetId ?? null) === identity.targetId &&
-        (rec.searchTerm ?? null) === identity.searchTerm,
+    return this.recommendations.some((rec) =>
+      sameRecommendationIdentity(rec, identity),
     );
+  }
+  async recommendationDismissed(identity: RecommendationIdentity) {
+    return this.dismissals.some((dismissed) =>
+      sameRecommendationIdentity(dismissed, identity),
+    );
+  }
+  async expirePendingRecommendations(identity: RecommendationIdentity) {
+    const before = this.recommendations.length;
+    this.recommendations = this.recommendations.filter(
+      (rec) => !sameRecommendationIdentity(rec, identity),
+    );
+    return before - this.recommendations.length;
   }
   async insertRecommendation(input: RecommendationInsertInput) {
     this.recommendations.push(input);
   }
+}
+
+function sameRecommendationIdentity(
+  candidate: {
+    profileId: string;
+    type: string;
+    campaignId?: string | null;
+    adGroupId?: string | null;
+    targetId?: string | null;
+    searchTerm?: string | null;
+  },
+  identity: RecommendationIdentity,
+): boolean {
+  return (
+    candidate.profileId === identity.profileId &&
+    candidate.type === identity.type &&
+    (candidate.campaignId ?? null) === identity.campaignId &&
+    (candidate.adGroupId ?? null) === identity.adGroupId &&
+    (candidate.targetId ?? null) === identity.targetId &&
+    (candidate.searchTerm ?? null) === identity.searchTerm
+  );
 }
 
 function grainKeyOf(facts: MetricFactRows, row: unknown): string {

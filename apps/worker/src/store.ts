@@ -127,11 +127,21 @@ export interface TargetRow {
   state: string;
 }
 
+/** Synced Amazon negative keyword; `adGroupId` null = campaign level. */
+export interface NegativeKeywordRow {
+  campaignId: string;
+  adGroupId: string | null;
+  keywordText: string;
+  matchType: string;
+  state: string;
+}
+
 export interface StructureData {
   campaigns: CampaignRow[];
   adGroups: AdGroupRow[];
   ads: AdRow[];
   targets: TargetRow[];
+  negativeKeywords: NegativeKeywordRow[];
 }
 
 /** One daily metric row in micros, keyed by Amazon entity id (as stored in the fact tables). */
@@ -145,6 +155,8 @@ export interface DailyFact {
   impressions: number;
   clicks: number;
   orders: number;
+  /** Copies sold; 0 on facts imported before the units columns existed. */
+  units: number;
   costMicros: number;
   salesMicros: number;
 }
@@ -298,6 +310,12 @@ export interface WorkerStore {
   pendingRecommendationExists(
     identity: RecommendationIdentity,
   ): Promise<boolean>;
+  /** True when the owner rejected this finding and the suppression still holds. */
+  recommendationDismissed(identity: RecommendationIdentity): Promise<boolean>;
+  /** Expire pending findings that the current run no longer considers valid. */
+  expirePendingRecommendations(
+    identity: RecommendationIdentity,
+  ): Promise<number>;
   insertRecommendation(input: RecommendationInsert): Promise<void>;
 }
 
@@ -695,58 +713,70 @@ export function createDbStore(pool: Pool): WorkerStore {
     },
 
     async loadStructure(profilePk) {
-      const [campaigns, adGroups, ads, targets] = await Promise.all([
-        db.query<{
-          id: string;
-          amazon_campaign_id: string;
-          name: string;
-          state: string;
-          targeting_type: string | null;
-          daily_budget: string | null;
-        }>(
-          `select id::text, amazon_campaign_id, name, state, targeting_type, daily_budget::text
+      const [campaigns, adGroups, ads, targets, negativeKeywords] =
+        await Promise.all([
+          db.query<{
+            id: string;
+            amazon_campaign_id: string;
+            name: string;
+            state: string;
+            targeting_type: string | null;
+            daily_budget: string | null;
+          }>(
+            `select id::text, amazon_campaign_id, name, state, targeting_type, daily_budget::text
            from campaigns where profile_id = $1`,
-          [profilePk],
-        ),
-        db.query<{
-          id: string;
-          campaign_id: string;
-          amazon_ad_group_id: string;
-          state: string;
-          default_bid: string | null;
-        }>(
-          `select id::text, campaign_id::text, amazon_ad_group_id, state, default_bid::text
+            [profilePk],
+          ),
+          db.query<{
+            id: string;
+            campaign_id: string;
+            amazon_ad_group_id: string;
+            state: string;
+            default_bid: string | null;
+          }>(
+            `select id::text, campaign_id::text, amazon_ad_group_id, state, default_bid::text
            from ad_groups where profile_id = $1`,
-          [profilePk],
-        ),
-        db.query<{
-          id: string;
-          ad_group_id: string;
-          amazon_ad_id: string;
-          asin: string;
-          state: string;
-        }>(
-          `select id::text, ad_group_id::text, amazon_ad_id, asin, state
+            [profilePk],
+          ),
+          db.query<{
+            id: string;
+            ad_group_id: string;
+            amazon_ad_id: string;
+            asin: string;
+            state: string;
+          }>(
+            `select id::text, ad_group_id::text, amazon_ad_id, asin, state
            from ads where profile_id = $1`,
-          [profilePk],
-        ),
-        db.query<{
-          id: string;
-          campaign_id: string;
-          ad_group_id: string;
-          amazon_target_id: string;
-          target_kind: string;
-          expression: unknown;
-          match_type: string | null;
-          bid: string | null;
-          state: string;
-        }>(
-          `select id::text, campaign_id::text, ad_group_id::text, amazon_target_id, target_kind,
+            [profilePk],
+          ),
+          db.query<{
+            id: string;
+            campaign_id: string;
+            ad_group_id: string;
+            amazon_target_id: string;
+            target_kind: string;
+            expression: unknown;
+            match_type: string | null;
+            bid: string | null;
+            state: string;
+          }>(
+            `select id::text, campaign_id::text, ad_group_id::text, amazon_target_id, target_kind,
                   expression, match_type, bid::text, state
            from targets where profile_id = $1`,
-          [profilePk],
-        ),
-      ]);
+            [profilePk],
+          ),
+          db.query<{
+            campaign_id: string;
+            ad_group_id: string | null;
+            keyword_text: string;
+            match_type: string;
+            state: string;
+          }>(
+            `select campaign_id::text, ad_group_id::text, keyword_text, match_type, state
+           from negative_keywords where profile_id = $1`,
+            [profilePk],
+          ),
+        ]);
       return {
         campaigns: campaigns.rows.map((row) => ({
           id: row.id,
@@ -781,6 +811,13 @@ export function createDbStore(pool: Pool): WorkerStore {
           bid: row.bid,
           state: row.state,
         })),
+        negativeKeywords: negativeKeywords.rows.map((row) => ({
+          campaignId: row.campaign_id,
+          adGroupId: row.ad_group_id,
+          keywordText: row.keyword_text,
+          matchType: row.match_type,
+          state: row.state,
+        })),
       };
     },
 
@@ -795,11 +832,12 @@ export function createDbStore(pool: Pool): WorkerStore {
           impressions: number;
           clicks: number;
           orders: number;
+          units: number;
           cost: string;
           sales: string;
         }>(
           `select ${grainCols}, metric_date::text, currency, impressions, clicks, orders,
-                cost::text, sales::text
+                units, cost::text, sales::text
          from ${table} where profile_id = $1 and metric_date >= $2`,
           [profilePk, sinceDate],
         );
@@ -812,6 +850,7 @@ export function createDbStore(pool: Pool): WorkerStore {
         impressions: number;
         clicks: number;
         orders: number;
+        units: number;
         cost: string;
         sales: string;
       }): DailyFact => ({
@@ -823,6 +862,7 @@ export function createDbStore(pool: Pool): WorkerStore {
         impressions: row.impressions,
         clicks: row.clicks,
         orders: row.orders,
+        units: row.units,
         costMicros: Math.round(Number(row.cost) * 1_000_000),
         salesMicros: Math.round(Number(row.sales) * 1_000_000),
       });
@@ -933,6 +973,31 @@ export function createDbStore(pool: Pool): WorkerStore {
         ],
       );
       return result.rows.length > 0;
+    },
+
+    recommendationDismissed(identity) {
+      return recommendationsRepo.activeDismissalExists(db, identity);
+    },
+
+    async expirePendingRecommendations(identity) {
+      const result = await db.query<{ id: string }>(
+        `update recommendations set state = 'expired'
+         where state = 'pending' and profile_id = $1 and type = $2
+           and campaign_id is not distinct from $3
+           and ad_group_id is not distinct from $4
+           and target_id is not distinct from $5
+           and search_term is not distinct from $6
+         returning id::text`,
+        [
+          identity.profileId,
+          identity.type,
+          identity.campaignId,
+          identity.adGroupId,
+          identity.targetId,
+          identity.searchTerm,
+        ],
+      );
+      return result.rows.length;
     },
 
     async insertRecommendation(input) {

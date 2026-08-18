@@ -37,6 +37,18 @@ function toTotals(row: RawTotals): TotalsRow {
   };
 }
 
+/**
+ * SQL fragment for the number of copies a royalty is earned on. KDP pays per
+ * copy, so a single order of three copies earns three royalties and `orders`
+ * alone undercounts it. `units` arrived later than `orders` (migration 0010)
+ * and stays 0 on facts imported before it; since Amazon never reports fewer
+ * units than orders, taking the greater of the two degrades to orders on those
+ * rows instead of reporting no royalty at all.
+ */
+function royaltyCopies(alias: string): string {
+  return `greatest(${alias}.units, ${alias}.orders)`;
+}
+
 export interface CampaignRowData {
   campaignPk: string;
   profilePk: string;
@@ -104,6 +116,7 @@ export async function listCampaignRows(
      campaign_days as (
        select profile_id, campaign_id, metric_date,
               sum(orders) as orders,
+              sum(units) as units,
               min(currency)::text as currency,
               count(distinct currency) > 1 as mixed_currency
        from campaign_metrics_daily
@@ -126,7 +139,7 @@ export async function listCampaignRows(
      ),
      royalty_daily as (
        select m.profile_id, m.campaign_id, m.metric_date,
-              sum(m.orders * economics.estimated_royalty_per_sale)
+              sum(${royaltyCopies("m")} * economics.estimated_royalty_per_sale)
                 as estimated_royalty,
               bool_or(economics.estimated_royalty_per_sale is null)
                 as economics_missing,
@@ -176,7 +189,7 @@ export async function listCampaignRows(
                   case
                     when d.orders = 0 then 0
                     when r.metric_date is not null then r.estimated_royalty
-                    else d.orders * fallback.royalty
+                    else ${royaltyCopies("d")} * fallback.royalty
                   end
                 ), 0)::text
               end as estimated_royalty
@@ -467,7 +480,7 @@ export async function listSearchTermRows(
      ),
      royalty_daily as (
        select d.ad_group_id, d.search_term, d.metric_date,
-              d.orders * economics.estimated_royalty_per_sale
+              ${royaltyCopies("d")} * economics.estimated_royalty_per_sale
                 as estimated_royalty
        from st_daily d
        join single_book_ad_groups s
@@ -627,7 +640,7 @@ const SEARCH_TERM_CTES = `with st_daily as (
      royalty_daily as (
        select d.profile_id, d.search_term, d.campaign_id, d.ad_group_id,
               d.metric_date,
-              d.orders * economics.estimated_royalty_per_sale
+              ${royaltyCopies("d")} * economics.estimated_royalty_per_sale
                 as estimated_royalty
        from st_daily d
        join single_book_ad_groups s
@@ -942,7 +955,7 @@ export async function campaignDailySeries(
   }>(
     `with campaign_daily as (
        select metric_date, sum(cost)::text as cost, sum(sales)::text as sales,
-              sum(orders) as orders, currency
+              sum(orders) as orders, sum(units) as units, currency
        from campaign_metrics_daily
        where profile_id = $1 and campaign_id = $2
          and metric_date between $3 and $4
@@ -964,7 +977,7 @@ export async function campaignDailySeries(
      ),
      royalty_daily as (
        select m.metric_date,
-              sum(m.orders * economics.estimated_royalty_per_sale)::text
+              sum(${royaltyCopies("m")} * economics.estimated_royalty_per_sale)::text
                 as estimated_royalty,
               bool_or(economics.estimated_royalty_per_sale is null)
                 as economics_missing
@@ -1012,7 +1025,7 @@ export async function campaignDailySeries(
               when r.metric_date is not null and not r.economics_missing
                 then coalesce(r.estimated_royalty, '0')
               when r.metric_date is null and fallback.royalty is not null
-                then (c.orders * fallback.royalty)::text
+                then (${royaltyCopies("c")} * fallback.royalty)::text
               else null
             end as estimated_royalty
      from campaign_daily c
@@ -1061,10 +1074,11 @@ export interface OverviewRoyaltyPoint {
 
 /**
  * Estimated KDP royalty for the overview KPIs and trend chart. Each advertised
- * product's orders are valued with that book's economics for that marketplace
- * (profile) on that metric date — never one royalty for the whole profile, and
- * never a book's US royalty on a UK order. `bookIds` (null or empty = no
- * filter) keeps only facts whose ASIN is linked to one of the selected books.
+ * product's copies sold are valued with that book's economics for that
+ * marketplace (profile) on that metric date — never one royalty for the whole
+ * profile, and never a book's US royalty on a UK order. `bookIds` (null or
+ * empty = no filter) keeps only facts whose ASIN is linked to one of the
+ * selected books.
  * Callers must hide profit when `economicsMissing` is true rather than guess.
  */
 export async function overviewRoyaltySeries(
@@ -1095,7 +1109,7 @@ export async function overviewRoyaltySeries(
               )
                 then null
               else coalesce(
-                sum(m.orders * economics.estimated_royalty_per_sale), 0
+                sum(${royaltyCopies("m")} * economics.estimated_royalty_per_sale), 0
               )::text
             end as estimated_royalty
      from advertised_product_metrics_daily m

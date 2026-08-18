@@ -1,5 +1,11 @@
 import type { CampaignDetail } from "@amazon-king/contracts";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CampaignDetailPage } from "./campaign-detail";
@@ -179,7 +185,10 @@ describe("CampaignDetailPage profitability", () => {
 
     expect(mocks.useCampaign).toHaveBeenCalledWith("campaign-1", 7, undefined);
     expect(screen.getByText("Profitable")).toBeInTheDocument();
-    expect(screen.getByText("$2.00 estimated ad profit")).toBeInTheDocument();
+    // The header toolbar renders the amount in its own element.
+    expect(screen.getByText(/estimated ad profit/)).toHaveTextContent(
+      "$2.00 estimated ad profit",
+    );
     expect(screen.getByText("Est. ad profit")).toBeInTheDocument();
     expect(screen.getByTestId("campaign-chart")).toHaveTextContent(
       "2 daily points · profit shown",
@@ -205,6 +214,16 @@ describe("CampaignDetailPage profitability", () => {
     expect(
       screen.getByRole("columnheader", { name: "Units" }),
     ).toBeInTheDocument();
+  });
+
+  it("shows the market flag next to the campaign name", () => {
+    render(<CampaignDetailPage />);
+
+    const heading = screen.getByRole("heading", { name: /General/ });
+    expect(within(heading).getByRole("img", { name: "US" })).toHaveClass(
+      "fi",
+      "fi-us",
+    );
   });
 
   it("links to the campaign in the Amazon Ads console", () => {

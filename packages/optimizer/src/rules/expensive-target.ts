@@ -2,6 +2,7 @@ import {
   acos,
   estimatedAdProfit,
   proposedBid,
+  royaltyCopies,
   smoothedConversionRate,
 } from "../calc.js";
 import {
@@ -19,7 +20,7 @@ import {
   type RuleContext,
 } from "./types.js";
 
-export const EXPENSIVE_TARGET_RULE_VERSION = "expensive_target@1";
+export const EXPENSIVE_TARGET_RULE_VERSION = "expensive_target@2";
 
 export interface ExpensiveTargetInput {
   targetId: string;
@@ -31,9 +32,11 @@ export interface ExpensiveTargetInput {
 }
 
 /**
- * expensive_target@1 — orders exist but estimated ad profit is negative or
+ * expensive_target@2 — orders exist but estimated ad profit is negative or
  * ACoS is materially (>= 1.2x) above target → reduce the bid, clamped to at
- * most -15% per cooldown period (docs/plan.md §9).
+ * most -15% per cooldown period (docs/plan.md §9). Version 2 values royalty on
+ * copies sold instead of orders, so multi-copy orders are no longer treated as
+ * a single royalty.
  *
  * This is a profit-down-bid action: it requires KDP book economics and is
  * suppressed entirely in launch/discovery mode. Without economics it must
@@ -54,14 +57,15 @@ export function evaluateExpensiveTarget(
   }
 
   const { minClicks, minOrders, acosMultiplier } = ctx.config.expensiveTarget;
-  const { clicks, orders, costMicros, salesMicros } = input.metrics;
+  const { clicks, orders, units, costMicros, salesMicros } = input.metrics;
   if (clicks < minClicks || orders < minOrders) return null;
 
   const targetAcos = ctx.targetAcos as number;
   const royaltyPerSaleMicros = ctx.royaltyPerSaleMicros as number;
   const observedAcos = acos(costMicros, salesMicros);
+  const copies = royaltyCopies(orders, units);
   const profitMicros = estimatedAdProfit(
-    orders,
+    copies,
     royaltyPerSaleMicros,
     costMicros,
   );
@@ -139,6 +143,8 @@ export function evaluateExpensiveTarget(
       currentBidMicros: input.currentBidMicros,
       clicks,
       orders,
+      units: units ?? 0,
+      royaltyCopies: copies,
       costMicros,
       salesMicros,
       observedAcos,

@@ -34,10 +34,12 @@ import {
   upsertBookEconomics,
 } from "./repositories/books.js";
 import {
+  activeDismissalExists,
   insertRecommendation,
   listRecommendationsByWorkspace,
   transitionRecommendationState,
   expireStaleRecommendations,
+  upsertRecommendationDismissal,
 } from "./repositories/recommendations.js";
 import {
   createChangeSet,
@@ -100,6 +102,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       "0008",
       "0009",
       "0010",
+      "0011",
     ]);
     const again = await migrate(pool);
     expect(again).toEqual([]);
@@ -610,7 +613,6 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       sales7d: "20.00",
       purchases14d: 2,
       sales14d: "20.00",
-      units: 2,
       unitsSoldClicks7d: 2,
       unitsSoldClicks14d: 2,
       currency: "USD",
@@ -627,6 +629,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         cost: "5.00",
         sales: "20.00",
         orders: 2,
+        units: 2,
       },
       {
         ...metricValues,
@@ -639,6 +642,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         cost: "3.00",
         sales: "8.00",
         orders: 1,
+        units: 1,
       },
       {
         ...metricValues,
@@ -651,6 +655,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         cost: "4.00",
         sales: "0.00",
         orders: 0,
+        units: 0,
       },
       {
         ...metricValues,
@@ -663,6 +668,21 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         cost: "6.00",
         sales: "10.00",
         orders: 1,
+        units: 1,
+      },
+      // One order shipping four copies, on a day outside the windows below.
+      {
+        ...metricValues,
+        profileId,
+        campaignId: "amzn-campaign-st-1",
+        adGroupId: "amzn-ad-group-st-1",
+        targetId: "amzn-target-st-1",
+        searchTerm: "fantasy books",
+        metricDate: "2026-08-20",
+        cost: "2.00",
+        sales: "40.00",
+        orders: 1,
+        units: 4,
       },
     ]);
 
@@ -697,6 +717,22 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         campaignCount: 1,
         // No orders → zero royalty, not missing economics.
         estimatedRoyalty: "0",
+        economicsMissing: false,
+      }),
+    ]);
+
+    const multiCopy = await listSearchTermRollupRows(
+      pool,
+      workspaceId,
+      "2026-08-20",
+      "2026-08-20",
+    );
+    expect(multiCopy).toEqual([
+      expect.objectContaining({
+        searchTerm: "fantasy books",
+        totals: expect.objectContaining({ orders: 1, units: 4 }),
+        // 4 copies × 4.25 royalty per copy, not one royalty for the order.
+        estimatedRoyalty: "17.0000",
         economicsMissing: false,
       }),
     ]);
@@ -1202,6 +1238,50 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     ]);
   });
 
+  it("dismissals suppress a finding by identity until they lapse", async () => {
+    const profileId = await seedProfile(pool);
+    // Every nullable part of the identity is null here, which is exactly the
+    // shape of a cannibalization finding — the unique constraint and the
+    // lookup must treat those nulls as equal.
+    const identity = {
+      profileId,
+      type: "cannibalization_conflict",
+      searchTerm: "tractor colouring book",
+    };
+    const soon = new Date(Date.now() + 86_400_000).toISOString();
+    await upsertRecommendationDismissal(pool, {
+      ...identity,
+      dismissedUntil: soon,
+    });
+    // Re-rejecting refreshes the same row rather than inserting a second one.
+    await upsertRecommendationDismissal(pool, {
+      ...identity,
+      searchTerm: "  Tractor Colouring Book ",
+      dismissedUntil: soon,
+    });
+    const count = await pool.query<{ count: string }>(
+      `select count(*)::text as count from recommendation_dismissals
+       where profile_id = $1`,
+      [profileId],
+    );
+    expect(count.rows[0]!.count).toBe("1");
+
+    expect(await activeDismissalExists(pool, identity)).toBe(true);
+    expect(
+      await activeDismissalExists(
+        pool,
+        identity,
+        new Date(Date.now() + 2 * 86_400_000),
+      ),
+    ).toBe(false);
+    expect(
+      await activeDismissalExists(pool, {
+        ...identity,
+        searchTerm: "dinosaur colouring book",
+      }),
+    ).toBe(false);
+  });
+
   it("change set creation is idempotent by fingerprint", async () => {
     const profileId = await seedProfile(pool);
     const user = await pool.query<{ id: string }>(
@@ -1430,6 +1510,30 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         orders: 2,
         currency: "GBP",
       },
+      // Six orders shipping eight copies (someone bought several at once).
+      {
+        ...metricValues,
+        profileId,
+        campaignId: "amzn-campaign-ov-us",
+        adGroupId: "amzn-ad-group-ov-us",
+        adId: "amzn-ad-ov-tractor",
+        metricDate: "2026-08-19",
+        orders: 6,
+        units: 8,
+        currency: "USD",
+      },
+      // Imported before the units columns existed: units stay 0 with orders.
+      {
+        ...metricValues,
+        profileId,
+        campaignId: "amzn-campaign-ov-us",
+        adGroupId: "amzn-ad-group-ov-us",
+        adId: "amzn-ad-ov-tractor",
+        metricDate: "2026-08-20",
+        orders: 3,
+        units: 0,
+        currency: "USD",
+      },
     ]);
 
     const tractorOnly = [BigInt(tractor!.id)];
@@ -1446,6 +1550,32 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         profilePk: profileId,
         currency: "USD",
         estimatedRoyalty: "20.5800",
+        economicsMissing: false,
+      },
+    ]);
+
+    // Royalty is earned per copy, so a multi-copy order counts every copy;
+    // a day whose units were never imported falls back to its orders.
+    const usTractorCopies = await overviewRoyaltySeries(
+      pool,
+      [profileId],
+      "2026-08-19",
+      "2026-08-20",
+      tractorOnly,
+    );
+    expect(usTractorCopies).toEqual([
+      {
+        date: "2026-08-19",
+        profilePk: profileId,
+        currency: "USD",
+        estimatedRoyalty: "27.4400",
+        economicsMissing: false,
+      },
+      {
+        date: "2026-08-20",
+        profilePk: profileId,
+        currency: "USD",
+        estimatedRoyalty: "10.2900",
         economicsMissing: false,
       },
     ]);

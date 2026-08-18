@@ -54,6 +54,12 @@ export interface ReadServiceDeps {
 const MAX_DAYS = 90;
 const MANUAL_SYNC_HISTORY_DAYS = 60;
 const DAY_MS = 86_400_000;
+/**
+ * How long a rejected finding stays suppressed. Matches the longest optimizer
+ * evidence window, so the metrics that produced it have fully rolled out of
+ * every window before it can be raised again.
+ */
+const REJECTION_SUPPRESSION_DAYS = 60;
 
 /** Extract the user-entered cover image URL from a book's `cover_json` blob. */
 function coverImageUrlOf(coverJson: unknown): string | null {
@@ -1313,6 +1319,21 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
           `Recommendation in state '${row.state}' cannot be rejected`,
         );
       }
+      // Rejecting only changes this row's state; without a dismissal the next
+      // recommendation run re-inserts an identical finding from the same
+      // evidence. Suppress it for as long as that evidence can persist.
+      await recommendations.upsertRecommendationDismissal(db, {
+        profileId: rejected.profileId,
+        type: rejected.type,
+        campaignId: rejected.campaignId,
+        adGroupId: rejected.adGroupId,
+        targetId: rejected.targetId,
+        searchTerm: rejected.searchTerm,
+        recommendationId: rejected.id,
+        dismissedUntil: new Date(
+          now().getTime() + REJECTION_SUPPRESSION_DAYS * DAY_MS,
+        ).toISOString(),
+      });
       await audit.insertAuditEvent(db, {
         workspaceId: auth.workspaceId,
         actorUserId: auth.userId,

@@ -70,9 +70,13 @@ With at least one effective economics row for a market:
 
 - The dashboard shows the **Est. royalty** and **Est. ad profit** KPIs and
   the **Daily profitability** chart. Royalty is each advertised book's own
-  figure in that marketplace (orders × that book's net royalty for the
-  country), never one rate for the whole account. Without economics these
-  stay hidden and the dashboard says so explicitly.
+  figure in that marketplace (copies sold × that book's net royalty for the
+  country), never one rate for the whole account. Copies, not orders: a single
+  order of three copies earns three royalties, and Amazon reports the two
+  numbers separately. On days imported before amazon-king collected units the
+  order count is used instead, which understates a multi-copy day rather than
+  reporting no royalty. Without economics these stay hidden and the dashboard
+  says so explicitly.
 - The profit-aware rules activate:
   `expensive_target` (cut bids on unprofitable targets),
   `profitable_target` (raise bids on profitable ones),

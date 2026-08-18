@@ -57,6 +57,7 @@ const STRUCTURE: StructureData = {
       state: "enabled",
     },
   ],
+  negativeKeywords: [],
 };
 
 function fact(overrides: Partial<DailyFact>): DailyFact {
@@ -69,6 +70,7 @@ function fact(overrides: Partial<DailyFact>): DailyFact {
     impressions: 300,
     clicks: 30,
     orders: 2,
+    units: 2,
     costMicros: 60_000_000,
     salesMicros: 20_000_000,
     ...overrides,
@@ -102,6 +104,60 @@ function storeWithData(
       error: null,
     });
   }
+  return store;
+}
+
+/** Two campaigns spending on the same shopper term (a cannibalization conflict). */
+function cannibalizationStore() {
+  const store = storeWithData();
+  store.structure = {
+    ...STRUCTURE,
+    campaigns: [
+      ...STRUCTURE.campaigns,
+      {
+        id: "11",
+        amazonCampaignId: "c2",
+        name: "Auto discovery",
+        state: "enabled",
+        targetingType: "auto",
+        dailyBudget: "10.0000",
+      },
+    ],
+    adGroups: [
+      ...STRUCTURE.adGroups,
+      {
+        id: "21",
+        campaignId: "11",
+        amazonAdGroupId: "ag2",
+        state: "enabled",
+        defaultBid: null,
+      },
+    ],
+    targets: [
+      ...STRUCTURE.targets,
+      {
+        id: "31",
+        campaignId: "11",
+        adGroupId: "21",
+        amazonTargetId: "t2",
+        targetKind: "keyword",
+        expression: { type: "keyword", value: "*" },
+        matchType: "broad",
+        bid: "1.0000",
+        state: "enabled",
+      },
+    ],
+  };
+  store.facts.searchTerm = [
+    fact({ subKey: "tractor colouring book", orders: 2, clicks: 4 }),
+    fact({
+      entityKey: "t2",
+      campaignAmazonId: "c2",
+      subKey: "tractor colouring book",
+      orders: 4,
+      clicks: 6,
+    }),
+  ];
   return store;
 }
 
@@ -171,12 +227,110 @@ describe("recommendation_run", () => {
     expect(expensive.currentValue).toBe("1.0000");
     // 60/20 = ACoS 3.0 vs target 0.5 → bid clamped down by 15%.
     expect(expensive.proposedValue).toBe("0.8500");
-    expect(expensive.ruleVersion).toBe("expensive_target@1");
+    expect(expensive.ruleVersion).toBe("expensive_target@2");
     expect(expensive.evidenceInputs).toMatchObject({ targetId: "30" });
 
     // Re-running does not duplicate pending recommendations.
     await runHandler(handler, PAYLOAD);
     expect(store.recommendations).toHaveLength(2);
+  });
+
+  it("flags a term spending across two campaigns", async () => {
+    const store = cannibalizationStore();
+    await runHandler(
+      createRecommendationRunHandler(makeDeps({ store, now: () => NOW })),
+      PAYLOAD,
+    );
+    const conflict = store.recommendations.find(
+      (rec) => rec.type === "cannibalization_conflict",
+    );
+    expect(conflict?.searchTerm).toBe("tractor colouring book");
+  });
+
+  it("stops flagging a term a campaign negative already blocks", async () => {
+    const store = cannibalizationStore();
+    store.structure = {
+      ...store.structure,
+      negativeKeywords: [
+        {
+          campaignId: "11",
+          adGroupId: null,
+          keywordText: "Tractor Colouring Book",
+          matchType: "NEGATIVE_EXACT",
+          state: "ENABLED",
+        },
+      ],
+    };
+    await runHandler(
+      createRecommendationRunHandler(makeDeps({ store, now: () => NOW })),
+      PAYLOAD,
+    );
+    expect(
+      store.recommendations.filter(
+        (rec) => rec.type === "cannibalization_conflict",
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("expires a pending conflict once a negative resolves it", async () => {
+    const store = cannibalizationStore();
+    store.recommendations.push({
+      profileId: PROFILE.id,
+      type: "cannibalization_conflict",
+      campaignId: null,
+      adGroupId: null,
+      targetId: null,
+      searchTerm: "tractor colouring book",
+      priority: 1,
+      evidenceWindowStart: "2026-06-07",
+      evidenceWindowEnd: "2026-08-05",
+      currentValue: null,
+      proposedValue: null,
+      rationale: "raised by an earlier run",
+      confidence: "0.500",
+      ruleVersion: "cannibalization_conflict@2",
+      dataFreshnessAt: "2026-08-06T06:00:00.000Z",
+      expiresAt: "2026-08-09T06:00:00.000Z",
+      evidenceInputs: {},
+    });
+    store.structure = {
+      ...store.structure,
+      negativeKeywords: [
+        {
+          campaignId: "11",
+          adGroupId: null,
+          keywordText: "tractor colouring book",
+          matchType: "NEGATIVE_EXACT",
+          state: "ENABLED",
+        },
+      ],
+    };
+    await runHandler(
+      createRecommendationRunHandler(makeDeps({ store, now: () => NOW })),
+      PAYLOAD,
+    );
+    expect(
+      store.recommendations.some(
+        (rec) => rec.type === "cannibalization_conflict",
+      ),
+    ).toBe(false);
+  });
+
+  it("does not re-raise a finding the owner dismissed", async () => {
+    const store = storeWithData();
+    store.dismissals.push({
+      profileId: PROFILE.id,
+      type: "wasteful_search_term",
+      campaignId: "10",
+      adGroupId: null,
+      targetId: null,
+      searchTerm: "junk term",
+    });
+    await runHandler(
+      createRecommendationRunHandler(makeDeps({ store, now: () => NOW })),
+      PAYLOAD,
+    );
+    expect(store.recommendations).toHaveLength(0);
   });
 
   it("expires stale recommendations before inserting new drafts", async () => {

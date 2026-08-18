@@ -80,6 +80,25 @@ describe("evaluateExpensiveTarget", () => {
     expect(draft!.proposedValue).toBe("0.8500");
   });
 
+  it("does not down-bid a target whose multi-copy orders pay for the clicks", () => {
+    // 2 orders shipping 6 copies at $4 royalty covers the $20 spend, so the
+    // profit-negative branch must not fire even though orders alone look bad.
+    const draft = evaluateExpensiveTarget(
+      {
+        ...baseInput,
+        metrics: makeMetrics({
+          clicks: 100,
+          orders: 2,
+          units: 6,
+          costMicros: 20_000_000,
+          salesMicros: 100_000_000,
+        }),
+      },
+      makeContext(),
+    );
+    expect(draft).toBeNull();
+  });
+
   it("is suppressed in launch/discovery mode", () => {
     expect(
       evaluateExpensiveTarget(baseInput, makeContext({ goalMode: "launch" })),

@@ -13,21 +13,18 @@ import type {
 import { useCampaign, useProfiles } from "../api/endpoints";
 import { KpiCard } from "../components/kpi-card";
 import { CampaignControls } from "../components/campaign-controls";
+import { CampaignHeader } from "../components/campaign-header";
 import { CampaignMaxCpc } from "../components/campaign-max-cpc";
 import { PerformanceTrendChart } from "../components/performance-trend-chart";
 import { ProfitabilityResult } from "../components/profitability-result";
-import { TimeframeSelect } from "../components/timeframe-select";
 import { Badge } from "../components/ui/badge";
 import { Card, CardBody, CardHeader } from "../components/ui/card";
 import { Table, Td, Th } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
-import { Flag } from "../components/flag";
-import { countryNameForCode } from "../lib/marketplaces";
 import {
   formatAcos,
   formatCount,
   formatDate,
-  formatDateTime,
   formatMoney,
   ORDERS_COLUMN_TITLE,
   ordersUnitsHint,
@@ -36,7 +33,7 @@ import {
   getCampaignProfitStatus,
   hasCampaignActivity,
 } from "../lib/campaign-profit";
-import { resolveTimeframe, selectedWindowLabel } from "../lib/timeframe";
+import { resolveTimeframe } from "../lib/timeframe";
 
 type Tab =
   "adGroups" | "targets" | "searchTerms" | "negativeKeywords" | "maxCpc";
@@ -78,7 +75,7 @@ function NegativeKeywordsTable({ rows }: { rows: NegativeKeywordRow[] }) {
     );
   }
   return (
-    <Table>
+    <Table stickyHeader>
       <thead>
         <tr>
           <Th>Negative keyword</Th>
@@ -127,7 +124,7 @@ function MetricsTable({
     return <EmptyState>Nothing here yet for this campaign.</EmptyState>;
   }
   return (
-    <Table>
+    <Table stickyHeader>
       <thead>
         <tr>
           <Th>Name</Th>
@@ -234,10 +231,7 @@ export function CampaignDetailPage() {
     (profile) => profile.profileId === c.profileId,
   )?.countryCode;
   const hasActivity = hasCampaignActivity(c.totals);
-  const estimatedProfit =
-    c.totals.estimatedAdProfit === null
-      ? null
-      : Number(c.totals.estimatedAdProfit);
+  const editable = c.state !== "archived";
   const profitStatus = getCampaignProfitStatus(
     c.totals,
     campaign.data.economicsMissing,
@@ -251,69 +245,33 @@ export function CampaignDetailPage() {
           ← Campaigns
         </Link>
       </p>
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight text-zinc-100">
-          {country ? (
-            <span title={countryNameForCode(country)}>
-              <Flag countryCode={country} />
-            </span>
-          ) : null}
-          {c.name}
-        </h1>
-        <Badge tone={c.state === "enabled" ? "success" : "neutral"}>
-          {c.state}
-        </Badge>
-        {c.state !== "archived" ? (
-          <CampaignControls campaignId={id} name={c.name} state={c.state} />
-        ) : null}
-        {c.amazonConsoleUrl ? (
-          <a
-            href={c.amazonConsoleUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs text-sky-400 hover:underline"
-          >
-            Open in Amazon Ads ↗
-          </a>
-        ) : null}
-        <span className="text-xs text-zinc-500">
-          Profile <span className="font-mono">{c.profileId}</span> · {currency}
-          {country ? ` · ${country}` : ""}
-        </span>
-        <div className="ml-auto flex items-center gap-3">
-          <span className="text-sm text-zinc-400">Date range</span>
-          <TimeframeSelect
-            value={days}
-            onChange={(window) =>
-              navigate({
-                to: "/campaigns/$id",
-                params: { id },
-                search: (prev) => ({ ...prev, days: window }),
-                replace: true,
-              })
-            }
-          />
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2 text-sm text-zinc-400">
-        <Badge tone={profitStatus.tone}>{profitStatus.label}</Badge>
-        <span>
-          {hasActivity && estimatedProfit !== null
-            ? `${formatMoney(c.totals.estimatedAdProfit, currency)} estimated ad profit`
-            : selectedWindowLabel(days)}
-        </span>
-        <span aria-hidden="true">·</span>
-        <span>
-          {formatDate(campaign.data.dateRange.start)} –{" "}
-          {formatDate(campaign.data.dateRange.end)}
-        </span>
-        <span aria-hidden="true">·</span>
-        <span>
-          Data current through{" "}
-          {formatDateTime(campaign.data.dataCurrentThrough)}
-        </span>
-      </div>
+      <CampaignHeader
+        name={c.name}
+        state={c.state}
+        countryCode={country}
+        currency={currency}
+        profileId={c.profileId}
+        amazonConsoleUrl={c.amazonConsoleUrl}
+        profitStatus={profitStatus}
+        estimatedAdProfit={c.totals.estimatedAdProfit}
+        hasActivity={hasActivity}
+        dateRange={campaign.data.dateRange}
+        dataCurrentThrough={campaign.data.dataCurrentThrough}
+        days={days}
+        onDaysChange={(window) =>
+          navigate({
+            to: "/campaigns/$id",
+            params: { id },
+            search: (prev) => ({ ...prev, days: window }),
+            replace: true,
+          })
+        }
+        controls={
+          editable ? (
+            <CampaignControls campaignId={id} name={c.name} state={c.state} />
+          ) : undefined
+        }
+      />
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <KpiCard label="Spend" value={formatMoney(c.totals.cost, currency)} />

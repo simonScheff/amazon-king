@@ -132,6 +132,37 @@ input:-webkit-autofill:focus {
   background-color: #52525b;
 }
 
+/*
+ * Tailwind v4's Preflight sets button-like elements to `cursor: default`;
+ * restore the pointer so every control reads as clickable on hover.
+ * Utility classes (`cursor-pointer`, `disabled:cursor-not-allowed`) still win,
+ * since they land in the utilities layer.
+ */
+@layer base {
+  button:not(:disabled),
+  summary,
+  select:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  input[type="submit"]:not(:disabled),
+  input[type="reset"]:not(:disabled),
+  input[type="file"]:not(:disabled)::file-selector-button,
+  label:has(> input[type="checkbox"]:not(:disabled)),
+  label:has(> input[type="radio"]:not(:disabled)),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"]:not([aria-disabled="true"]),
+  [role="switch"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  select:disabled,
+  button[aria-disabled="true"],
+  [role="button"][aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+}
+
 a,
 button,
 input,

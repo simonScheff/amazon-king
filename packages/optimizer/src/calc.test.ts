@@ -9,6 +9,7 @@ import {
   MixedCurrencyError,
   proposedBid,
   roas,
+  royaltyCopies,
   smoothedConversionRate,
   type DailyMetricRow,
 } from "./calc.js";
@@ -52,12 +53,36 @@ describe("conversionRate", () => {
 });
 
 describe("estimatedAdProfit", () => {
-  it("computes orders x royalty - cost", () => {
+  it("computes copies x royalty - cost", () => {
     expect(estimatedAdProfit(10, 4_000_000, 20_000_000)).toBe(20_000_000);
   });
 
   it("can be negative", () => {
     expect(estimatedAdProfit(1, 4_000_000, 20_000_000)).toBe(-16_000_000);
+  });
+});
+
+describe("royaltyCopies", () => {
+  it("counts every copy of a multi-copy order", () => {
+    expect(royaltyCopies(6, 8)).toBe(8);
+  });
+
+  it("falls back to orders when units were never imported", () => {
+    expect(royaltyCopies(6, 0)).toBe(6);
+    expect(royaltyCopies(6)).toBe(6);
+  });
+
+  it("values a multi-copy order at a royalty per copy", () => {
+    // 6 orders / 8 copies at $3.43 royalty against $18.62 spend: valuing
+    // orders would report $1.96 of profit instead of $8.82.
+    expect(estimatedAdProfit(royaltyCopies(6, 8), 3_430_000, 18_620_000)).toBe(
+      8_820_000,
+    );
+  });
+
+  it("rejects negative counts", () => {
+    expect(() => royaltyCopies(-1, 0)).toThrow(RangeError);
+    expect(() => royaltyCopies(1, -1)).toThrow(RangeError);
   });
 });
 
@@ -261,6 +286,20 @@ describe("aggregateWindow", () => {
 
   it("supports 14/30/60-day style windows", () => {
     expect(aggregateWindow(rows, 14, "2026-02-08", "USD").rowCount).toBe(4);
+  });
+
+  it("sums copies sold, treating absent units as zero", () => {
+    const totals = aggregateWindow(
+      [
+        row({ date: "2026-02-01", orders: 1, units: 3 }),
+        row({ date: "2026-02-07", orders: 1 }),
+      ],
+      7,
+      "2026-02-07",
+      "USD",
+    );
+    expect(totals.orders).toBe(2);
+    expect(totals.units).toBe(3);
   });
 
   it("throws MixedCurrencyError on mixed rows", () => {

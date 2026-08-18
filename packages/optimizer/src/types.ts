@@ -8,6 +8,12 @@ export interface WindowMetrics {
   impressions: number;
   clicks: number;
   orders: number;
+  /**
+   * Copies sold, which is what royalty is earned on (a three-copy order counts
+   * once in `orders`). Omitted or 0 on facts imported before the units columns
+   * existed; profit math then falls back to `orders`.
+   */
+  units?: number;
   costMicros: number;
   salesMicros: number;
 }

@@ -300,6 +300,88 @@ export async function getRecommendationForWorkspace(
   return result.rows[0] ? withProfile(result.rows[0]) : null;
 }
 
+/**
+ * Identity of a finding, matching the worker's pending-dedupe tuple. Used to
+ * suppress a dismissed recommendation on later runs.
+ */
+export interface RecommendationDismissalIdentity {
+  profileId: string;
+  type: string;
+  campaignId?: string | null;
+  adGroupId?: string | null;
+  targetId?: string | null;
+  searchTerm?: string | null;
+}
+
+export interface RecommendationDismissalInput extends RecommendationDismissalIdentity {
+  recommendationId?: string | null;
+  /** When suppression lapses; null keeps the finding dismissed forever. */
+  dismissedUntil?: string | null;
+}
+
+/** The stored search term is normalized so casing drift cannot resurrect a dismissal. */
+const NORMALIZED_SEARCH_TERM = "nullif(lower(btrim($6::text)), '')";
+
+/**
+ * Record (or refresh) a dismissal. Re-rejecting the same finding extends the
+ * suppression window rather than inserting a duplicate.
+ */
+export async function upsertRecommendationDismissal(
+  db: Db,
+  input: RecommendationDismissalInput,
+): Promise<void> {
+  await db.query(
+    `insert into recommendation_dismissals
+       (profile_id, type, campaign_id, ad_group_id, target_id, search_term,
+        recommendation_id, dismissed_until)
+     values ($1, $2, $3, $4, $5, ${NORMALIZED_SEARCH_TERM}, $7, $8)
+     on conflict (profile_id, type, campaign_id, ad_group_id, target_id, search_term)
+     do update set
+       recommendation_id = excluded.recommendation_id,
+       dismissed_at = now(),
+       dismissed_until = excluded.dismissed_until`,
+    [
+      input.profileId,
+      input.type,
+      input.campaignId ?? null,
+      input.adGroupId ?? null,
+      input.targetId ?? null,
+      input.searchTerm ?? null,
+      input.recommendationId ?? null,
+      input.dismissedUntil ?? null,
+    ],
+  );
+}
+
+/** True when this finding is currently dismissed and must not be re-inserted. */
+export async function activeDismissalExists(
+  db: Db,
+  identity: RecommendationDismissalIdentity,
+  now?: Date,
+): Promise<boolean> {
+  const result = await db.query<{ id: string }>(
+    `select id::text from recommendation_dismissals
+     where profile_id = $1 and type = $2
+       and campaign_id is not distinct from $3
+       and ad_group_id is not distinct from $4
+       and target_id is not distinct from $5
+       and search_term is not distinct from ${NORMALIZED_SEARCH_TERM}
+       and (dismissed_until is null
+            or dismissed_until > coalesce($7::timestamptz, now()))
+     limit 1`,
+    [
+      identity.profileId,
+      identity.type,
+      identity.campaignId ?? null,
+      identity.adGroupId ?? null,
+      identity.targetId ?? null,
+      identity.searchTerm ?? null,
+      now ?? null,
+    ],
+  );
+  return result.rows.length > 0;
+}
+
 /** Fetch the immutable inputs captured when a recommendation was produced. */
 export async function getRecommendationEvidence(
   db: Db,

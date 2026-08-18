@@ -7,7 +7,7 @@ description: The nine deterministic optimizer rules of amazon-king — exact tri
 
 The optimizer (`packages/optimizer`) is pure and deterministic: no I/O, no
 wall clock (time is injected), money in integer micro-units internally with
-string decimals at the boundaries. Every rule is versioned (`<name>@1`),
+string decimals at the boundaries. Every rule is versioned (`<name>@<n>`),
 stores its exact inputs as evidence, and expires when data goes stale. Rules
 run over 7/14/30/60-day windows after each complete metrics sync.
 
@@ -29,7 +29,7 @@ guessed — when economics are missing**.
 | Suppressed | Launch goal mode; missing KDP economics; protected campaign; bid cooldown active on the target. Also rejected when the computed bid is not below the current bid. |
 | Impact     | `max(|min(profit, 0)|, max(0, cost − targetAcos × sales))` — the larger of the loss and the excess spend over target. |
 | Human review | No. Writable: `update_bid`. |
-| Version    | `expensive_target@1` |
+| Version    | `expensive_target@2` (v2 values royalty per copy sold instead of per order) |
 
 ### 2. `profitable_target` — bid up a proven winner
 
@@ -41,7 +41,7 @@ guessed — when economics are missing**.
 | Suppressed | Missing KDP economics; protected campaign; bid cooldown active on the target. |
 | Impact     | The estimated ad profit over the window. |
 | Human review | No. Writable: `update_bid`. |
-| Version    | `profitable_target@1` |
+| Version    | `profitable_target@2` (v2 values royalty per copy sold instead of per order) |
 
 ### 3. `wasteful_search_term` — negative a zero-order term
 
@@ -77,7 +77,7 @@ guessed — when economics are missing**.
 | Suppressed | Missing KDP economics (royalty null); protected campaign; budget ≤ 0. |
 | Impact     | The estimated ad profit over the window. |
 | Human review | No. Advisory-only in the MVP (no automatic budget write). |
-| Version    | `budget_constrained_winner@1` |
+| Version    | `budget_constrained_winner@2` (v2 values royalty per copy sold instead of per order) |
 
 ### 6. `high_ctr_poor_conversion` — listing problem diagnostic
 
@@ -113,19 +113,29 @@ guessed — when economics are missing**.
 | Suppressed | Missing KDP economics; protected campaign. |
 | Impact     | The estimated ad profit over the window. |
 | Human review | No. Advisory-only in the MVP. |
-| Version    | `placement_opportunity@1` |
+| Version    | `placement_opportunity@2` (v2 values royalty per copy sold instead of per order) |
 
 ### 9. `cannibalization_conflict` — overlapping campaigns
 
 | Aspect     | Detail |
 | ---------- | ------ |
 | Purpose    | The same shopper term has spend/orders in `≥ 2` campaigns → campaigns bid against each other; consolidate or separate intent. |
-| Trigger    | `campaigns ≥ 2` carrying the same search term. |
+| Trigger    | `campaigns ≥ 2` carrying the same search term, counting only spend/orders **inside the evidence window**. |
 | Proposal   | None — resolution is a human decision (route to an existing campaign or create a new one via the [campaign-creation flow](/guide/campaign-tools), which then drafts locked negatives). |
-| Suppressed | — (no economics needed). |
-| Impact     | The combined spend across the conflicting campaigns. |
+| Suppressed | Campaigns that can no longer serve the term are excluded before the `≥ 2` check, so a conflict you already resolved with a negative stops being raised (see below). No economics needed. |
+| Impact     | The combined spend across the still-competing campaigns. |
 | Human review | **Yes.** Advisory-only. |
-| Version    | `cannibalization_conflict@1` |
+| Version    | `cannibalization_conflict@2` |
+
+**Negative-keyword awareness.** Historical spend stays in the 60-day evidence
+window long after a negative is applied, so the rule checks the negatives
+synced from Amazon (`negative_keywords`) rather than the metrics alone. A
+campaign counts as blocked when an enabled campaign-level negative exact or
+negative phrase matches the term, or when every ad group that served the term
+has a matching ad-group-level negative. Blocked campaigns are recorded under
+`excludedCampaigns` in the evidence and do not count toward the threshold; when
+that leaves fewer than two competing campaigns, any finding an earlier run
+raised for the term is expired instead of re-raised.
 
 ## Shared math (`src/calc.ts`)
 
@@ -138,7 +148,8 @@ indicates a caller bug.
 | `acos` | `cost / sales`; null when sales = 0. ACoS is ad-spend-over-retail-revenue, **not** author profit. |
 | `roas` | `sales / cost`; null when cost = 0. |
 | `conversionRate` | `orders / clicks`; null when clicks = 0. |
-| `estimatedAdProfit` | `orders × royaltyPerSale − cost`, exact integer micro-units; may be negative. |
+| `estimatedAdProfit` | `copies × royaltyPerSale − cost`, exact integer micro-units; may be negative. |
+| `royaltyCopies` | `max(orders, units)` — the copies a royalty is earned on. KDP pays per copy, so one order of three copies earns three royalties. Facts imported before the `units` columns existed report 0 units, and Amazon never reports fewer units than orders, so this degrades to `orders` there rather than erasing the royalty. |
 | `breakEvenCpc` | `smoothed CVR × royaltyPerSale`, rounded half-up to 4 dp — the profit ceiling for a bid. |
 | `smoothedConversionRate` | `(orders + 0.05 × 20) / (clicks + 20)` — a beta-style prior (rate 0.05, weight 20). At zero clicks it returns 0.05; with volume it converges to the observed rate. |
 

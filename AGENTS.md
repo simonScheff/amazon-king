@@ -123,10 +123,16 @@ and the term as an EXACT keyword, and are submitted as
 ASIN product target in the wizard switches the campaign to MANUAL targeting
 automatically (Amazon rejects manual targeting clauses in AUTO campaigns, and
 creates the default auto targets itself — so an AUTO campaign submits no
-keywords/targets). The campaign detail page header has one-click guarded
-controls (`src/components/campaign-controls.tsx`): pause/enable and rename,
-each drafting and immediately applying a `campaign_update` change set via
-`POST /api/campaigns/:campaignId/state|name` (REAUTH_REQUIRED opens the
+keywords/targets). The campaign detail page header lives in
+`src/components/campaign-header.tsx`, which orders it in four tiers:
+truncating title (flag, name, state badge) with the date-range selector, a
+bordered toolbar pairing the profit verdict and amount with the guarded
+actions, then window/freshness/market/currency/profile as small print (the
+profile id is shortened with the full value in a `title` tooltip). It takes
+the actions as a `controls` slot, which the page fills with the one-click
+guarded controls (`src/components/campaign-controls.tsx`): pause/enable and
+rename, each drafting and immediately applying a `campaign_update` change set
+via `POST /api/campaigns/:campaignId/state|name` (REAUTH_REQUIRED opens the
 shared ReauthDialog). A global multi-select
 **product filter** lives in the sidebar footer
 (`src/components/product-filter.tsx`, rendered by `Sidebar` in
@@ -158,7 +164,11 @@ Migration `0005_campaign_creation.sql` adds the `campaign_creation` change-set
 kind and the four `create_*` action types. Migration `0010_metric_units.sql`
 adds `units` / `units_sold_clicks7d` / `units_sold_clicks14d` on every daily
 fact table (`units` mirrors `unitsSoldClicks7d`, the same way `orders` mirrors
-`purchases7d`).
+`purchases7d`). Migration `0011_recommendation_dismissals.sql` adds
+`recommendation_dismissals`, keyed by the same identity tuple the worker
+dedupes on (`unique nulls not distinct`, so the nullable parts compare equal)
+with a normalized `search_term`; rejecting a recommendation writes a row here
+so the next run does not raise the identical finding again.
 Commands: `typecheck`, `test` (vitest). Integration tests in
 `src/integration.test.ts` run only when `TEST_DATABASE_URL` points at a
 scratch Postgres database; otherwise they are skipped.
@@ -183,10 +193,14 @@ roughly 19–21 minutes per daily report, so `REPORT_POLL_TIMEOUT_MS` defaults t
 discarding the wait; only an Amazon `FAILURE` marks it `retryable` and
 re-requests. A report already downloaded (`validating`/`importing` with a
 `storage_key`) is re-imported from disk rather than re-fetched. Other handlers:
-`recent_window_resync`, `recommendation_run` (loads structure/metrics/
-economics/cooldowns and runs `@amazon-king/optimizer` over 7/14/30/60-day
+`recent_window_resync`, `recommendation_run` (loads structure — including the
+synced `negative_keywords` — plus metrics/economics/cooldowns and runs
+`@amazon-king/optimizer` over 7/14/30/60-day
 windows; skips when no fresh complete metrics sync; profit rules suppressed
-without KDP economics), `connection_health`, and the self-rescheduling
+without KDP economics; skips any identity with an active row in
+`recommendation_dismissals`, and expires pending
+`cannibalization_conflict` findings whose term a negative now blocks),
+`connection_health`, and the self-rescheduling
 `schedule_tick` (15 min; cadence per plan §8, deduped via
 `enqueueIfNotQueued`). Handlers depend on the `WorkerStore` interface in
 `src/store.ts` (production: repositories + worker-specific SQL; tests:
@@ -266,7 +280,12 @@ book_profile_links)` predicate and `book_id = any($n)` — include-all semantics
 at ad-group grain, union across selected books, null/empty = unfiltered.
 `GET /api/dashboard/summary` estimates royalty from advertised-product facts
 valued with each book's own `book_economics` for that marketplace and metric
-date (never one royalty per country). Route
+date (never one royalty per country). Every royalty query in
+`repositories/dashboard.ts` values `greatest(units, orders)` copies, not orders
+— KDP pays per copy, so one order of three copies earns three royalties; the
+`greatest` degrades to orders on facts imported before the `units` columns
+existed (migration 0010), since Amazon never reports fewer units than orders.
+Route
 handlers are thin wrappers
 over injectable services (`src/services/types.js`); tests use the SQL-matching
 in-memory `FakeDb` (`src/test/fake-db.ts`). Commands: `dev` (`tsx watch
@@ -277,8 +296,17 @@ deterministic — no I/O, no wall clock (time is injected). Money is integer
 micro-units internally with string decimals at boundaries. All nine §9 rules
 under `src/rules/` with `*_RULE_VERSION` constants, `proposedBid` per the plan
 formula (±15% clamp), guardrails (`checkGuardrails`, §10), ranking, and
-smoothed conversion rates. Heavily unit-tested (146 tests) including threshold
-boundaries and launch-mode/protected/cooldown suppression.
+smoothed conversion rates. `src/negatives.ts` decides which campaigns a synced
+negative keyword blocks for a given shopper term (exact and phrase, enabled
+only; ad-group negatives block a campaign only when every serving ad group is
+negated) — `cannibalization_conflict@2` excludes those campaigns before its
+`minCampaigns` check so a conflict already resolved with a negative stops being
+raised. `estimatedAdProfit` takes copies, not orders: the four profit rules
+(`expensive_target@2`, `profitable_target@2`, `budget_constrained_winner@2`,
+`placement_opportunity@2`) pass `royaltyCopies(orders, units)` —
+`max(orders, units)` — so multi-copy orders earn a royalty per copy and windows
+whose units were never imported fall back to orders. Heavily unit-tested
+including threshold boundaries and launch-mode/protected/cooldown suppression.
 
 `packages/amazon-ads` (`@amazon-king/amazon-ads`) is implemented: LWA OAuth
 client, `TokenManager` (serialized per-connection refresh, 5-min early skew,
