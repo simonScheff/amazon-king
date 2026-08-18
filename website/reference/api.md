@@ -297,6 +297,7 @@ Response `200`: array of campaign rows.
 | name, state      | string         |                                                          |
 | totals           | object         | `impressions`, `clicks`, `cost`, `sales`, `orders`       |
 | amazonConsoleUrl | string \| null | Campaign Manager link; null when no account id on file   |
+| bookIds          | string[]       | Distinct catalog books advertised by the campaign; empty if unmapped |
 | profitability    | object         | `{dateRange, currency, estimatedRoyalty, estimatedAdProfit, economicsMissing, dataCurrentThrough}`; money fields null when economics are missing |
 
 ### `GET /api/campaigns/:id?days&books`
@@ -332,7 +333,8 @@ null — never guessed — when book economics are missing.
 
 Response `200`: array of rows — `{searchTerm, campaignCount, countryCodes[],
 currency, totals (with acos), estimatedRoyalty, estimatedAdProfit,
-economicsMissing, dataCurrentThrough}`.
+economicsMissing, dataCurrentThrough, bookIds[]}`. `bookIds` are the distinct
+catalog books whose ad groups contributed to the term (empty if unmapped).
 
 ### `GET /api/search-terms/:term?days&books&country`
 

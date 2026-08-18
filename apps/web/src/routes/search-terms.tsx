@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import type { SearchTermListRow } from "@amazon-king/contracts";
-import { useProfiles, useSearchTerms } from "../api/endpoints";
+import { useBooks, useProfiles, useSearchTerms } from "../api/endpoints";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { SortableTh } from "../components/ui/sortable-th";
@@ -10,6 +10,7 @@ import { EmptyState, ErrorState, Loading } from "../components/states";
 import { Flag } from "../components/flag";
 import { CountrySelect } from "../components/country-select";
 import { AmazonProductLink } from "../components/amazon-product-link";
+import { BookCoverStack } from "../components/book-covers";
 import { ProfitabilityResult } from "../components/profitability-result";
 import {
   getCampaignProfitStatus,
@@ -72,6 +73,7 @@ export function SearchTermsPage() {
   const country = search.country;
   const navigate = useNavigate();
   const profiles = useProfiles();
+  const books = useBooks();
   const searchTerms = useSearchTerms(PROFITABILITY_DAYS, search.books, country);
   const marketplaces = useSpendSortedMarketplaces(
     PROFITABILITY_DAYS,
@@ -172,9 +174,13 @@ export function SearchTermsPage() {
                   onSort={onSort}
                   className="text-right"
                 />
-                <Th className="hidden md:table-cell">
-                  {PROFITABILITY_DAYS}-day profit
-                </Th>
+                <SortableTh
+                  label={`${PROFITABILITY_DAYS}-day profit`}
+                  column="profit"
+                  sort={sort}
+                  onSort={onSort}
+                  className="hidden md:table-cell"
+                />
                 <SortableTh
                   label="Impressions"
                   column="impressions"
@@ -236,35 +242,43 @@ export function SearchTermsPage() {
                 return (
                   <tr key={term.searchTerm}>
                     <Td className="max-w-xs">
-                      <Link
-                        to="/search-terms/$term"
-                        params={{ term: term.searchTerm }}
-                        search={{
-                          days: PROFITABILITY_DAYS,
-                          ...(defaultCountry
-                            ? { country: defaultCountry }
-                            : {}),
-                        }}
-                        className="break-words text-sky-400 hover:underline"
-                      >
-                        {term.searchTerm}
-                      </Link>
-                      <AmazonProductLink
-                        term={term.searchTerm}
-                        countryCode={defaultCountry}
-                        className="ml-2 whitespace-nowrap text-xs"
-                      />
-                      <div className="mt-2 md:hidden">
-                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-                          {PROFITABILITY_DAYS}-day profit
-                        </p>
-                        <ProfitabilityResult
-                          status={profitStatus}
-                          amount={term.estimatedAdProfit}
-                          currency={currency}
-                          economicsMissing={term.economicsMissing}
-                          hasActivity={hasActivity}
+                      <div className="flex items-start gap-2">
+                        <BookCoverStack
+                          bookIds={term.bookIds}
+                          books={books.data}
                         />
+                        <div className="min-w-0">
+                          <Link
+                            to="/search-terms/$term"
+                            params={{ term: term.searchTerm }}
+                            search={{
+                              days: PROFITABILITY_DAYS,
+                              ...(defaultCountry
+                                ? { country: defaultCountry }
+                                : {}),
+                            }}
+                            className="break-words text-sky-400 hover:underline"
+                          >
+                            {term.searchTerm}
+                          </Link>
+                          <AmazonProductLink
+                            term={term.searchTerm}
+                            countryCode={defaultCountry}
+                            className="ml-2 whitespace-nowrap text-xs"
+                          />
+                          <div className="mt-2 md:hidden">
+                            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                              {PROFITABILITY_DAYS}-day profit
+                            </p>
+                            <ProfitabilityResult
+                              status={profitStatus}
+                              amount={term.estimatedAdProfit}
+                              currency={currency}
+                              economicsMissing={term.economicsMissing}
+                              hasActivity={hasActivity}
+                            />
+                          </div>
+                        </div>
                       </div>
                     </Td>
                     <Td

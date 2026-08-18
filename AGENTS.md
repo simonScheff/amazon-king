@@ -140,6 +140,9 @@ route in `src/router.tsx` and retained across navigation via
 overview, campaigns, campaign detail, search terms, and recommendations pages
 pass the selection to their query hooks (query keys include the sorted id
 list); `/changes`, `/settings`, and `/connect` ignore it.
+Campaign and search-term list payloads include `bookIds` (distinct catalog
+books linked through ads); those tables — and the product-filter dropdown —
+render cover thumbs from `GET /api/books`.
 Overview, campaign detail, and search-term detail share a date-range selector
 (`src/components/timeframe-select.tsx`): 7/14/30/60d plus month-to-date
 (`?days=mtd`, UTC 1st of the current month through today). Campaign and

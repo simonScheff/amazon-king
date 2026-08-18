@@ -118,6 +118,12 @@ export type CampaignProfitability = z.infer<typeof campaignProfitabilitySchema>;
 /** GET /api/campaigns row, including profitability for the requested window. */
 export const campaignListRowSchema = campaignRowSchema.extend({
   profitability: campaignProfitabilitySchema,
+  /**
+   * Distinct catalog book ids advertised by this campaign (via enabled
+   * book_profile_links). Empty when no ads are mapped. The dashboard joins
+   * GET /api/books for cover images.
+   */
+  bookIds: z.array(z.string()).default([]),
 });
 export type CampaignListRow = z.infer<typeof campaignListRowSchema>;
 
@@ -172,6 +178,12 @@ export const searchTermListRowSchema = z.object({
   estimatedAdProfit: decimalStringSchema.nullable(),
   economicsMissing: z.boolean(),
   dataCurrentThrough: isoDateSchema.nullable(),
+  /**
+   * Distinct catalog book ids whose ad groups contributed to this term.
+   * Empty when no contributing ads are mapped. The dashboard joins
+   * GET /api/books for cover images.
+   */
+  bookIds: z.array(z.string()).default([]),
 });
 export type SearchTermListRow = z.infer<typeof searchTermListRowSchema>;
 

@@ -928,6 +928,14 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       "2026-08-14",
     );
     expect(unfiltered).toHaveLength(2);
+    expect(
+      unfiltered.find((row) => row.amazonCampaignId === "amzn-campaign-bf-a")
+        ?.bookIds,
+    ).toEqual([bookA!.id]);
+    expect(
+      unfiltered.find((row) => row.amazonCampaignId === "amzn-campaign-bf-b")
+        ?.bookIds,
+    ).toEqual([bookB!.id]);
 
     const onlyA = await listCampaignRows(
       pool,
@@ -976,6 +984,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     );
     expect(termsA.map((row) => row.searchTerm)).toEqual(["alpha term"]);
     expect(termsA[0]!.totals.cost).toBe("10.0000");
+    expect(termsA[0]!.bookIds).toEqual([bookA!.id]);
 
     const termsBoth = await listSearchTermRollupRows(
       pool,

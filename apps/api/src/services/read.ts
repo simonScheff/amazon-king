@@ -642,6 +642,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
           totals: row.totals,
           amazonConsoleUrl:
             consoleUrlByProfile.get(row.amazonProfileId) ?? null,
+          bookIds: row.bookIds,
           profitability: {
             dateRange: { start, end },
             currency: row.currency as DashboardSummary["currency"],
@@ -857,6 +858,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
               : microsToDecimalString(royaltyMicros - costMicros),
           economicsMissing: row.economicsMissing,
           dataCurrentThrough: row.dataCurrentThrough,
+          bookIds: row.bookIds,
         };
       });
     },

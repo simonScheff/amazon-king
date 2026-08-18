@@ -13,6 +13,7 @@ import { SearchTermsPage } from "./search-terms";
 const mocks = vi.hoisted(() => ({
   useSearchTerms: vi.fn(),
   useProfiles: vi.fn(),
+  useBooks: vi.fn(),
   useSearch: vi.fn(() => ({}) as { books?: string[]; country?: string }),
   useNavigate: vi.fn(() => vi.fn()),
 }));
@@ -26,6 +27,7 @@ vi.mock("@tanstack/react-router", () => ({
 vi.mock("../api/endpoints", () => ({
   useSearchTerms: mocks.useSearchTerms,
   useProfiles: mocks.useProfiles,
+  useBooks: mocks.useBooks,
   useCountrySpend: () => ({ data: undefined }),
 }));
 
@@ -75,6 +77,7 @@ function searchTerm(
     estimatedAdProfit: "2.0000",
     economicsMissing: false,
     dataCurrentThrough: "2026-08-13",
+    bookIds: [],
     ...overrides,
   };
 }
@@ -93,6 +96,7 @@ describe("SearchTermsPage", () => {
     vi.clearAllMocks();
     mocks.useSearch.mockReturnValue({});
     mocks.useProfiles.mockReturnValue({ data: PROFILES, isPending: false });
+    mocks.useBooks.mockReturnValue({ data: [], isPending: false });
     mocks.useSearchTerms.mockReturnValue({
       isPending: false,
       error: null,
@@ -173,12 +177,17 @@ describe("SearchTermsPage", () => {
       data: [
         searchTerm("beta", {
           totals: { ...searchTerm("beta").totals, orders: 3 },
+          estimatedAdProfit: "5.0000",
         }),
         searchTerm("alpha", {
           totals: { ...searchTerm("alpha").totals, orders: 1 },
+          estimatedAdProfit: "-1.0000",
         }),
         searchTerm("gamma", {
           totals: { ...searchTerm("gamma").totals, orders: 2 },
+          estimatedRoyalty: null,
+          estimatedAdProfit: null,
+          economicsMissing: true,
         }),
       ],
     });
@@ -195,6 +204,10 @@ describe("SearchTermsPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Orders/ }));
     expect(rowTexts()).toEqual(["beta", "gamma", "alpha"]);
+
+    // Profit desc: unavailable profit (gamma) sorts last.
+    fireEvent.click(screen.getByRole("button", { name: /7-day profit/ }));
+    expect(rowTexts()).toEqual(["beta", "alpha", "gamma"]);
   });
 
   it("filters terms by the search box", () => {
@@ -287,5 +300,29 @@ describe("SearchTermsPage", () => {
     expect(
       screen.getByText("No search terms in Germany for the selected window."),
     ).toBeInTheDocument();
+  });
+
+  it("shows the advertised book's cover next to the search term", () => {
+    mocks.useBooks.mockReturnValue({
+      data: [
+        {
+          id: "book-1",
+          title: "Dragon Tales",
+          coverImageUrl: "https://example.com/dragons.jpg",
+        },
+      ],
+      isPending: false,
+    });
+    mocks.useSearchTerms.mockReturnValue({
+      isPending: false,
+      error: null,
+      data: [searchTerm("dragons", { bookIds: ["book-1"] })],
+    });
+
+    render(<SearchTermsPage />);
+
+    expect(
+      screen.getByRole("img", { name: "Dragon Tales cover" }),
+    ).toHaveAttribute("src", "https://example.com/dragons.jpg");
   });
 });

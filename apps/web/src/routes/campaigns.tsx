@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link, useSearch } from "@tanstack/react-router";
 import type { CampaignListRow } from "@amazon-king/contracts";
-import { useCampaigns, useProfiles } from "../api/endpoints";
+import { useBooks, useCampaigns, useProfiles } from "../api/endpoints";
+import { BookCoverStack } from "../components/book-covers";
 import { Badge } from "../components/ui/badge";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -70,6 +71,7 @@ export function CampaignsPage() {
   const search = useSearch({ strict: false }) as { books?: string[] };
   const campaigns = useCampaigns(PROFITABILITY_DAYS, search.books);
   const profiles = useProfiles();
+  const books = useBooks();
   const [sort, setSort] = useState<Sort<SortKey>>({
     key: "cost",
     direction: "desc",
@@ -243,25 +245,35 @@ export function CampaignsPage() {
                 return (
                   <tr key={c.campaignId}>
                     <Td>
-                      <Link
-                        to="/campaigns/$id"
-                        params={{ id: c.campaignId }}
-                        search={{ days: PROFITABILITY_DAYS }}
-                        className="text-sky-400 hover:underline"
-                      >
-                        {c.name}
-                      </Link>
-                      <div className="mt-2 md:hidden">
-                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-                          {PROFITABILITY_DAYS}-day profit
-                        </p>
-                        <ProfitabilityResult
-                          status={profitStatus}
-                          amount={c.profitability.estimatedAdProfit}
-                          currency={currency}
-                          economicsMissing={c.profitability.economicsMissing}
-                          hasActivity={hasActivity}
+                      <div className="flex items-start gap-2">
+                        <BookCoverStack
+                          bookIds={c.bookIds}
+                          books={books.data}
                         />
+                        <div className="min-w-0">
+                          <Link
+                            to="/campaigns/$id"
+                            params={{ id: c.campaignId }}
+                            search={{ days: PROFITABILITY_DAYS }}
+                            className="text-sky-400 hover:underline"
+                          >
+                            {c.name}
+                          </Link>
+                          <div className="mt-2 md:hidden">
+                            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                              {PROFITABILITY_DAYS}-day profit
+                            </p>
+                            <ProfitabilityResult
+                              status={profitStatus}
+                              amount={c.profitability.estimatedAdProfit}
+                              currency={currency}
+                              economicsMissing={
+                                c.profitability.economicsMissing
+                              }
+                              hasActivity={hasActivity}
+                            />
+                          </div>
+                        </div>
                       </div>
                     </Td>
                     <Td className="text-xs text-zinc-500">

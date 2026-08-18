@@ -13,6 +13,7 @@ import { CampaignsPage } from "./campaigns";
 const mocks = vi.hoisted(() => ({
   useCampaigns: vi.fn(),
   useProfiles: vi.fn(),
+  useBooks: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -23,6 +24,7 @@ vi.mock("@tanstack/react-router", () => ({
 vi.mock("../api/endpoints", () => ({
   useCampaigns: mocks.useCampaigns,
   useProfiles: mocks.useProfiles,
+  useBooks: mocks.useBooks,
   useCountrySpend: () => ({ data: undefined }),
 }));
 
@@ -37,6 +39,7 @@ function campaign(
     sales: "20.0000",
     orders: 2,
   },
+  bookIds: string[] = [],
 ): CampaignListRow {
   return {
     profileId: "profile-us",
@@ -46,6 +49,7 @@ function campaign(
     amazonConsoleUrl:
       "https://advertising.amazon.com/cm/campaigns?entityId=ENTITY-1",
     totals,
+    bookIds,
     profitability: {
       dateRange: { start: "2026-08-07", end: "2026-08-13" },
       currency: "USD",
@@ -64,6 +68,8 @@ describe("CampaignsPage seven-day profitability", () => {
   beforeEach(() => {
     mocks.useCampaigns.mockReset();
     mocks.useProfiles.mockReset();
+    mocks.useBooks.mockReset();
+    mocks.useBooks.mockReturnValue({ data: [], isPending: false });
     mocks.useProfiles.mockReturnValue({
       data: [
         {
@@ -332,5 +338,29 @@ describe("CampaignsPage seven-day profitability", () => {
       "Discovery",
       "New campaign",
     ]);
+  });
+
+  it("shows the advertised book's cover next to the campaign name", () => {
+    mocks.useBooks.mockReturnValue({
+      data: [
+        {
+          id: "book-1",
+          title: "Farm Tractors",
+          coverImageUrl: "https://example.com/tractors.jpg",
+        },
+      ],
+      isPending: false,
+    });
+    mocks.useCampaigns.mockReturnValue({
+      isPending: false,
+      error: null,
+      data: [campaign("campaign-profit", "General", {}, undefined, ["book-1"])],
+    });
+
+    render(<CampaignsPage />);
+
+    expect(
+      screen.getByRole("img", { name: "Farm Tractors cover" }),
+    ).toHaveAttribute("src", "https://example.com/tractors.jpg");
   });
 });

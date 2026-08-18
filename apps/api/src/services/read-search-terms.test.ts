@@ -42,6 +42,7 @@ const ROLLUP_ROW = {
   economicsMissing: false,
   dataCurrentThrough: "2026-08-13",
   mixedCurrency: false,
+  bookIds: ["42"],
 };
 
 const CAMPAIGN_ROW = {
@@ -139,6 +140,7 @@ describe("search terms", () => {
         estimatedAdProfit: "2.0000",
         economicsMissing: false,
         dataCurrentThrough: "2026-08-13",
+        bookIds: ["42"],
       },
     ]);
   });

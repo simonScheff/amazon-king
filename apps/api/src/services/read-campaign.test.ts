@@ -96,6 +96,7 @@ describe("campaign profitability", () => {
         economicsMissing: false,
         dataCurrentThrough: "2026-08-13",
         mixedCurrency: false,
+        bookIds: ["42"],
       },
     ]);
     vi.mocked(dashboard.listAdGroupRows).mockResolvedValue([]);
@@ -241,6 +242,7 @@ describe("campaign profitability", () => {
     expect(result).toEqual([
       expect.objectContaining({
         campaignId: "amazon-campaign",
+        bookIds: ["42"],
         amazonConsoleUrl:
           "https://advertising.amazon.com/cm/campaigns?entityId=ENTITY-1",
         profitability: {

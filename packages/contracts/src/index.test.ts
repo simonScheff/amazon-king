@@ -236,9 +236,11 @@ describe("contracts smoke test", () => {
         economicsMissing: false,
         dataCurrentThrough: "2026-08-13",
       },
+      bookIds: [],
     });
 
     expect(row.profitability.estimatedAdProfit).toBe("2.0000");
+    expect(row.bookIds).toEqual([]);
   });
 
   it("validates a campaign-wide CPC ceiling and its coverage state", () => {

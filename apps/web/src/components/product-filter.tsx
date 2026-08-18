@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
+import { BookCoverThumb } from "./book-covers";
 import { useBooks } from "../api/endpoints";
 
 /** Book icon matching the sidebar nav icons. */
@@ -159,6 +160,12 @@ export function ProductFilter({ collapsed = false }: { collapsed?: boolean }) {
                   className="h-4 w-4 shrink-0 accent-sky-600"
                   checked={selected.includes(book.id)}
                   onChange={() => toggleBook(book.id)}
+                />
+                <BookCoverThumb
+                  title={book.title}
+                  coverImageUrl={book.coverImageUrl}
+                  size="sm"
+                  decorative
                 />
                 <span className="min-w-0 flex-1 truncate">{book.title}</span>
                 <span className="shrink-0 text-xs text-zinc-500">

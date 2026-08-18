@@ -48,6 +48,8 @@ export interface CampaignRowData {
   economicsMissing: boolean;
   dataCurrentThrough: string | null;
   mixedCurrency: boolean;
+  /** Distinct catalog books advertised by this campaign; empty if unmapped. */
+  bookIds: string[];
 }
 
 /**
@@ -78,6 +80,7 @@ export async function listCampaignRows(
       economics_missing: boolean;
       data_current_through: string | null;
       mixed_currency: boolean;
+      book_ids: string[];
     }
   >(
     `with campaign_rollup as (
@@ -192,6 +195,19 @@ export async function listCampaignRows(
          limit 1
        ) fallback on r.metric_date is null
        group by d.profile_id, d.campaign_id
+     ),
+     campaign_books as (
+       select c.profile_id, c.amazon_campaign_id as campaign_id,
+              array_agg(distinct bpl.book_id::text order by bpl.book_id::text)
+                as book_ids
+       from campaigns c
+       join ad_groups g on g.campaign_id = c.id
+       join ads a on a.profile_id = c.profile_id and a.ad_group_id = g.id
+       join book_profile_links bpl
+         on bpl.profile_id = c.profile_id
+        and bpl.marketplace_asin = a.asin
+        and bpl.enabled = true
+       group by c.profile_id, c.amazon_campaign_id
      )
      select c.id, c.profile_id, p.profile_id as amazon_profile_id,
             c.amazon_campaign_id, c.name, c.state,
@@ -201,7 +217,8 @@ export async function listCampaignRows(
             coalesce(rr.economics_missing, false) as economics_missing,
             cr.data_current_through,
             coalesce(cr.mixed_currency, false)
-              or coalesce(rr.mixed_currency, false) as mixed_currency
+              or coalesce(rr.mixed_currency, false) as mixed_currency,
+            coalesce(cb.book_ids, '{}'::text[]) as book_ids
      from campaigns c
      join amazon_profiles p on p.id = c.profile_id
      join amazon_connections conn on conn.id = p.connection_id
@@ -211,6 +228,9 @@ export async function listCampaignRows(
      left join royalty_rollup rr
        on rr.profile_id = c.profile_id
       and rr.campaign_id = c.amazon_campaign_id
+     left join campaign_books cb
+       on cb.profile_id = c.profile_id
+      and cb.campaign_id = c.amazon_campaign_id
      where conn.workspace_id = $1
        and (coalesce(cardinality($4::bigint[]), 0) = 0 or exists (
          select 1
@@ -240,6 +260,7 @@ export async function listCampaignRows(
     economicsMissing: row.economics_missing,
     dataCurrentThrough: row.data_current_through,
     mixedCurrency: row.mixed_currency,
+    bookIds: row.book_ids ?? [],
   }));
 }
 
@@ -628,6 +649,8 @@ export interface SearchTermRollupRowData {
   economicsMissing: boolean;
   dataCurrentThrough: string | null;
   mixedCurrency: boolean;
+  /** Distinct catalog books whose ad groups contributed to this term. */
+  bookIds: string[];
 }
 
 /**
@@ -655,9 +678,26 @@ export async function listSearchTermRollupRows(
       economics_missing: boolean;
       data_current_through: string | null;
       mixed_currency: boolean;
+      book_ids: string[];
     }
   >(
-    `${SEARCH_TERM_CTES}
+    `${SEARCH_TERM_CTES},
+     term_books as (
+       select d.search_term,
+              array_agg(distinct bpl.book_id::text order by bpl.book_id::text)
+                as book_ids
+       from (select distinct profile_id, search_term, ad_group_id from st_daily) d
+       join ad_groups g
+         on g.profile_id = d.profile_id
+        and g.amazon_ad_group_id = d.ad_group_id
+       join ads a
+         on a.profile_id = g.profile_id and a.ad_group_id = g.id
+       join book_profile_links bpl
+         on bpl.profile_id = g.profile_id
+        and bpl.marketplace_asin = a.asin
+        and bpl.enabled = true
+       group by d.search_term
+     )
      select d.search_term,
             count(distinct (d.profile_id, d.campaign_id))::text as campaign_count,
             array_agg(distinct ap.country_code order by ap.country_code) as country_codes,
@@ -673,7 +713,8 @@ export async function listSearchTermRollupRows(
             case
               when bool_or(d.orders > 0 and r.ad_group_id is null) then null
               else coalesce(sum(r.estimated_royalty), 0)::text
-            end as estimated_royalty
+            end as estimated_royalty,
+            coalesce(tb.book_ids, '{}'::text[]) as book_ids
      from st_daily d
      join amazon_profiles ap on ap.id = d.profile_id
      left join royalty_daily r
@@ -682,7 +723,8 @@ export async function listSearchTermRollupRows(
       and r.campaign_id = d.campaign_id
       and r.ad_group_id = d.ad_group_id
       and r.metric_date = d.metric_date
-     group by d.search_term
+     left join term_books tb on tb.search_term = d.search_term
+     group by d.search_term, tb.book_ids
      order by sum(d.cost) desc, d.search_term`,
     [workspaceId, dateStart, dateEnd, null, bookIds, countryCode],
   );
@@ -696,6 +738,7 @@ export async function listSearchTermRollupRows(
     economicsMissing: row.economics_missing,
     dataCurrentThrough: row.data_current_through,
     mixedCurrency: row.mixed_currency,
+    bookIds: row.book_ids ?? [],
   }));
 }
 
