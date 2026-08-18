@@ -120,13 +120,29 @@ change.
 
 ## Install on a phone
 
-The production build is an installable PWA. Open the public HTTPS origin in
-your phone's browser and use the browser menu's **Install app** action. On
-Android Chromium-based browsers the installed app launches in standalone
-mode, without the browser's address and navigation bars. If you previously
-added the site as a plain home-screen shortcut, remove that shortcut and
-install again after deploying the PWA-enabled build. The service worker is
-network-only — no Amazon data is cached on the device.
+On phones the app is install-only: the production build is an installable PWA,
+and a phone browser tab shows install instructions instead of the dashboard.
+Sign in first in the phone browser, then install when the gate appears — on
+iOS an installed web app gets its own cookie storage, copied from Safari at the
+moment you add it to the home screen, so installing while signed in is what
+carries your session across.
+
+Installing means the browser menu's **Install app** action on Android
+Chromium-based browsers, or **Share → Add to Home Screen** in iOS Safari. The
+installed app launches in standalone mode, without the browser's address and
+navigation bars. If you previously added the site as a plain home-screen
+shortcut, remove that shortcut and install again after deploying the
+PWA-enabled build. The service worker is network-only — no Amazon data is
+cached on the device.
+
+Inside the installed app, sign-in links have to come back by hand. Tapping a
+link in your mail app opens the browser, and on iOS the installed app cannot see
+the session created there, so the sign-in screen and the "Confirm it's you"
+dialog both accept a pasted link: press and hold the link in the email, choose
+**Copy Link**, and paste it into the app. On Android the installed app shares
+the browser's cookies, so tapping the link and reopening the app is enough.
+
+Tablets and desktops are unaffected and keep normal browser access.
 
 ## Updating
 

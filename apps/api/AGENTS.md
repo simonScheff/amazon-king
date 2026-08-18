@@ -1,0 +1,116 @@
+# apps/api — `@amazon-king/api`
+
+The browser-facing backend and OAuth callback. Read the root `AGENTS.md` first
+for the binding architectural rules, especially **guarded writes** and the
+**two separate logins**.
+
+## Commands
+
+`dev` (`tsx watch src/index.ts`), `start`, `typecheck`, `test`.
+
+Stack: Fastify 5 with `@fastify/cookie`, `cors`, and `rate-limit`.
+
+## Structure
+
+Route handlers are thin wrappers over injectable services declared in
+`src/services/types.ts`; the handlers themselves hold no logic and no SQL. Tests
+use the SQL-matching in-memory `FakeDb` (`src/test/fake-db.ts`), so a new
+repository query must be understood by `FakeDb` to be testable here.
+
+The route surface is `docs/plan.md` §11 plus the frontend's contract
+extensions: `GET /api/change-sets`, cannibalization comparison, campaign-level
+negative-exact and negative-target draft creation, `csrfToken` on the session
+response, `amazonConsoleUrl` on campaign list/detail payloads (built from the
+profile's `account_id` entity id, null when absent), and the cross-campaign
+search-term screens `GET /api/search-terms` and `GET /api/search-terms/:term`
+(detail includes a per-day `daily` series for the trend chart).
+
+`GET /api/dashboard/summary` returns a `daily` series, `writesDisabled`, and
+`previous` — totals for the comparison window, which is the immediately
+preceding same-length range for trailing 7/14/30/60d, or prior-month MTD when
+`days=mtd`. Those power the period-over-period deltas on the overview KPI cards.
+
+## Royalty is valued per copy, not per order
+
+Every royalty query in `repositories/dashboard.ts` values
+`greatest(units, orders)`. KDP pays per copy, so one order of three copies earns
+three royalties. The `greatest` degrades to orders on facts imported before the
+`units` columns existed, which is safe because Amazon never reports fewer units
+than orders.
+
+`GET /api/dashboard/summary` estimates royalty from advertised-product facts
+valued with each book's own `book_economics` for that marketplace and metric
+date. Never apply one royalty rate per country.
+
+## The `books` product filter
+
+`dashboard/summary`, `dashboard/country-spend`, `campaigns` list and detail,
+`recommendations`, and `search-terms` list and detail accept a `books`
+comma-separated book-id query param.
+
+Ids are resolved to internal PKs per request via `requireBookPks`, which 404s on
+an unknown or foreign book, and forwarded to the repositories. Repositories
+filter with an `EXISTS (ad_groups → ads.asin → book_profile_links)` predicate
+and `book_id = any($n)`. The semantics are include-all at ad-group grain, union
+across selected books, and null or empty means unfiltered.
+
+## Campaign creation
+
+`POST /api/campaign-creation-change-sets` is human-approved campaign creation.
+It drafts one `campaign_creation` change set per profile holding
+create_campaign → create_ad_group →
+create_product_ad / create_keyword / create_target actions. Product targets are
+ASINs via `ASIN_SAME_AS` expressions with an optional bid.
+
+Keywords and targets are MANUAL-only, enforced by the contract schema: Amazon
+creates the default auto targets itself and rejects manual targeting clauses in
+auto campaigns, so an AUTO campaign carries no manual targeting actions.
+
+Apply resolves the creation chain, treats an existing same-name campaign as
+already satisfied, verifies created ids against a fresh structure read, then
+enqueues a `structure_sync`. Creation sets are **not** rollbackable.
+
+When the payload carries `cannibalization.recommendationId`, the service also
+validates the finding (it must cover the conflict's profile) and drafts a second
+`recommendation`-kind change set adding the term as a campaign-level negative
+exact keyword — or a negative ASIN target when the term is an ASIN — in every
+conflicting campaign, with `metadata.dependsOnChangeSetId` pointing at the
+creation set. `applyLoadedSet` rejects such a set with `DEPENDENCY_NOT_APPLIED`
+until the referenced set is `applied`, so the term is never blocked in every
+campaign at once, which would strand the traffic with nowhere to land.
+
+## One-click campaign updates
+
+`POST /api/campaigns/:campaignId/state` (pause/enable) and
+`POST /api/campaigns/:campaignId/name` (rename) each draft a single-action
+`campaign_update` change set (`update_campaign_state` /
+`update_campaign_name`) and immediately run the guarded apply. Both are
+rollbackable by restoring the before-state, and a verified apply writes through
+to the local `campaigns` mirror via `structure.updateCampaignAttributes`.
+
+## Guarded write flow
+
+`src/services/changes.ts` is the only path to Amazon writes: fingerprint-
+idempotent create, preview, re-read Amazon and compare against the before-state,
+guardrails, per-item apply, then verify. Rollback is a compensating API action
+— never a DB undo — and covers verified app-created negative exact keywords.
+Negative ASIN targets are not rollbackable.
+
+## Authentication
+
+Passwordless email login. In development no SMTP is configured and the magic
+link is returned as `devLoginUrl` plus logged; see the `local-stack` skill.
+
+- The login token records the allowlisted browser origin it was started from
+  (`login_tokens.origin`), so the magic link and post-verify redirect work on
+  localhost and a cloudflared tunnel interchangeably.
+- An optional same-origin `next` path (`login_tokens.next_path`) returns the
+  user to the page that required re-auth.
+- CSRF is stateless HMAC per session. OAuth state is single-use and marked used
+  **before** the code exchange.
+- Refresh tokens are envelope-encrypted via `@amazon-king/crypto` and never
+  reach the browser.
+- Recent auth (15 minutes, `RECENT_AUTH_MS` in `src/config.ts`) is required for
+  apply and rollback. The one exception is retrying a `failed` change set, which
+  replays an already-approved payload through the same guarded path and so skips
+  the gate.

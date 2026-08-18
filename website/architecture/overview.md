@@ -68,7 +68,10 @@ settings). All API responses are validated at the fetch boundary with the zod
 schemas from `@amazon-king/contracts`, so a shape mismatch fails loudly in the
 UI instead of corrupting state. A network-only service worker
 (`apps/web/public/sw.js`) lets an HTTPS deployment be installed as a
-standalone app without ever caching `/api` responses.
+standalone app without ever caching `/api` responses. Phones must use that
+installed app: an install gate replaces the app routes with install
+instructions in a phone browser tab, leaving only the sign-in screen reachable
+there.
 
 ### `apps/api` — browser-facing backend
 

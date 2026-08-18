@@ -1,11 +1,16 @@
 import { useState, type FormEvent } from "react";
 import { useLogin } from "../api/endpoints";
 import { ApiError } from "../api/client";
+import { isStandalone } from "../lib/install";
+import { PasteLoginLink } from "../components/paste-login-link";
 import { Button } from "../components/ui/button";
 import { Card, CardBody } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 
 export function LoginPage() {
+  // The installed app cannot receive the emailed link (iOS keeps its cookies
+  // in a separate container), so it signs in from a pasted link instead.
+  const [installed] = useState(isStandalone);
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [invalidToken, setInvalidToken] = useState(
@@ -76,6 +81,8 @@ export function LoginPage() {
                 <p role="status" className="text-sm text-emerald-300">
                   Check your inbox — we sent a sign-in link to{" "}
                   <span className="font-medium">{email}</span>.
+                  {installed &&
+                    " Copy the link and paste it below: tapping it opens your browser, which this installed app cannot see."}
                 </p>
               )}
               <Button
@@ -120,6 +127,13 @@ export function LoginPage() {
                 {login.isPending ? "Sending…" : "Email me a sign-in link"}
               </Button>
             </form>
+          )}
+          {installed && (
+            <div className="mt-6 border-t border-zinc-800 pt-4">
+              {/* Reload rather than route: the app boots fresh under the
+                  session the pasted link just created. */}
+              <PasteLoginLink onSignedIn={() => window.location.assign("/")} />
+            </div>
           )}
         </CardBody>
       </Card>

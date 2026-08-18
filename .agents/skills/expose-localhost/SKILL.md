@@ -14,7 +14,7 @@ Port: use `$port` if the user provided one; otherwise default to `5173` (this pr
 Steps:
 
 1. Verify cloudflared exists: `which cloudflared`. If missing, ask the user before installing (`brew install cloudflared`).
-2. Verify the target responds: `curl -s -o /dev/null -w '%{http_code}' http://localhost:$port/`. If it is not running, tell the user (or start the dev server in the background if asked).
+2. Verify the target responds: `curl -s -o /dev/null -w '%{http_code}' http://localhost:$port/`. If it is not running, tell the user (or start the dev server in the background if asked — see the `local-stack` skill).
 3. Start the tunnel as a background task with no timeout:
    `cloudflared tunnel --url http://localhost:$port --no-autoupdate`
 4. Read the task log and extract the `https://<random>.trycloudflare.com` URL.
@@ -26,44 +26,26 @@ Steps:
 
 Notes:
 
-- HTTPS via the tunnel enables secure-context browser features (e.g. PWA install prompts, service workers) that plain-HTTP LAN URLs like `http://10.0.0.x:5173` cannot use.
+- HTTPS via the tunnel enables secure-context browser features (e.g. PWA install prompts, service workers) that plain-HTTP LAN URLs like `http://10.0.0.x:5173` cannot use. Testing the phone install gate requires this.
 - Do not tunnel ports serving secrets or unauthenticated admin panels without warning the user — a quick-tunnel URL is reachable by anyone who has it.
 
-## This repo: sign-in works on localhost and tunnel alike
+## Sign-in works on localhost and tunnel alike
 
-Since migration `0006_login_token_origin.sql`, the API remembers the browser
-origin each login was started from (`Origin` header on
-`POST /api/session/login`, allowlisted in `apps/api/src/services/session.ts`:
-the configured `WEB_ORIGIN`, plus localhost and `https://*.trycloudflare.com`
-in development). The magic link is built from that origin and
-`GET /api/session/verify` redirects back to it, so no `.env` changes are
-needed when opening or closing a tunnel.
+The API remembers the browser origin each login was started from (the `Origin`
+header on `POST /api/session/login`, allowlisted in
+`apps/api/src/services/session.ts`: the configured `WEB_ORIGIN`, plus localhost
+and `https://*.trycloudflare.com` in development). The magic link is built from
+that origin and `GET /api/session/verify` redirects back to it, so **no `.env`
+changes are needed when opening or closing a tunnel**.
 
 Keep `WEB_ORIGIN` and `API_PUBLIC_URL` in `.env` pointed at
-`http://localhost:5173` as the default; they remain the fallback when a
-request carries no origin. Note the Amazon _connect_ (OAuth) callback still
-redirects to `WEB_ORIGIN` only — connecting the Amazon account is best done
-from localhost.
+`http://localhost:5173` as the default; they remain the fallback when a request
+carries no origin.
 
-## This repo: no email on localhost — links are dev-delivered
+Two caveats:
 
-Local development has no SMTP configured, so **no real email is ever sent**.
-`POST /api/session/login` instead returns the magic link as `devLoginUrl` in
-the JSON response (the login page and the re-auth "Confirm it's you" dialog
-render it as a "Continue sign-in" link), and the API process also logs it.
-This is intentional (`apps/api/src/services/session.ts` `startLogin`); do not
-treat the missing email as a bug.
-
-Related sign-in facts worth knowing when working locally:
-
-- Spend-changing actions (apply, rollback, max-cpc, campaign creation)
-  require an app session created within the last 15 minutes
-  (`RECENT_AUTH_MS` in `apps/api/src/config.ts`). When it lapses, the web app
-  opens the re-auth dialog — on localhost, one click on the dev link
-  re-signs you in and returns you to the same page (the link carries the
-  path as `next`, stored in `login_tokens.next_path`, migration `0008`).
-- **After pulling or writing schema changes, run `make migrate`.** A missing
-  migration surfaces only as a generic "Internal server error" in the UI —
-  e.g. the re-auth dialog failed with a 500 until `0008_login_token_next_path.sql`
-  was applied to the running Docker Postgres. If a login or mutation 500s
-  locally, check `docker compose ps`, then pending migrations first.
+- The Amazon **connect** (OAuth) callback redirects to `WEB_ORIGIN` only, so
+  connecting the Amazon account is best done from localhost.
+- No email is sent locally — the magic link is returned in the login response
+  and logged. See the `local-stack` skill for dev sign-in and for why a local
+  500 usually means a pending migration.

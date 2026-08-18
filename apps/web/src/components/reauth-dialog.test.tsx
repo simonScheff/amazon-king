@@ -20,7 +20,24 @@ vi.mock("../api/endpoints", () => ({
       ? { ok: true, devLoginUrl: mocks.devLoginUrl }
       : undefined,
   }),
+  useRedeemLoginLink: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+    error: null,
+  }),
 }));
+
+function setStandalone(standalone: boolean) {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: (query: string) => ({
+      matches: standalone && query === "(display-mode: standalone)",
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }),
+  });
+}
 
 // jsdom lacks HTMLDialogElement.showModal/close; render a minimal stand-in.
 vi.mock("./ui/dialog", () => ({
@@ -52,6 +69,7 @@ describe("ReauthDialog", () => {
     mocks.login.mockReset();
     mocks.isSuccess = false;
     mocks.devLoginUrl = undefined;
+    setStandalone(false);
   });
 
   it("explains the recent sign-in requirement with the session email", () => {
@@ -96,6 +114,31 @@ describe("ReauthDialog", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       /Check your inbox.*owner@example\.com/,
     );
+  });
+
+  it("takes the link back by paste in the installed app", () => {
+    mocks.isSuccess = true;
+    setStandalone(true);
+    render(<ReauthDialog open={true} onClose={() => {}} />);
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /Copy the link and paste it below/,
+    );
+    expect(
+      screen.getByLabelText("Paste the sign-in link from your email"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the paste fallback out of the browser flow", () => {
+    mocks.isSuccess = true;
+    render(<ReauthDialog open={true} onClose={() => {}} />);
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /brings you right back to this page/,
+    );
+    expect(
+      screen.queryByLabelText("Paste the sign-in link from your email"),
+    ).toBeNull();
   });
 
   it("renders nothing while closed", () => {

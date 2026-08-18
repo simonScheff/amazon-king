@@ -1,4 +1,7 @@
+import { useState } from "react";
 import { useLogin, useSession } from "../api/endpoints";
+import { isStandalone } from "../lib/install";
+import { PasteLoginLink } from "./paste-login-link";
 import { Dialog } from "./ui/dialog";
 
 interface ReauthDialogProps {
@@ -12,10 +15,15 @@ interface ReauthDialogProps {
  * with one click — the email comes from the live session, no typing — and the
  * link carries the current path as `next`, so verify lands the user right
  * back here to retry the action.
+ *
+ * In the installed app the link cannot land here (iOS opens it in the browser,
+ * whose cookies the installed app never sees), so the link is pasted back in
+ * instead.
  */
 export function ReauthDialog({ open, onClose }: ReauthDialogProps) {
   const session = useSession();
   const login = useLogin();
+  const [installed] = useState(isStandalone);
   const email = session.data?.email;
 
   function sendLink() {
@@ -55,8 +63,10 @@ export function ReauthDialog({ open, onClose }: ReauthDialogProps) {
         ) : (
           <p role="status" className="text-emerald-300">
             Check your inbox — we sent a sign-in link to{" "}
-            <span className="font-medium">{email}</span>. It brings you right
-            back to this page.
+            <span className="font-medium">{email}</span>.{" "}
+            {installed
+              ? "Copy the link and paste it below."
+              : "It brings you right back to this page."}
           </p>
         )
       ) : (
@@ -72,6 +82,11 @@ export function ReauthDialog({ open, onClose }: ReauthDialogProps) {
             </span>
             . Clicking it signs you in and returns you here to retry the action.
           </p>
+        </div>
+      )}
+      {login.isSuccess && installed && (
+        <div className="mt-4 border-t border-zinc-800 pt-4">
+          <PasteLoginLink onSignedIn={onClose} />
         </div>
       )}
       {login.error && (

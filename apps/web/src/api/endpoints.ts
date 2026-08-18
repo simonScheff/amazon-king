@@ -39,7 +39,8 @@ import {
   type RecommendationState,
   type RecommendationType,
 } from "@amazon-king/contracts";
-import { ApiError, apiFetch, setCsrfToken } from "./client";
+import { ApiError, apiFetch, redeemLoginToken, setCsrfToken } from "./client";
+import { parseLoginToken } from "../lib/login-link";
 
 // ---------------------------------------------------------------------------
 // Response schemas. Where the contracts package does not yet define a shape
@@ -100,6 +101,36 @@ export function useLogin() {
         body,
         schema: loginResponseSchema,
       }),
+  });
+}
+
+/**
+ * Signs in from a pasted sign-in link. The link's own session lives in the
+ * browser that opened it, so the installed app redeems the token itself and
+ * then reads the session it just established.
+ */
+export function useRedeemLoginLink() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (pasted: string) => {
+      const token = parseLoginToken(pasted);
+      if (!token) {
+        throw new ApiError(
+          400,
+          "That is not a sign-in link. Paste the whole link from the email.",
+          "INVALID_LINK",
+        );
+      }
+      await redeemLoginToken(token);
+      const session = await apiFetch("/api/session", {
+        schema: sessionResponseSchema,
+      });
+      setCsrfToken(session.csrfToken);
+      return session;
+    },
+    onSuccess: (session) => {
+      qc.setQueryData(["session"], session);
+    },
   });
 }
 

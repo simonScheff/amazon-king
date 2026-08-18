@@ -73,6 +73,32 @@ async function normalizeError(res: Response): Promise<ApiError> {
 }
 
 /**
+ * Redeems a magic-link token from inside the app instead of by following the
+ * emailed link. Needed by the installed app on iOS, which has its own cookie
+ * container: an emailed link always opens in the browser, whose session cookie
+ * the installed app can never see. Fetching verify here stores the cookie in
+ * the container that runs this code.
+ *
+ * Verify answers with a redirect either way, so failure is detected from the
+ * URL it lands on rather than from a status code.
+ */
+export async function redeemLoginToken(token: string): Promise<void> {
+  const res = await fetch(buildUrl("/api/session/verify", { token }), {
+    credentials: "same-origin",
+  });
+  if (!res.ok) throw await normalizeError(res);
+
+  const landed = new URL(res.url, window.location.origin);
+  if (landed.searchParams.get("error") === "invalid_token") {
+    throw new ApiError(
+      401,
+      "This sign-in link is invalid, expired, or already used. Request a new one.",
+      "INVALID_TOKEN",
+    );
+  }
+}
+
+/**
  * Typed fetch wrapper for the application API. Sends credentials (session
  * cookie) on every request and the CSRF header on mutations. Optionally
  * validates the response against a Zod schema from @amazon-king/contracts.

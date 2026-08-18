@@ -44,7 +44,9 @@ vi.mock("../api/endpoints", () => ({
   useLogout: () => ({ mutate: mocks.logoutMutate, isPending: false }),
 }));
 
-vi.mock("./install-banner", () => ({ InstallBanner: () => null }));
+vi.mock("./install-gate", () => ({
+  InstallGate: ({ children }: { children: React.ReactNode }) => children,
+}));
 vi.mock("./product-filter", () => ({ ProductFilter: () => null }));
 
 /** The mobile drawer: off-canvas and untabbable unless open. */

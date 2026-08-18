@@ -74,6 +74,23 @@ describe("LoginPage", () => {
     ).toBeEnabled();
   });
 
+  it("offers the paste fallback only in the installed app", () => {
+    const label = "Paste the sign-in link from your email";
+    renderLogin();
+    expect(screen.queryByLabelText(label)).toBeNull();
+    cleanup();
+
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === "(display-mode: standalone)",
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    renderLogin();
+
+    expect(screen.getByLabelText(label)).toBeInTheDocument();
+  });
+
   it("shows the local redirect URL when development email is unavailable", async () => {
     fetchMock.mockResolvedValue(
       new Response(

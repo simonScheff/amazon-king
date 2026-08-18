@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { ApiError, apiFetch, getCsrfToken, setCsrfToken } from "./client";
+import {
+  ApiError,
+  apiFetch,
+  getCsrfToken,
+  redeemLoginToken,
+  setCsrfToken,
+} from "./client";
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -106,5 +112,58 @@ describe("apiFetch", () => {
       query: { days: 30, type: undefined },
     });
     expect(spy.mock.calls[0]?.[0]).toBe("/api/dashboard/summary?days=30");
+  });
+});
+
+describe("redeemLoginToken", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** Verify answers with a redirect; fetch reports where it landed in res.url. */
+  function landingResponse(url: string, status = 200): Response {
+    const res = new Response("<html></html>", { status });
+    Object.defineProperty(res, "url", { value: url });
+    return res;
+  }
+
+  it("sends the token to verify and resolves when a session is established", async () => {
+    const spy = vi.fn(async (_url: string, _init?: RequestInit) =>
+      landingResponse("http://localhost:5173/campaigns"),
+    );
+    vi.stubGlobal("fetch", spy);
+
+    await expect(redeemLoginToken("tok-123")).resolves.toBeUndefined();
+    expect(spy.mock.calls[0]?.[0]).toBe("/api/session/verify?token=tok-123");
+  });
+
+  it("rejects when verify redirects back to login with invalid_token", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        landingResponse("http://localhost:5173/login?error=invalid_token"),
+      ),
+    );
+
+    const err = await redeemLoginToken("stale").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).code).toBe("INVALID_TOKEN");
+  });
+
+  it("surfaces a rate-limited verify as an ApiError", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ message: "Too many requests" }), {
+            status: 429,
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    );
+
+    const err = await redeemLoginToken("tok").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(429);
   });
 });

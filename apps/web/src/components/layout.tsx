@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { ApiError } from "../api/client";
 import { useDashboardSummary, useLogout, useSession } from "../api/endpoints";
 import { ToastProvider, useToast } from "./toast";
-import { InstallBanner } from "./install-banner";
+import { InstallGate } from "./install-gate";
 import { ProductFilter } from "./product-filter";
 import { Loading } from "./states";
 
@@ -336,59 +336,60 @@ export function AppLayout() {
   }, [navOpen]);
 
   return (
-    <ToastProvider>
-      <SessionGate>
-        <div className="min-h-screen bg-zinc-950 text-zinc-200">
-          <KillSwitchBanner />
-          <div className="flex">
-            <button
-              type="button"
-              aria-label="Open navigation"
-              aria-controls="app-sidebar"
-              aria-expanded={navOpen}
-              onClick={() => setNavOpen(true)}
-              className={`fixed left-3 top-3 z-40 h-10 w-10 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-300 shadow-sm md:hidden ${
-                navOpen ? "hidden" : "flex"
-              }`}
-            >
-              <MenuIcon />
-            </button>
-            {navOpen && (
+    <InstallGate>
+      <ToastProvider>
+        <SessionGate>
+          <div className="min-h-screen bg-zinc-950 text-zinc-200">
+            <KillSwitchBanner />
+            <div className="flex">
+              <button
+                type="button"
+                aria-label="Open navigation"
+                aria-controls="app-sidebar"
+                aria-expanded={navOpen}
+                onClick={() => setNavOpen(true)}
+                className={`fixed left-3 top-3 z-40 h-10 w-10 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-300 shadow-sm md:hidden ${
+                  navOpen ? "hidden" : "flex"
+                }`}
+              >
+                <MenuIcon />
+              </button>
+              {navOpen && (
+                <div
+                  aria-hidden="true"
+                  onClick={closeNav}
+                  className="fixed inset-0 z-20 bg-black/60 md:hidden"
+                />
+              )}
+              <aside
+                id="app-sidebar"
+                className={`fixed inset-y-0 left-0 z-30 border-r border-zinc-800 bg-zinc-900/95 backdrop-blur transition-[transform,width,visibility] md:visible md:translate-x-0 ${
+                  navOpen ? "translate-x-0" : "invisible -translate-x-full"
+                } w-60 ${sidebarCollapsed ? "md:w-16" : "md:w-60"}`}
+              >
+                <Sidebar
+                  collapsed={sidebarCollapsed}
+                  onToggleCollapse={toggleSidebar}
+                  onNavigate={closeNav}
+                  onClose={closeNav}
+                />
+              </aside>
               <div
                 aria-hidden="true"
-                onClick={closeNav}
-                className="fixed inset-0 z-20 bg-black/60 md:hidden"
+                className={`hidden shrink-0 transition-[width] md:block ${
+                  sidebarCollapsed ? "w-16" : "w-60"
+                }`}
               />
-            )}
-            <aside
-              id="app-sidebar"
-              className={`fixed inset-y-0 left-0 z-30 border-r border-zinc-800 bg-zinc-900/95 backdrop-blur transition-[transform,width,visibility] md:visible md:translate-x-0 ${
-                navOpen ? "translate-x-0" : "invisible -translate-x-full"
-              } w-60 ${sidebarCollapsed ? "md:w-16" : "md:w-60"}`}
-            >
-              <Sidebar
-                collapsed={sidebarCollapsed}
-                onToggleCollapse={toggleSidebar}
-                onNavigate={closeNav}
-                onClose={closeNav}
-              />
-            </aside>
-            <div
-              aria-hidden="true"
-              className={`hidden shrink-0 transition-[width] md:block ${
-                sidebarCollapsed ? "w-16" : "w-60"
-              }`}
-            />
-            <main className="min-w-0 flex-1 px-4 py-8 md:px-10">
-              <div className="mx-auto w-full max-w-[1440px]">
-                <div className="h-8 md:hidden" />
-                <Outlet />
-              </div>
-            </main>
+              <main className="min-w-0 flex-1 px-4 py-8 md:px-10">
+                <div className="mx-auto w-full max-w-[1440px]">
+                  <div className="h-8 md:hidden" />
+                  <Outlet />
+                </div>
+              </main>
+            </div>
           </div>
-          <InstallBanner />
-        </div>
-      </SessionGate>
-    </ToastProvider>
+        </SessionGate>
+      </ToastProvider>
+    </InstallGate>
   );
 }
