@@ -11,8 +11,6 @@ import {
   useCreateCampaignDrafts,
   useProfiles,
 } from "../api/endpoints";
-import { ApiError, isReauthError } from "../api/client";
-import { ReauthDialog } from "../components/reauth-dialog";
 import { useToast } from "../components/toast";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -103,7 +101,6 @@ export function CampaignNewPage() {
   const profiles = useProfiles();
   const books = useBooks();
   const createDrafts = useCreateCampaignDrafts();
-  const [reauthOpen, setReauthOpen] = useState(false);
 
   // Optional prefill from the cannibalization resolution screen: the search
   // term to advertise, its market, and the finding this campaign resolves.
@@ -280,9 +277,6 @@ export function CampaignNewPage() {
         );
         void navigate({ to: "/changes" });
       },
-      onError: (err) => {
-        if (isReauthError(err)) setReauthOpen(true);
-      },
     });
   }
 
@@ -311,13 +305,8 @@ export function CampaignNewPage() {
     );
   }
 
-  const submitError = isReauthError(createDrafts.error)
-    ? null
-    : createDrafts.error instanceof ApiError
-      ? createDrafts.error.message
-      : createDrafts.error instanceof Error
-        ? createDrafts.error.message
-        : null;
+  const submitError =
+    createDrafts.error instanceof Error ? createDrafts.error.message : null;
 
   return (
     <div className="flex max-w-3xl flex-col gap-4">
@@ -770,7 +759,6 @@ export function CampaignNewPage() {
           </Button>
         )}
       </div>
-      <ReauthDialog open={reauthOpen} onClose={() => setReauthOpen(false)} />
     </div>
   );
 }

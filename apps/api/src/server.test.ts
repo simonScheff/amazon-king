@@ -174,7 +174,7 @@ describe("POST /api/campaign-creation-change-sets", () => {
     expect(changes.createCampaignCreationChangeSets).not.toHaveBeenCalled();
   });
 
-  it("requires a recent sign-in", async () => {
+  it("drafts without a recent sign-in (nothing reaches Amazon until apply)", async () => {
     const { changes } = await start({ recentAuth: false });
 
     const response = await app!.inject({
@@ -184,9 +184,8 @@ describe("POST /api/campaign-creation-change-sets", () => {
       payload: VALID_BODY,
     });
 
-    expect(response.statusCode).toBe(401);
-    expect(response.json().error.code).toBe("REAUTH_REQUIRED");
-    expect(changes.createCampaignCreationChangeSets).not.toHaveBeenCalled();
+    expect(response.statusCode).toBe(200);
+    expect(changes.createCampaignCreationChangeSets).toHaveBeenCalled();
   });
 });
 

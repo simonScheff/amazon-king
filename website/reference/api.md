@@ -40,10 +40,14 @@ endpoints return `401 REAUTH_REQUIRED` when the session is too old:
 - `POST /api/campaigns/:campaignId/max-cpc`
 - `POST /api/campaigns/:campaignId/state`
 - `POST /api/campaigns/:campaignId/name`
-- `POST /api/campaign-creation-change-sets`
 - `POST /api/change-sets/:id/apply` — except when retrying a `failed` change
   set, which replays an already-approved payload through the same guarded path
 - `POST /api/change-actions/:actionId/rollback`
+
+Drafting a change set is not gated — `POST /api/recommendations/change-sets`,
+`POST /api/recommendations/:id/cannibalization-change-set`, and
+`POST /api/campaign-creation-change-sets` only write to the app's own database.
+The gate applies at the point spend can change, which is the apply.
 
 ### Error envelope
 
@@ -571,7 +575,8 @@ Drafts one `campaign_creation` change set per profile, each holding an ordered
 `create_keyword` / `create_target` action chain. Nothing is created on Amazon
 until the sets are applied.
 
-- **Auth:** session + CSRF + **recent-auth**. **Rate:** WRITE.
+- **Auth:** session + CSRF (no recent-auth — the wizard only drafts; the apply
+  is gated). **Rate:** WRITE.
 
 | Field                  | Type     | Constraints                                                   |
 | ---------------------- | -------- | ------------------------------------------------------------- |

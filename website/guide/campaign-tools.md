@@ -52,8 +52,11 @@ The wizard at `/campaigns/new` has six steps:
 6. **Review** — the payload is validated against the shared contract schema
    before submission.
 
-Submitting posts to `POST /api/campaign-creation-change-sets` (recent-auth
-required) and creates **one draft `campaign_creation` change set per market**.
+Submitting posts to `POST /api/campaign-creation-change-sets` and creates **one
+draft `campaign_creation` change set per market**. The wizard never interrupts
+you for a sign-in, however long you spend in it: drafting touches only the
+app's own database, and the recent-sign-in requirement lands on the apply in
+the Change center, where the campaign actually reaches Amazon.
 
 ### How creation applies
 

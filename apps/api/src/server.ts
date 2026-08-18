@@ -648,12 +648,15 @@ export async function buildServer(
     },
   );
 
+  // Drafting a creation set writes nothing to Amazon — like the other
+  // draft-creating routes above it is not recent-auth gated, so a long wizard
+  // is never interrupted by a sign-in it would lose its state to. The spend
+  // starts at apply, which keeps the gate.
   app.post(
     "/api/campaign-creation-change-sets",
     { config: { rateLimit: WRITE_RATE } },
     async (request) => {
       const auth = await authenticate(request);
-      requireRecentAuth(auth);
       const body = parse(campaignCreationCreateSchema, request.body);
       const result = await services.changes.createCampaignCreationChangeSets(
         auth,

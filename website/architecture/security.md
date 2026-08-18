@@ -149,13 +149,19 @@ Over-limit requests get `429` with error code `RATE_LIMITED`.
 
 Spend-changing actions require a session created within the last **15
 minutes** (`RECENT_AUTH_MS`, `isRecentAuth`): applying a change set, rolling
-back an action, setting a campaign max CPC, and creating campaign-creation
-change sets. A gated call from an older session fails with
+back an action, pausing/enabling or renaming a campaign, and setting a
+campaign max CPC. A gated call from an older session fails with
 `401 REAUTH_REQUIRED`; the web app answers with a one-click re-auth dialog
 whose magic link carries the current page as `next`. One deliberate
 exception: retrying a **failed** change set replays an already-approved
 payload through the same guarded path (Amazon state is re-read and compared
 before anything is sent), so it skips the recent-auth gate.
+
+Drafting a change set — from a recommendation, a cannibalization resolution,
+or the new-campaign wizard — is deliberately **not** gated. A draft writes
+only to the app's own database and cannot spend anything, so a stolen session
+could at most queue a proposal it still could not apply. Gating it would buy
+no security while making a long wizard lose its unsaved state to a sign-in.
 
 ## Guarded writes
 
