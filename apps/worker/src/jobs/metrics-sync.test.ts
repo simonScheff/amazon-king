@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
 import { describe, expect, it, vi, type Mock } from "vitest";
 import {
@@ -41,6 +42,7 @@ const ROWS_BY_FAMILY: Record<string, unknown[]> = {
       cost: 5.5,
       purchases7d: 2,
       sales7d: 20,
+      unitsSoldClicks7d: 4,
     },
   ],
   spTargeting: [
@@ -168,6 +170,14 @@ describe("metrics_sync", () => {
     expect(storage.files.size).toBe(4);
     // Four fact batches were imported; the sync run completed.
     expect(store.importCalls).toHaveLength(4);
+    const campaignFacts = store.importCalls.find(
+      (batch) => batch.reportType === "spCampaigns",
+    );
+    expect(campaignFacts?.rows[0]).toMatchObject({
+      orders: 2,
+      units: 4,
+      unitsSoldClicks7d: 4,
+    });
     const run = store.syncRuns.find((r) => r.kind === "metrics")!;
     expect(run.status).toBe("complete");
     // A successful complete import chains a recommendation run (plan §8).
@@ -264,6 +274,47 @@ describe("metrics_sync", () => {
       ["spAdvertisedProduct", "spSearchTerm", "spTargeting"].sort(),
     );
     expect(store.importCalls).toHaveLength(3);
+  });
+
+  it("imports a downloaded artifact without re-polling Amazon", async () => {
+    const store = new FakeStore();
+    store.profiles.push(PROFILE);
+    const storage = new FakeStorage();
+    for (const familySpec of buildAllFamilySpecs(
+      PROFILE.id,
+      RANGE.startDate,
+      RANGE.endDate,
+    )) {
+      const bytes = gzipSync(
+        JSON.stringify(ROWS_BY_FAMILY[familySpec.family] ?? []),
+      );
+      const key = `1/7/stored-${familySpec.family}.json.gz`;
+      storage.files.set(key, bytes);
+      store.reportJobs.set(familySpec.specFingerprint, {
+        id: `job-${familySpec.family}`,
+        syncRunId: "1",
+        profileId: PROFILE.id,
+        reportType: familySpec.family,
+        specFingerprint: familySpec.specFingerprint,
+        amazonReportId: `amz-${familySpec.family}`,
+        status: "importing",
+        attempts: 1,
+        checksum: createHash("sha256").update(bytes).digest("hex"),
+        storageKey: key,
+        error: "column units did not exist",
+      });
+    }
+    const { deps, calls } = makeMetricsDeps(store, storage);
+
+    await runHandler(createMetricsSyncHandler(deps), payload());
+
+    expect(calls.requestReport).not.toHaveBeenCalled();
+    expect(calls.getReport).not.toHaveBeenCalled();
+    expect(store.importCalls).toHaveLength(4);
+    expect(store.importCalls[0]?.rows[0]).toMatchObject({
+      orders: 2,
+      units: 4,
+    });
   });
 
   it("resumes at polling after a restart when amazon_report_id is persisted", async () => {
@@ -399,6 +450,55 @@ describe("metrics_sync", () => {
 
     expect(store.importCalls).toHaveLength(8); // 4 families x 2 runs
     expect(store.convergedFacts.size).toBe(totalRows); // still one row per grain
+  });
+
+  it("keeps a timed-out report polling so the retry resumes the same report", async () => {
+    const store = new FakeStore();
+    store.profiles.push(PROFILE);
+    const storage = new FakeStorage();
+    let clock = Date.parse("2026-08-06T12:00:00.000Z");
+    let ready = false;
+    const { deps, calls } = makeMetricsDeps(store, storage, {
+      now: () => new Date(clock),
+      getReportStatus: (reportId) => {
+        if (ready) {
+          return {
+            reportId,
+            state: "downloading",
+            amazonStatus: "SUCCESS",
+            downloadUrl: `https://download.test/${reportId}`,
+          };
+        }
+        // Amazon is still generating; each poll burns ten minutes.
+        clock += 10 * 60_000;
+        return { reportId, state: "queued", amazonStatus: "PENDING" };
+      },
+    });
+
+    await expect(
+      runHandler(createMetricsSyncHandler(deps), payload()),
+    ).rejects.toThrow(/polling timed out/);
+
+    const spec = buildFamilySpec(
+      "spCampaigns",
+      PROFILE.id,
+      RANGE.startDate,
+      RANGE.endDate,
+    );
+    const timedOut = store.reportJobs.get(spec.specFingerprint)!;
+    expect(timedOut.status).toBe("polling");
+    expect(timedOut.amazonReportId).toBe("amz-report-1-spCampaigns");
+    expect(calls.requestReport).toHaveBeenCalledTimes(1);
+
+    ready = true;
+    await runHandler(createMetricsSyncHandler(deps), payload());
+
+    // The wait was not thrown away: no duplicate spCampaigns report was asked for.
+    const requested = calls.requestReport.mock.calls.filter(
+      ([, requestedSpec]) => requestedSpec.reportType === "spCampaigns",
+    );
+    expect(requested).toHaveLength(1);
+    expect(store.reportJobs.get(spec.specFingerprint)!.status).toBe("complete");
   });
 
   it("marks polling reports retryable and lets the queue retry them", async () => {

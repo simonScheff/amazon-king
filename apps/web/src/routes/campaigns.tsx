@@ -16,12 +16,17 @@ import {
   getCampaignProfitStatus,
   hasCampaignActivity,
 } from "../lib/campaign-profit";
-import { formatAcos, formatCount, formatMoney } from "../lib/format";
+import {
+  formatAcos,
+  formatCount,
+  formatMoney,
+  ORDERS_COLUMN_TITLE,
+} from "../lib/format";
 import { countryNameForCode } from "../lib/marketplaces";
 import { useSpendSortedMarketplaces } from "../lib/use-spend-sorted-marketplaces";
 import { compareNullable, nextSort, type Sort } from "../lib/sorting";
 
-const PROFITABILITY_DAYS = 7;
+const PROFITABILITY_DAYS = 30;
 
 const TEXT_COLUMNS = ["name", "profile", "state"] as const;
 
@@ -35,6 +40,7 @@ type SortKey =
   | "cost"
   | "sales"
   | "orders"
+  | "units"
   | "acos";
 
 /** Display-only sort keys; money strings are converted to Number for ordering. */
@@ -60,6 +66,8 @@ function sortValue(row: CampaignListRow, key: SortKey): number | string | null {
       return Number(row.totals.sales);
     case "orders":
       return row.totals.orders;
+    case "units":
+      return row.totals.units;
     case "acos":
       return Number(row.totals.sales) > 0
         ? Number(row.totals.cost) / Number(row.totals.sales)
@@ -216,6 +224,14 @@ export function CampaignsPage() {
                   sort={sort}
                   onSort={onSort}
                   className="text-right"
+                  title={ORDERS_COLUMN_TITLE}
+                />
+                <SortableTh
+                  label="Units"
+                  column="units"
+                  sort={sort}
+                  onSort={onSort}
+                  className="text-right"
                 />
                 <SortableTh
                   label="ACoS"
@@ -298,7 +314,7 @@ export function CampaignsPage() {
                     </Td>
                     <Td
                       className="hidden whitespace-nowrap md:table-cell"
-                      aria-label={`${c.name} seven-day profit: ${profitStatus.label}`}
+                      aria-label={`${c.name} ${PROFITABILITY_DAYS}-day profit: ${profitStatus.label}`}
                     >
                       <ProfitabilityResult
                         status={profitStatus}
@@ -322,6 +338,9 @@ export function CampaignsPage() {
                     </Td>
                     <Td className="text-right">
                       {formatCount(c.totals.orders)}
+                    </Td>
+                    <Td className="text-right">
+                      {formatCount(c.totals.units)}
                     </Td>
                     <Td className="text-right">{formatAcos(acos)}</Td>
                   </tr>

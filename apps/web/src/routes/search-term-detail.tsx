@@ -29,6 +29,8 @@ import {
   formatCount,
   formatDate,
   formatMoney,
+  ORDERS_COLUMN_TITLE,
+  ordersUnitsHint,
 } from "../lib/format";
 import { compareNullable, nextSort, type Sort } from "../lib/sorting";
 import { countryNameForCode } from "../lib/marketplaces";
@@ -50,6 +52,7 @@ type SortKey =
   | "cost"
   | "sales"
   | "orders"
+  | "units"
   | "acos";
 
 /** Display-only sort keys; money strings are converted to Number for ordering. */
@@ -78,6 +81,8 @@ function sortValue(
       return Number(row.totals.sales);
     case "orders":
       return row.totals.orders;
+    case "units":
+      return row.totals.units;
     case "acos":
       return Number(row.totals.sales) > 0
         ? Number(row.totals.cost) / Number(row.totals.sales)
@@ -245,7 +250,12 @@ export function SearchTermDetailPage() {
           label="Sales"
           value={formatMoney(data.totals.sales, currency)}
         />
-        <KpiCard label="Orders" value={formatCount(data.totals.orders)} />
+        <KpiCard
+          label="Orders"
+          value={formatCount(data.totals.orders)}
+          suffix={ordersUnitsHint(data.totals.orders, data.totals.units)}
+          suffixTitle={ORDERS_COLUMN_TITLE}
+        />
         <KpiCard label="ACoS" value={formatAcos(data.totals.acos)} />
         <KpiCard
           label="Est. royalty"
@@ -358,6 +368,14 @@ export function SearchTermDetailPage() {
                   sort={sort}
                   onSort={onSort}
                   className="text-right"
+                  title={ORDERS_COLUMN_TITLE}
+                />
+                <SortableTh
+                  label="Units"
+                  column="units"
+                  sort={sort}
+                  onSort={onSort}
+                  className="text-right"
                 />
                 <SortableTh
                   label="ACoS"
@@ -442,6 +460,9 @@ export function SearchTermDetailPage() {
                     </Td>
                     <Td className="text-right">
                       {formatCount(c.totals.orders)}
+                    </Td>
+                    <Td className="text-right">
+                      {formatCount(c.totals.units)}
                     </Td>
                     <Td className="text-right">{formatAcos(acos)}</Td>
                   </tr>

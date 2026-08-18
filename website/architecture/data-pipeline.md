@@ -92,13 +92,14 @@ For each chunk, one spec is built per report family — `spCampaigns`,
 (`apps/worker/src/report-specs.ts`). Placement reporting has no stable daily
 import path yet, so no spec is built for it. Every family requests DAILY rows
 with explicit attribution columns: `impressions`, `clicks`, `cost`,
-`purchases7d`, `sales7d`, `purchases14d`, `sales14d`.
+`purchases7d`, `sales7d`, `purchases14d`, `sales14d`, `unitsSoldClicks7d`,
+`unitsSoldClicks14d`.
 
 Each spec gets a deterministic fingerprint (`buildReportSpecFingerprint` in
 `packages/database/src/fingerprint.ts`): the SHA-256 of a stable JSON
 serialization of `{profileId, reportType, dateStart, dateEnd, columns}`, with
 columns sorted and `REPORT_CONFIGURATION_VERSION` (currently
-`reporting-v3-config-2`) prepended. Bumping that constant invalidates old
+`reporting-v3-config-3`) prepended. Bumping that constant invalidates old
 fingerprints when adapter-owned dimensions change, so a queued sync can never
 adopt a stale artifact whose shape no longer matches the row schemas.
 
@@ -152,7 +153,13 @@ Key properties:
   callback (`findProfilePkForReport`) resolves which profile owns a persisted
   report id.
 - **Polling** starts at 5 s, doubles each round, caps at 60 s, and gives up
-  after 20 minutes total (`REPORT_POLL_*`), marking the job `retryable`.
+  after 45 minutes total (`REPORT_POLL_*`). Observed Reporting v3 latency for
+  daily Sponsored Products reports is 19–21 minutes, so the budget has to
+  comfortably exceed that. A report that exhausts the budget stays `polling`
+  with its `amazon_report_id` intact, so the queue retry resumes the same
+  Amazon report instead of discarding the wait and requesting an identical
+  one; only a report Amazon reports as `FAILURE` becomes `retryable` and is
+  re-requested.
 - **Download** streams the pre-signed URL straight to disk — never buffered
   in memory (`downloadReport` in
   `packages/amazon-ads/src/adapters/reporting.ts`). The artifact keeps
@@ -223,11 +230,12 @@ Rule thresholds and formulas are documented in
 ## Attribution model
 
 Fact tables store both attribution windows explicitly and never merge them:
-`purchases7d`/`sales7d` and `purchases14d`/`sales14d` are separate columns on
-every `*_metrics_daily` table. At import time the convenience columns are set
-from the 7-day window — `orders = purchases7d`, `sales = sales7d`
-(`mapRowsToFacts` in `apps/worker/src/reconcile.ts`) — and rows missing
-optional attribution columns default to 0. This is why
+`purchases7d`/`sales7d`, `purchases14d`/`sales14d`, and
+`unitsSoldClicks7d`/`unitsSoldClicks14d` are separate columns on every
+`*_metrics_daily` table. At import time the convenience columns are set from
+the 7-day window — `orders = purchases7d`, `sales = sales7d`,
+`units = unitsSoldClicks7d` (`mapRowsToFacts` in `apps/worker/src/reconcile.ts`)
+— and rows missing optional attribution columns default to 0. This is why
 `recent_window_resync` exists: a conversion attributed 10 days late updates
 the stored 7d/14d columns through the same idempotent upsert.
 

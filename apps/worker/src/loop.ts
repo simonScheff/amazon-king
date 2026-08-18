@@ -39,7 +39,6 @@ export interface WorkerLoopOptions {
   reapIntervalMs: number;
   logger: Logger;
   sleep?: (ms: number) => Promise<void>;
-  now?: () => number;
 }
 
 function defaultSleep(ms: number): Promise<void> {
@@ -56,42 +55,54 @@ export async function runWorkerLoop(
   shouldStop: () => boolean,
 ): Promise<void> {
   const sleep = options.sleep ?? defaultSleep;
-  const now = options.now ?? (() => Date.now());
   const types = Object.keys(options.handlers);
-  let lastReapAt = 0;
 
-  while (!shouldStop()) {
-    if (now() - lastReapAt >= options.reapIntervalMs) {
-      lastReapAt = now();
+  // Reaping runs on its own timer rather than at the top of the loop: a single
+  // metrics_sync can occupy the loop for hours (Amazon needs ~20 minutes per
+  // report), and a crashed worker's claimed jobs must not stay invisible that
+  // long. Reap once up front so a restarted worker reclaims its own orphans.
+  await reapOnce(options);
+  const reapTimer = setInterval(() => {
+    void reapOnce(options);
+  }, options.reapIntervalMs);
+  reapTimer.unref();
+
+  try {
+    while (!shouldStop()) {
+      let job: Job | null;
       try {
-        const reaped = await reapExpiredLeases(options.pool);
-        if (reaped.length > 0) {
-          options.logger.warn({ reaped }, "Reaped expired job leases");
-        }
+        job = await claim(
+          options.pool,
+          options.workerId,
+          types,
+          options.leaseSeconds,
+        );
       } catch (error) {
-        options.logger.error({ err: error }, "Lease reaping failed");
+        options.logger.error({ err: error }, "Job claim failed");
+        await sleep(options.pollIntervalMs);
+        continue;
       }
-    }
+      if (!job) {
+        await sleep(options.pollIntervalMs);
+        continue;
+      }
 
-    let job: Job | null;
-    try {
-      job = await claim(
-        options.pool,
-        options.workerId,
-        types,
-        options.leaseSeconds,
-      );
-    } catch (error) {
-      options.logger.error({ err: error }, "Job claim failed");
-      await sleep(options.pollIntervalMs);
-      continue;
+      await executeJob(job, options);
     }
-    if (!job) {
-      await sleep(options.pollIntervalMs);
-      continue;
-    }
+  } finally {
+    clearInterval(reapTimer);
+  }
+}
 
-    await executeJob(job, options);
+/** Return expired leases to `pending`; never throws into the caller. */
+async function reapOnce(options: WorkerLoopOptions): Promise<void> {
+  try {
+    const reaped = await reapExpiredLeases(options.pool);
+    if (reaped.length > 0) {
+      options.logger.warn({ reaped }, "Reaped expired job leases");
+    }
+  } catch (error) {
+    options.logger.error({ err: error }, "Lease reaping failed");
   }
 }
 

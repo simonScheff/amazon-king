@@ -239,9 +239,23 @@ has the full environment from `.env`.
 ### A metrics sync keeps retrying
 
 **Cause.** Amazon report generation failed or polling timed out
-(`REPORT_POLL_TIMEOUT_MS`, default 20 minutes). The sync run is marked
-`retryable` and the job is retried; after 5 attempts the job is dead-lettered
-with `Report <family> exhausted 5 attempts`.
+(`REPORT_POLL_TIMEOUT_MS`, default 45 minutes). A timeout keeps the report
+`polling` so the retry resumes the same `amazon_report_id`; a report Amazon
+reports as `FAILURE` becomes `retryable` and is re-requested. After 5 attempts
+the job is dead-lettered with `Report <family> exhausted 5 attempts`.
+
+Amazon needs roughly 19–21 minutes per daily report, and the worker runs one
+job at a time, so a full pass over many marketplaces takes hours. If metric
+columns look stale for one country, check whether its reports have completed
+before assuming a bug:
+
+```sql
+select report_type, date_start, date_end, status, attempts
+  from report_jobs
+ where profile_id = $1
+ order by id desc
+ limit 12;
+```
 
 **Fix.** Check the worker logs for the underlying Amazon error (rate limits,
 region outages). Once the cause clears, request a new sync. Persistent

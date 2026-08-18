@@ -28,6 +28,24 @@ export function formatCount(n: number | null | undefined): string {
   return new Intl.NumberFormat("en-US").format(n);
 }
 
+/** Native tooltip on the Orders column: checkouts, not copies. */
+export const ORDERS_COLUMN_TITLE =
+  "Checkouts. One order can include multiple copies.";
+
+/**
+ * KPI suffix beside Orders when Amazon attributed more units than checkouts.
+ * Hidden when counts match, or when units are still 0 (not yet imported).
+ */
+export function ordersUnitsHint(
+  orders: number | null | undefined,
+  units: number | null | undefined,
+): string | undefined {
+  if (orders == null || units == null || units <= 0 || units === orders) {
+    return undefined;
+  }
+  return `${formatCount(units)} units`;
+}
+
 /**
  * Period-over-period change as a fraction of |previous| (0.12 = +12%).
  * Null when the previous value is zero or unknown — a percentage change has

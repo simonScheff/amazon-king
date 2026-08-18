@@ -79,6 +79,7 @@ const detail: CampaignDetail = {
       cost: "8.0000",
       sales: "20.0000",
       orders: 2,
+      units: 2,
       acos: 0.4,
       estimatedRoyalty: "10.0000",
       estimatedAdProfit: "2.0000",
@@ -115,6 +116,7 @@ const detail: CampaignDetail = {
         cost: "0.5000",
         sales: "8.3000",
         orders: 1,
+        units: 1,
       },
       estimatedRoyalty: "4.0000",
       estimatedAdProfit: "3.5000",
@@ -130,6 +132,7 @@ const detail: CampaignDetail = {
         cost: "0.5000",
         sales: "0.0000",
         orders: 0,
+        units: 0,
       },
       estimatedRoyalty: null,
       estimatedAdProfit: null,
@@ -181,6 +184,27 @@ describe("CampaignDetailPage profitability", () => {
     expect(screen.getByTestId("campaign-chart")).toHaveTextContent(
       "2 daily points · profit shown",
     );
+  });
+
+  it("shows Units next to Orders when they differ", () => {
+    mocks.useCampaign.mockReturnValue({
+      isPending: false,
+      error: null,
+      data: {
+        ...detail,
+        campaign: {
+          ...detail.campaign,
+          totals: { ...detail.campaign.totals, units: 4 },
+        },
+      },
+    });
+    render(<CampaignDetailPage />);
+
+    expect(screen.getByText("4 units")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Search terms" }));
+    expect(
+      screen.getByRole("columnheader", { name: "Units" }),
+    ).toBeInTheDocument();
   });
 
   it("links to the campaign in the Amazon Ads console", () => {

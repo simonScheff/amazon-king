@@ -10,6 +10,7 @@ import type { ReportFamily } from "./report-specs.js";
  * - `orders` is set from `purchases7d` (the 7-day attributed order count);
  *   the 7d/14d attribution windows are also stored explicitly and never merged.
  * - `sales` is set from `sales7d` (7-day attributed revenue).
+ * - `units` is set from `unitsSoldClicks7d` (7-day click-attributed units).
  * - Rows missing optional attribution columns default to 0.
  */
 
@@ -49,10 +50,13 @@ interface SharedValues {
   cost: string;
   sales: string;
   orders: number;
+  units: number;
   purchases7d: number;
   sales7d: string;
   purchases14d: number;
   sales14d: string;
+  unitsSoldClicks7d: number;
+  unitsSoldClicks14d: number;
   currency: string;
 }
 
@@ -64,13 +68,18 @@ function sharedValues(
   const purchases14d = optionalCount(row, "purchases14d");
   const sales7d = optionalCount(row, "sales7d");
   const sales14d = optionalCount(row, "sales14d");
+  const unitsSoldClicks7d = optionalCount(row, "unitsSoldClicks7d");
+  const unitsSoldClicks14d = optionalCount(row, "unitsSoldClicks14d");
   return {
     sales: money(sales7d),
     orders: purchases7d,
+    units: unitsSoldClicks7d,
     purchases7d,
     sales7d: money(sales7d),
     purchases14d,
     sales14d: money(sales14d),
+    unitsSoldClicks7d,
+    unitsSoldClicks14d,
     currency,
   };
 }
@@ -231,8 +240,11 @@ export function reconcileFacts(
       ["impressions", row.impressions],
       ["clicks", row.clicks],
       ["orders", row.orders],
+      ["units", row.units],
       ["purchases7d", row.purchases7d],
       ["purchases14d", row.purchases14d],
+      ["unitsSoldClicks7d", row.unitsSoldClicks7d],
+      ["unitsSoldClicks14d", row.unitsSoldClicks14d],
     ] as const;
     for (const [field, value] of counts) {
       if (!Number.isInteger(value) || value < 0) {

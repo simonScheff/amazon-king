@@ -71,6 +71,7 @@ function searchTerm(
       cost: "8.0000",
       sales: "20.0000",
       orders: 2,
+      units: 2,
       acos: 0.4,
     },
     estimatedRoyalty: "10.0000",
@@ -115,33 +116,31 @@ describe("SearchTermsPage", () => {
     });
   });
 
-  it("shows the seven-day result for every aggregated search term", () => {
+  it("shows the thirty-day result for every aggregated search term", () => {
     render(<SearchTermsPage />);
 
-    expect(mocks.useSearchTerms).toHaveBeenCalledWith(7, undefined, undefined);
+    expect(mocks.useSearchTerms).toHaveBeenCalledWith(30, undefined, undefined);
     expect(
-      screen.getByRole("columnheader", { name: "7-day profit" }),
+      screen.getByRole("columnheader", { name: "30-day profit" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("columnheader", { name: "Campaigns" }),
     ).toBeInTheDocument();
 
     const profitable = screen.getByLabelText(
-      "fantasy books seven-day profit: Profitable",
+      "fantasy books 30-day profit: Profitable",
     );
     expect(within(profitable).getByText("Profitable")).toBeInTheDocument();
     expect(within(profitable).getByText("$2.00")).toBeInTheDocument();
 
-    const loss = screen.getByLabelText(
-      "dragons seven-day profit: Not profitable",
-    );
+    const loss = screen.getByLabelText("dragons 30-day profit: Not profitable");
     expect(within(loss).getByText("Not profitable")).toBeInTheDocument();
     expect(within(loss).getByText("-$3.00")).toBeInTheDocument();
 
     expect(
       within(
         screen.getByLabelText(
-          "unmapped series seven-day profit: Profit unavailable",
+          "unmapped series 30-day profit: Profit unavailable",
         ),
       ).getByText("Missing economics"),
     ).toBeInTheDocument();
@@ -206,7 +205,7 @@ describe("SearchTermsPage", () => {
     expect(rowTexts()).toEqual(["beta", "gamma", "alpha"]);
 
     // Profit desc: unavailable profit (gamma) sorts last.
-    fireEvent.click(screen.getByRole("button", { name: /7-day profit/ }));
+    fireEvent.click(screen.getByRole("button", { name: /30-day profit/ }));
     expect(rowTexts()).toEqual(["beta", "alpha", "gamma"]);
   });
 
@@ -235,7 +234,7 @@ describe("SearchTermsPage", () => {
     render(<SearchTermsPage />);
 
     expect(mocks.useSearchTerms).toHaveBeenCalledWith(
-      7,
+      30,
       ["book-1", "book-2"],
       undefined,
     );
@@ -252,7 +251,7 @@ describe("SearchTermsPage", () => {
     mocks.useSearch.mockReturnValue({ books: ["book-1"], country: "DE" });
     render(<SearchTermsPage />);
 
-    expect(mocks.useSearchTerms).toHaveBeenCalledWith(7, ["book-1"], "DE");
+    expect(mocks.useSearchTerms).toHaveBeenCalledWith(30, ["book-1"], "DE");
 
     const marketFilter = screen.getByRole("button", {
       name: "Filter by market",

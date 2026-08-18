@@ -183,13 +183,36 @@ async function driveFamily(
     job = { ...job, status: "retryable" };
   }
 
-  // Request phase. States queued/requested/retryable (re)request a fresh
-  // Amazon report; polling/downloading/validating/importing resume using the
-  // persisted amazon_report_id (restart-safe via the reportOwner callback).
+  // A previous attempt already downloaded the gzip. Re-import from disk
+  // instead of re-polling Amazon — the pre-signed URL is usually gone, and
+  // the local artifact is the source of truth after validating.
+  if (
+    (job.status === "validating" || job.status === "importing") &&
+    job.storageKey &&
+    job.checksum
+  ) {
+    await importArtifact(
+      deps,
+      profile,
+      job,
+      family,
+      spec,
+      job.storageKey,
+      job.checksum,
+      logger,
+    );
+    return;
+  }
+
+  // Request phase. queued/requested/retryable (re)request a fresh Amazon
+  // report; polling/downloading resume from the persisted amazon_report_id.
+  // A report that outlived MAX_REPORT_ATTEMPTS polling windows is treated as
+  // abandoned so a wedged report id cannot be resumed forever.
   if (
     job.status === "queued" ||
     job.status === "requested" ||
     job.status === "retryable" ||
+    job.attempts >= MAX_REPORT_ATTEMPTS ||
     !job.amazonReportId
   ) {
     await deps.store.updateReportJob(job.id, { status: "requested" });
@@ -231,9 +254,30 @@ async function driveFamily(
     checksum: artifact.checksum,
     storageKey: artifact.key,
   });
+  await importArtifact(
+    deps,
+    profile,
+    job,
+    family,
+    spec,
+    artifact.key,
+    artifact.checksum,
+    logger,
+  );
+}
 
-  // Validate the artifact read back from storage.
-  if (!(await deps.storage.verifyChecksum(artifact.key, artifact.checksum))) {
+/** Validate, reconcile, and upsert a report already stored on disk. */
+async function importArtifact(
+  deps: JobDeps,
+  profile: ProfileRecord,
+  job: ReportJobRecord,
+  family: FamilySpec["family"],
+  spec: FamilySpec["spec"],
+  storageKey: string,
+  checksum: string,
+  logger: Logger,
+): Promise<void> {
+  if (!(await deps.storage.verifyChecksum(storageKey, checksum))) {
     await deps.store.updateReportJob(job.id, {
       status: "failed",
       error: "artifact checksum mismatch on read-back",
@@ -244,10 +288,7 @@ async function driveFamily(
   }
   let rows;
   try {
-    rows = parseReportRows(
-      family,
-      await deps.storage.readGzipJson(artifact.key),
-    );
+    rows = parseReportRows(family, await deps.storage.readGzipJson(storageKey));
   } catch (error) {
     if (error instanceof AdapterValidationError) {
       await deps.store.updateReportJob(job.id, {
@@ -259,7 +300,6 @@ async function driveFamily(
     throw error;
   }
 
-  // Reconcile before import (plan §8 step 11).
   const facts = mapRowsToFacts(family, rows, profile.id, profile.currencyCode);
   const reconciliation = reconcileFacts(facts, {
     expectedRowCount: rows.length,
@@ -281,12 +321,11 @@ async function driveFamily(
     );
   }
 
-  // Import atomically; only then is the report complete (plan §8 step 10–12).
   await deps.store.updateReportJob(job.id, { status: "importing" });
   const imported = await deps.store.importMetrics(facts);
   await deps.store.updateReportJob(job.id, { status: "complete" });
   logger.info(
-    { family, rows: rows.length, imported, storageKey: artifact.key },
+    { family, rows: rows.length, imported, storageKey },
     "Report imported",
   );
 }
@@ -324,8 +363,11 @@ async function pollUntilReady(
     }
     await deps.store.updateReportJob(job.id, { status: "polling" });
     if (deps.now().getTime() >= deadline) {
+      // Stay in `polling` and keep amazon_report_id: the report is still being
+      // generated, so the queue retry resumes this same report instead of
+      // discarding the wait and requesting an identical one.
       await deps.store.updateReportJob(job.id, {
-        status: "retryable",
+        status: "polling",
         error: "report polling timed out",
         incrementAttempts: true,
       });

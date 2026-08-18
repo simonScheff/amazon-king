@@ -146,7 +146,7 @@ render cover thumbs from `GET /api/books`.
 Overview, campaign detail, and search-term detail share a date-range selector
 (`src/components/timeframe-select.tsx`): 7/14/30/60d plus month-to-date
 (`?days=mtd`, UTC 1st of the current month through today). Campaign and
-search-term **list** pages still hardcode a 7-day profitability window.
+search-term **list** pages hardcode a 30-day profitability window.
 
 `packages/database` (`@amazon-king/database`) is implemented: plain SQL
 migrations under `migrations/` (numbered `NNNN_name.sql`, applied by
@@ -155,7 +155,10 @@ migrations under `migrations/` (numbered `NNNN_name.sql`, applied by
 repository modules under `src/repositories/` with parameterized SQL only, and
 the PostgreSQL job queue in `src/queue.ts` (`FOR UPDATE SKIP LOCKED` + leases).
 Migration `0005_campaign_creation.sql` adds the `campaign_creation` change-set
-kind and the four `create_*` action types.
+kind and the four `create_*` action types. Migration `0010_metric_units.sql`
+adds `units` / `units_sold_clicks7d` / `units_sold_clicks14d` on every daily
+fact table (`units` mirrors `unitsSoldClicks7d`, the same way `orders` mirrors
+`purchases7d`).
 Commands: `typecheck`, `test` (vitest). Integration tests in
 `src/integration.test.ts` run only when `TEST_DATABASE_URL` points at a
 scratch Postgres database; otherwise they are skipped.
@@ -163,12 +166,23 @@ scratch Postgres database; otherwise they are skipped.
 `apps/worker` (`@amazon-king/worker`) is implemented: the background job
 worker (read-only against Amazon in the MVP). `src/loop.ts` is the
 poll-claim-execute loop (one job at a time, 120 s lease heartbeated every
-30 s, lease reaping, graceful SIGTERM/SIGINT shutdown). Job handlers live in
+30 s, graceful SIGTERM/SIGINT shutdown). Lease reaping runs on its own
+`setInterval` (plus once at startup) rather than inside the loop body, because
+a single `metrics_sync` can occupy the loop for hours and a crashed worker's
+claimed jobs must not stay `running` and invisible for that long. Job handlers
+live in
 `src/jobs/` behind a type→handler map: `profile_discovery`, `structure_sync`,
-`metrics_sync` (Reporting v3 orchestration: fingerprint-deduped specs, poll
+`metrics_sync` (Reporting v3 orchestration: fingerprint-deduped specs requesting
+`purchases7d`/`sales7d`/`unitsSoldClicks7d` and the matching 14d columns, poll
 resume via persisted `amazon_report_id` + the gateway `reportOwner` callback,
 streaming download to `REPORT_STORAGE_DIR` with sha256, reconciliation, then
-transactional fact upserts; success chains `recommendation_run`),
+transactional fact upserts; success chains `recommendation_run`). Amazon needs
+roughly 19–21 minutes per daily report, so `REPORT_POLL_TIMEOUT_MS` defaults to
+45 minutes and a poll timeout leaves the report `polling` with its
+`amazon_report_id` so the retry resumes the same Amazon report instead of
+discarding the wait; only an Amazon `FAILURE` marks it `retryable` and
+re-requests. A report already downloaded (`validating`/`importing` with a
+`storage_key`) is re-imported from disk rather than re-fetched. Other handlers:
 `recent_window_resync`, `recommendation_run` (loads structure/metrics/
 economics/cooldowns and runs `@amazon-king/optimizer` over 7/14/30/60-day
 windows; skips when no fresh complete metrics sync; profit rules suppressed

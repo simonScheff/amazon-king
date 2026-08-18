@@ -98,6 +98,8 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       "0006",
       "0007",
       "0008",
+      "0009",
+      "0010",
     ]);
     const again = await migrate(pool);
     expect(again).toEqual([]);
@@ -119,10 +121,13 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       cost: "5.00",
       sales: "20.00",
       orders: 2,
+      units: 2,
       purchases7d: 2,
       sales7d: "20.00",
       purchases14d: 2,
       sales14d: "20.00",
+      unitsSoldClicks7d: 2,
+      unitsSoldClicks14d: 2,
       currency: "USD",
     };
     await upsertCampaignMetrics(pool, [row]);
@@ -163,6 +168,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       impressions: 100,
       clicks: 10,
       orders: 2,
+      units: 2,
     });
   });
 
@@ -176,10 +182,13 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       cost: "1.00",
       sales: "1.00",
       orders: 0,
+      units: 0,
       purchases7d: 0,
       sales7d: "0",
       purchases14d: 0,
       sales14d: "0",
+      unitsSoldClicks7d: 0,
+      unitsSoldClicks14d: 0,
     };
     await upsertCampaignMetrics(pool, [
       { ...base, metricDate: "2026-07-01", currency: "USD" },
@@ -404,10 +413,13 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       cost: "5.00",
       sales: "20.00",
       orders: 2,
+      units: 2,
       purchases7d: 2,
       sales7d: "20.00",
       purchases14d: 2,
       sales14d: "20.00",
+      unitsSoldClicks7d: 2,
+      unitsSoldClicks14d: 2,
       currency: "USD",
     };
     await upsertCampaignMetrics(pool, [
@@ -598,6 +610,9 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       sales7d: "20.00",
       purchases14d: 2,
       sales14d: "20.00",
+      units: 2,
+      unitsSoldClicks7d: 2,
+      unitsSoldClicks14d: 2,
       currency: "USD",
     };
     await upsertSearchTermMetrics(pool, [
@@ -870,6 +885,9 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       sales7d: "20.00",
       purchases14d: 2,
       sales14d: "20.00",
+      units: 2,
+      unitsSoldClicks7d: 2,
+      unitsSoldClicks14d: 2,
       currency: "USD",
     };
     await upsertCampaignMetrics(pool, [
@@ -1377,6 +1395,9 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       sales7d: "20.00",
       purchases14d: 2,
       sales14d: "20.00",
+      units: 2,
+      unitsSoldClicks7d: 2,
+      unitsSoldClicks14d: 2,
     };
     await upsertAdvertisedProductMetrics(pool, [
       {

@@ -27,6 +27,8 @@ import {
   formatDateTime,
   formatMoney,
   labelize,
+  ORDERS_COLUMN_TITLE,
+  ordersUnitsHint,
   percentChange,
 } from "../lib/format";
 import { resolveCountry } from "../lib/marketplaces";
@@ -189,6 +191,8 @@ export function OverviewPage() {
             <KpiCard
               label="Orders"
               value={formatCount(totals?.orders)}
+              suffix={ordersUnitsHint(totals?.orders, totals?.units)}
+              suffixTitle={ORDERS_COLUMN_TITLE}
               delta={percentChange(totals?.orders, previousTotals?.orders)}
               deltaLabel={deltaLabel}
               {...seriesProps("orders")}

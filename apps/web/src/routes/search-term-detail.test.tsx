@@ -32,6 +32,7 @@ vi.mock("../api/endpoints", () => ({
 
 function detail(campaigns: SearchTermDetail["campaigns"]): SearchTermDetail {
   const orders = campaigns.reduce((sum, c) => sum + c.totals.orders, 0);
+  const units = campaigns.reduce((sum, c) => sum + c.totals.units, 0);
   const economicsMissing = campaigns.some((c) => c.economicsMissing);
   return {
     searchTerm: "fantasy books",
@@ -45,6 +46,7 @@ function detail(campaigns: SearchTermDetail["campaigns"]): SearchTermDetail {
       cost: "8.0000",
       sales: "20.0000",
       orders,
+      units,
       acos: 0.4,
       estimatedRoyalty: economicsMissing ? null : "10.0000",
       estimatedAdProfit: economicsMissing ? null : "2.0000",
@@ -87,6 +89,7 @@ function campaign(
       cost: "5.0000",
       sales: "12.0000",
       orders: 1,
+      units: 1,
     },
     estimatedRoyalty: "6.0000",
     estimatedAdProfit: "1.0000",
@@ -304,6 +307,7 @@ describe("SearchTermDetailPage", () => {
             cost: "9.0000",
             sales: "8.0000",
             orders: 3,
+            units: 3,
           },
           estimatedRoyalty: "4.0000",
           estimatedAdProfit: "-5.0000",

@@ -21,6 +21,8 @@ in `schema_migrations`. The shape follows `docs/plan.md` §7.
 | `0006_login_token_origin.sql`     | `login_tokens.origin` — remembers the allowlisted web origin a login started from.                                                                                                                                                                                                       |
 | `0007_product_targeting.sql`      | Action types `create_target` (ASIN product targets) and `add_negative_target` (campaign-level negative ASIN targets) — 12 action types total.                                                                                                                                              |
 | `0008_login_token_next_path.sql`  | `login_tokens.next_path` — same-origin return path for the re-auth flow.                                                                                                                                                                                                                  |
+| `0009_campaign_update.sql`        | Change-set kind `campaign_update`; action types `update_campaign_state` and `update_campaign_name`.                                                                                                                                                                                       |
+| `0010_metric_units.sql`           | `units`, `units_sold_clicks7d`, and `units_sold_clicks14d` on all five daily fact tables.                                                                                                                                                                                                |
 
 ## Conventions
 
@@ -33,8 +35,9 @@ Established in `0001_initial.sql` and held throughout:
   requires `> 0`); currency is `char(3)` stored **per row** — never aggregate
   across currencies.
 - Timestamps are `timestamptz`; dates are `date`.
-- Attribution windows stay explicit: `purchases7d`/`sales7d` and
-  `purchases14d`/`sales14d` are separate columns everywhere.
+- Attribution windows stay explicit: `purchases7d`/`sales7d`,
+  `purchases14d`/`sales14d`, and `unitsSoldClicks7d`/`unitsSoldClicks14d` are
+  separate columns everywhere.
 - Partial indexes cover the hot paths: pending recommendations
   (`state = 'pending'`), runnable queue jobs (`status = 'pending'`), and
   unfinished report jobs (`status <> 'complete'`).
@@ -211,9 +214,10 @@ erDiagram
 ## Daily facts
 
 Five tables, one per report grain, with identical metric columns —
-`impressions`, `clicks`, `cost`, `sales`, `orders`, `purchases7d`, `sales7d`,
-`purchases14d`, `sales14d` (all non-negative) — plus `currency char(3)` per
-row. `orders` and `sales` are set from the 7-day attribution columns at
+`impressions`, `clicks`, `cost`, `sales`, `orders`, `units`, `purchases7d`,
+`sales7d`, `purchases14d`, `sales14d`, `units_sold_clicks7d`,
+`units_sold_clicks14d` (all non-negative) — plus `currency char(3)` per row.
+`orders`, `sales`, and `units` are set from the 7-day attribution columns at
 import; both windows stay stored explicitly.
 
 | Table                             | Grain (unique key)                                   |

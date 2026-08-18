@@ -21,12 +21,16 @@ import { Badge } from "../components/ui/badge";
 import { Card, CardBody, CardHeader } from "../components/ui/card";
 import { Table, Td, Th } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
+import { Flag } from "../components/flag";
+import { countryNameForCode } from "../lib/marketplaces";
 import {
   formatAcos,
   formatCount,
   formatDate,
   formatDateTime,
   formatMoney,
+  ORDERS_COLUMN_TITLE,
+  ordersUnitsHint,
 } from "../lib/format";
 import {
   getCampaignProfitStatus,
@@ -132,7 +136,10 @@ function MetricsTable({
           <Th className="text-right">Clicks</Th>
           <Th className="text-right">Spend</Th>
           <Th className="text-right">Sales</Th>
-          <Th className="text-right">Orders</Th>
+          <Th className="text-right" title={ORDERS_COLUMN_TITLE}>
+            Orders
+          </Th>
+          <Th className="text-right">Units</Th>
           <Th className="text-right">ACoS</Th>
           {showProfit ? <Th>Profit</Th> : null}
         </tr>
@@ -180,6 +187,7 @@ function MetricsTable({
                 {formatMoney(r.totals.sales, currency)}
               </Td>
               <Td className="text-right">{formatCount(r.totals.orders)}</Td>
+              <Td className="text-right">{formatCount(r.totals.units)}</Td>
               <Td className="text-right">{formatAcos(acos)}</Td>
               {showProfit ? (
                 <Td>
@@ -244,7 +252,12 @@ export function CampaignDetailPage() {
         </Link>
       </p>
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-bold tracking-tight text-zinc-100">
+        <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight text-zinc-100">
+          {country ? (
+            <span title={countryNameForCode(country)}>
+              <Flag countryCode={country} />
+            </span>
+          ) : null}
           {c.name}
         </h1>
         <Badge tone={c.state === "enabled" ? "success" : "neutral"}>
@@ -305,7 +318,12 @@ export function CampaignDetailPage() {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <KpiCard label="Spend" value={formatMoney(c.totals.cost, currency)} />
         <KpiCard label="Sales" value={formatMoney(c.totals.sales, currency)} />
-        <KpiCard label="Orders" value={formatCount(c.totals.orders)} />
+        <KpiCard
+          label="Orders"
+          value={formatCount(c.totals.orders)}
+          suffix={ordersUnitsHint(c.totals.orders, c.totals.units)}
+          suffixTitle={ORDERS_COLUMN_TITLE}
+        />
         <KpiCard label="ACoS" value={formatAcos(c.totals.acos)} />
         <KpiCard
           label="Est. royalty"

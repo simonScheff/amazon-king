@@ -249,7 +249,7 @@ export function useDataFreshness() {
 // Campaigns
 // ---------------------------------------------------------------------------
 
-export function useCampaigns(days: MetricWindow = 7, bookIds?: string[]) {
+export function useCampaigns(days: MetricWindow = 30, bookIds?: string[]) {
   const books = booksParam(bookIds);
   return useQuery({
     queryKey: ["campaigns", days, books ?? null],
@@ -369,7 +369,7 @@ export function useCreateCampaignDrafts() {
 // ---------------------------------------------------------------------------
 
 export function useSearchTerms(
-  days: MetricWindow = 7,
+  days: MetricWindow = 30,
   bookIds?: string[],
   countryCode?: string,
 ) {

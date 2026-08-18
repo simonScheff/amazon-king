@@ -310,7 +310,7 @@ export function AppLayout() {
               ☰
             </button>
             <aside
-              className={`fixed inset-y-0 left-0 z-30 border-r border-zinc-800 bg-zinc-900/95 backdrop-blur transition-[transform,width] md:sticky md:top-0 md:h-screen md:translate-x-0 ${
+              className={`fixed inset-y-0 left-0 z-30 border-r border-zinc-800 bg-zinc-900/95 backdrop-blur transition-[transform,width] md:translate-x-0 ${
                 navOpen ? "translate-x-0" : "-translate-x-full"
               } w-60 ${sidebarCollapsed ? "md:w-16" : "md:w-60"}`}
             >
@@ -320,6 +320,12 @@ export function AppLayout() {
                 onNavigate={() => setNavOpen(false)}
               />
             </aside>
+            <div
+              aria-hidden="true"
+              className={`hidden shrink-0 transition-[width] md:block ${
+                sidebarCollapsed ? "w-16" : "w-60"
+              }`}
+            />
             <main className="min-w-0 flex-1 px-4 py-8 md:px-10">
               <div className="mx-auto w-full max-w-[1440px]">
                 <div className="h-8 md:hidden" />

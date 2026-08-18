@@ -14,6 +14,7 @@ export const metricTotalsSchema = z.object({
   cost: nonNegativeDecimalStringSchema,
   sales: nonNegativeDecimalStringSchema,
   orders: z.number().int().nonnegative(),
+  units: z.number().int().nonnegative(),
 });
 export type MetricTotals = z.infer<typeof metricTotalsSchema>;
 

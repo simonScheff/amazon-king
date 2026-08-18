@@ -21,7 +21,7 @@ export type ReportFamily = (typeof REPORT_FAMILIES)[number];
  * prevents a queued sync from adopting an older report artifact whose shape
  * no longer matches the current row schemas.
  */
-const REPORT_CONFIGURATION_VERSION = "reporting-v3-config-2";
+const REPORT_CONFIGURATION_VERSION = "reporting-v3-config-3";
 
 /**
  * Metric columns requested for every family (Reporting v3, DAILY time unit).
@@ -35,6 +35,8 @@ const METRIC_COLUMNS = [
   "sales7d",
   "purchases14d",
   "sales14d",
+  "unitsSoldClicks7d",
+  "unitsSoldClicks14d",
 ] as const;
 
 /**

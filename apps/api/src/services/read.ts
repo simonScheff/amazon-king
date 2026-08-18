@@ -312,6 +312,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         let impressions = 0;
         let clicks = 0;
         let orders = 0;
+        let units = 0;
         let costMicros = 0;
         let salesMicros = 0;
 
@@ -346,6 +347,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
           impressions += totals.impressions;
           clicks += totals.clicks;
           orders += totals.orders;
+          units += totals.units;
           costMicros += microsFromDecimalString(totals.cost);
           salesMicros += microsFromDecimalString(totals.sales);
         }
@@ -354,6 +356,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
           impressions,
           clicks,
           orders,
+          units,
           costMicros,
           salesMicros,
         };
@@ -495,6 +498,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
           cost: microsToDecimalString(current.costMicros),
           sales: microsToDecimalString(current.salesMicros),
           orders: current.orders,
+          units: current.units,
           acos:
             current.salesMicros > 0
               ? current.costMicros / current.salesMicros
@@ -518,6 +522,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
             cost: microsToDecimalString(previousWindow.costMicros),
             sales: microsToDecimalString(previousWindow.salesMicros),
             orders: previousWindow.orders,
+            units: previousWindow.units,
             acos:
               previousWindow.salesMicros > 0
                 ? previousWindow.costMicros / previousWindow.salesMicros
@@ -713,6 +718,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         cost: "0",
         sales: "0",
         orders: 0,
+        units: 0,
       };
       const currencies = new Set(dailyRows.map((point) => point.currency));
       if (currencies.size > 1) {
@@ -924,6 +930,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       let impressions = 0;
       let clicks = 0;
       let orders = 0;
+      let units = 0;
       let costMicros = 0;
       let salesMicros = 0;
       let royaltyMicros = 0;
@@ -935,6 +942,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         impressions += row.totals.impressions;
         clicks += row.totals.clicks;
         orders += row.totals.orders;
+        units += row.totals.units;
         costMicros += microsFromDecimalString(row.totals.cost);
         salesMicros += microsFromDecimalString(row.totals.sales);
         if (!economicsMissing && row.estimatedRoyalty !== null) {
@@ -961,6 +969,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
           cost: microsToDecimalString(costMicros),
           sales: microsToDecimalString(salesMicros),
           orders,
+          units,
           acos: salesMicros > 0 ? costMicros / salesMicros : null,
           estimatedRoyalty: economicsMissing
             ? null

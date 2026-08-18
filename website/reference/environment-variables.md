@@ -67,7 +67,7 @@ with a `missing_lwa_credentials` auth error until they are set.
 | `WORKER_REAP_INTERVAL_MS`        | `60000`            | Interval for reaping expired leases. |
 | `REPORT_POLL_INITIAL_DELAY_MS`   | `5000`             | First delay when polling a Reporting v3 report. |
 | `REPORT_POLL_MAX_DELAY_MS`       | `60000`            | Maximum report-poll backoff. |
-| `REPORT_POLL_TIMEOUT_MS`         | `1200000` (20 min) | Overall report-poll timeout. |
+| `REPORT_POLL_TIMEOUT_MS`         | `2700000` (45 min) | Overall report-poll timeout. Amazon typically needs 19–21 minutes per daily report. |
 | `RECENT_WINDOW_DAYS`             | `14`               | Days re-imported by `recent_window_resync` to absorb attribution lag. |
 | `RECOMMENDATION_FRESHNESS_HOURS` | `48`               | Recommendation runs skip when the last complete metrics sync is older than this. |
 | `SCHEDULE_TICK_MS`               | `900000` (15 min)  | `schedule_tick` self-rescheduling interval. |

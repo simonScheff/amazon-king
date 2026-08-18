@@ -14,6 +14,7 @@ export interface TotalsRow {
   cost: string;
   sales: string;
   orders: number;
+  units: number;
 }
 
 interface RawTotals {
@@ -22,6 +23,7 @@ interface RawTotals {
   cost: string | null;
   sales: string | null;
   orders: string | null;
+  units: string | null;
 }
 
 function toTotals(row: RawTotals): TotalsRow {
@@ -31,6 +33,7 @@ function toTotals(row: RawTotals): TotalsRow {
     cost: row.cost ?? "0",
     sales: row.sales ?? "0",
     orders: Number(row.orders ?? 0),
+    units: Number(row.units ?? 0),
   };
 }
 
@@ -90,6 +93,7 @@ export async function listCampaignRows(
               sum(cost)::text as cost,
               sum(sales)::text as sales,
               sum(orders)::text as orders,
+              sum(units)::text as units,
               min(currency)::text as currency,
               count(distinct currency) > 1 as mixed_currency,
               max(metric_date)::text as data_current_through
@@ -211,7 +215,7 @@ export async function listCampaignRows(
      )
      select c.id, c.profile_id, p.profile_id as amazon_profile_id,
             c.amazon_campaign_id, c.name, c.state,
-            cr.impressions, cr.clicks, cr.cost, cr.sales, cr.orders,
+            cr.impressions, cr.clicks, cr.cost, cr.sales, cr.orders, cr.units,
             coalesce(cr.currency, p.currency_code)::text as currency,
             rr.estimated_royalty,
             coalesce(rr.economics_missing, false) as economics_missing,
@@ -305,7 +309,8 @@ export async function listAdGroupRows(
             sum(m.clicks)::text as clicks,
             sum(m.cost)::text as cost,
             sum(m.sales)::text as sales,
-            sum(m.orders)::text as orders
+            sum(m.orders)::text as orders,
+            sum(m.units)::text as units
      from ad_groups g
      left join target_metrics_daily m
        on m.profile_id = g.profile_id
@@ -360,7 +365,8 @@ export async function listTargetRows(
             sum(m.clicks)::text as clicks,
             sum(m.cost)::text as cost,
             sum(m.sales)::text as sales,
-            sum(m.orders)::text as orders
+            sum(m.orders)::text as orders,
+            sum(m.units)::text as units
      from targets t
      left join target_metrics_daily m
        on m.profile_id = t.profile_id
@@ -426,6 +432,7 @@ export async function listSearchTermRows(
               sum(m.cost) as cost,
               sum(m.sales) as sales,
               sum(m.orders) as orders,
+              sum(m.units) as units,
               min(m.currency)::text as currency
        from search_term_metrics_daily m
        where m.profile_id = $1 and m.campaign_id = $2
@@ -483,6 +490,7 @@ export async function listSearchTermRows(
             sum(d.cost)::text as cost,
             sum(d.sales)::text as sales,
             sum(d.orders)::text as orders,
+            sum(d.units)::text as units,
             bool_or(d.orders > 0 and r.ad_group_id is null) as economics_missing,
             case
               when bool_or(d.orders > 0 and r.ad_group_id is null) then null
@@ -578,6 +586,7 @@ const SEARCH_TERM_CTES = `with st_daily as (
               sum(m.cost) as cost,
               sum(m.sales) as sales,
               sum(m.orders) as orders,
+              sum(m.units) as units,
               min(m.currency)::text as currency,
               count(distinct m.currency) > 1 as mixed_currency
        from search_term_metrics_daily m
@@ -706,6 +715,7 @@ export async function listSearchTermRollupRows(
             sum(d.cost)::text as cost,
             sum(d.sales)::text as sales,
             sum(d.orders)::text as orders,
+            sum(d.units)::text as units,
             min(d.currency)::text as currency,
             bool_or(d.mixed_currency) as mixed_currency,
             max(d.metric_date)::text as data_current_through,
@@ -789,6 +799,7 @@ export async function listSearchTermCampaignRows(
             sum(d.cost)::text as cost,
             sum(d.sales)::text as sales,
             sum(d.orders)::text as orders,
+            sum(d.units)::text as units,
             min(d.currency)::text as currency,
             bool_or(d.mixed_currency) as mixed_currency,
             max(d.metric_date)::text as data_current_through,

@@ -65,7 +65,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
     reapIntervalMs: intEnv("WORKER_REAP_INTERVAL_MS", 60_000),
     reportPollInitialDelayMs: intEnv("REPORT_POLL_INITIAL_DELAY_MS", 5_000),
     reportPollMaxDelayMs: intEnv("REPORT_POLL_MAX_DELAY_MS", 60_000),
-    reportPollTimeoutMs: intEnv("REPORT_POLL_TIMEOUT_MS", 20 * 60_000),
+    // Observed Reporting v3 latency for daily SP reports is 19–21 minutes, so a
+    // 20-minute budget timed out roughly half of them. Poll long enough to
+    // cover that spread; a waiting poll costs one request per minute.
+    reportPollTimeoutMs: intEnv("REPORT_POLL_TIMEOUT_MS", 45 * 60_000),
     recentWindowDays: intEnv("RECENT_WINDOW_DAYS", 14),
     recommendationFreshnessHours: intEnv("RECOMMENDATION_FRESHNESS_HOURS", 48),
     scheduleTickMs: intEnv("SCHEDULE_TICK_MS", 15 * 60_000),

@@ -8,17 +8,20 @@ export function SortableTh<K extends string>({
   sort,
   onSort,
   className = "",
+  title,
 }: {
   label: string;
   column: K;
   sort: Sort<K>;
   onSort: (column: K) => void;
   className?: string;
+  title?: string;
 }) {
   const active = sort.key === column;
   return (
     <Th
       className={className}
+      title={title}
       aria-sort={
         active
           ? sort.direction === "asc"

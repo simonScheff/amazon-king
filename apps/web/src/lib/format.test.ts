@@ -7,6 +7,7 @@ import {
   formatMoney,
   formatPercentChange,
   labelize,
+  ordersUnitsHint,
   percentChange,
 } from "./format";
 
@@ -38,10 +39,15 @@ describe("formatAcos", () => {
   });
 });
 
-describe("formatCount", () => {
-  it("formats with grouping and placeholders", () => {
-    expect(formatCount(1234567)).toBe("1,234,567");
-    expect(formatCount(null)).toBe("—");
+describe("ordersUnitsHint", () => {
+  it("explains extra units when they differ from orders", () => {
+    expect(ordersUnitsHint(2, 4)).toBe("4 units");
+    expect(ordersUnitsHint(2, 2)).toBeUndefined();
+    expect(ordersUnitsHint(undefined, 4)).toBeUndefined();
+  });
+
+  it("hides a zero count so unimported units do not look like Amazon data", () => {
+    expect(ordersUnitsHint(33, 0)).toBeUndefined();
   });
 });
 

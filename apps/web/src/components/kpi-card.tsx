@@ -4,7 +4,10 @@ import { formatPercentChange } from "../lib/format";
 interface KpiCardProps {
   label: string;
   value: ReactNode;
-  hint?: ReactNode;
+  /** Muted text on the same row as `value` (e.g. Orders `48 units`). */
+  suffix?: ReactNode;
+  /** Native tooltip on the suffix. */
+  suffixTitle?: string;
   /** When true, show an "economics missing" placeholder instead of a value. */
   missing?: boolean;
   /**
@@ -27,7 +30,8 @@ interface KpiCardProps {
 export function KpiCard({
   label,
   value,
-  hint,
+  suffix,
+  suffixTitle,
   missing = false,
   delta,
   deltaGoodWhenUp = true,
@@ -70,8 +74,15 @@ export function KpiCard({
           — <span className="text-xs">economics missing</span>
         </p>
       ) : (
-        <p className="mt-1.5 font-display text-2xl font-semibold tracking-tight text-zinc-100">
-          {value}
+        <p className="mt-1.5 flex items-baseline gap-2">
+          <span className="font-display text-2xl font-semibold tracking-tight text-zinc-100">
+            {value}
+          </span>
+          {suffix ? (
+            <span className="text-xs text-zinc-500" title={suffixTitle}>
+              {suffix}
+            </span>
+          ) : null}
         </p>
       )}
       {showDelta ? (
@@ -83,7 +94,6 @@ export function KpiCard({
           ) : null}
         </p>
       ) : null}
-      {hint ? <p className="mt-1 text-xs text-zinc-500">{hint}</p> : null}
     </>
   );
 

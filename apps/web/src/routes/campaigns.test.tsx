@@ -38,6 +38,7 @@ function campaign(
     cost: "8.0000",
     sales: "20.0000",
     orders: 2,
+    units: 2,
   },
   bookIds: string[] = [],
 ): CampaignListRow {
@@ -62,7 +63,7 @@ function campaign(
   };
 }
 
-describe("CampaignsPage seven-day profitability", () => {
+describe("CampaignsPage thirty-day profitability", () => {
   afterEach(() => cleanup());
 
   beforeEach(() => {
@@ -112,40 +113,44 @@ describe("CampaignsPage seven-day profitability", () => {
             cost: "0",
             sales: "0",
             orders: 0,
+            units: 0,
           },
         ),
       ],
     });
   });
 
-  it("shows the requested seven-day result for every campaign", () => {
+  it("shows the requested thirty-day result for every campaign", () => {
     render(<CampaignsPage />);
 
-    expect(mocks.useCampaigns).toHaveBeenCalledWith(7, undefined);
+    expect(mocks.useCampaigns).toHaveBeenCalledWith(30, undefined);
     expect(
-      screen.getByRole("columnheader", { name: "7-day profit" }),
+      screen.getByRole("columnheader", { name: "30-day profit" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Units" }),
     ).toBeInTheDocument();
 
     const profitable = screen.getByLabelText(
-      "General seven-day profit: Profitable",
+      "General 30-day profit: Profitable",
     );
     expect(within(profitable).getByText("Profitable")).toBeInTheDocument();
     expect(within(profitable).getByText("$2.00")).toBeInTheDocument();
 
     const loss = screen.getByLabelText(
-      "Research seven-day profit: Not profitable",
+      "Research 30-day profit: Not profitable",
     );
     expect(within(loss).getByText("Not profitable")).toBeInTheDocument();
     expect(within(loss).getByText("-$3.00")).toBeInTheDocument();
 
     expect(
       within(
-        screen.getByLabelText("Discovery seven-day profit: Profit unavailable"),
+        screen.getByLabelText("Discovery 30-day profit: Profit unavailable"),
       ).getByText("Missing economics"),
     ).toBeInTheDocument();
     expect(
       within(
-        screen.getByLabelText("New campaign seven-day profit: No activity"),
+        screen.getByLabelText("New campaign 30-day profit: No activity"),
       ).getByText("—"),
     ).toBeInTheDocument();
   });
@@ -331,7 +336,7 @@ describe("CampaignsPage seven-day profitability", () => {
     ]);
 
     // Profit desc: unavailable profit (Discovery, New campaign) sorts last.
-    fireEvent.click(screen.getByRole("button", { name: /7-day profit/ }));
+    fireEvent.click(screen.getByRole("button", { name: /30-day profit/ }));
     expect(rowNames()).toEqual([
       "General",
       "Research",

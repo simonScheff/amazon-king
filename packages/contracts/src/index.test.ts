@@ -177,6 +177,7 @@ describe("contracts smoke test", () => {
           cost: "8.0000",
           sales: "20.0000",
           orders: 2,
+          units: 2,
           acos: 0.4,
           estimatedRoyalty: "10.0000",
           estimatedAdProfit: "2.0000",
@@ -227,6 +228,7 @@ describe("contracts smoke test", () => {
         cost: "8.0000",
         sales: "20.0000",
         orders: 2,
+        units: 2,
       },
       profitability: {
         dateRange: { start: "2026-08-07", end: "2026-08-13" },

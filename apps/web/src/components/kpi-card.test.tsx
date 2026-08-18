@@ -32,6 +32,20 @@ describe("KpiCard", () => {
     expect(onToggle).toHaveBeenCalledOnce();
   });
 
+  it("renders a muted suffix on the same row as the value", () => {
+    render(
+      <KpiCard
+        label="Orders"
+        value="33"
+        suffix="48 units"
+        suffixTitle="hint"
+      />,
+    );
+    const suffix = screen.getByText("48 units");
+    expect(suffix).toHaveAttribute("title", "hint");
+    expect(suffix.parentElement).toHaveTextContent("3348 units");
+  });
+
   it("reflects the inactive state when the series is hidden", () => {
     render(
       <KpiCard

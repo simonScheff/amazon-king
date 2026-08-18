@@ -66,6 +66,7 @@ describe("dashboard country filtering", () => {
         cost: "5.0000",
         sales: "20.0000",
         orders: 2,
+        units: 2,
       }),
     );
     vi.mocked(dashboard.overviewRoyaltySeries).mockResolvedValue([]);
@@ -118,6 +119,7 @@ describe("dashboard country filtering", () => {
         cost: "5.0000",
         sales: "20.0000",
         orders: 2,
+        units: 2,
         acos: 0.25,
         estimatedRoyalty: null,
         estimatedAdProfit: null,
@@ -351,6 +353,7 @@ describe("dashboard country spend", () => {
           cost,
           sales: "0.0000",
           orders: 0,
+          units: 0,
         };
       },
     );

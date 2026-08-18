@@ -27,10 +27,13 @@ export interface MetricValues {
   cost: string;
   sales: string;
   orders: number;
+  units: number;
   purchases7d: number;
   sales7d: string;
   purchases14d: number;
   sales14d: string;
+  unitsSoldClicks7d: number;
+  unitsSoldClicks14d: number;
   currency: string;
 }
 
@@ -87,14 +90,18 @@ const METRIC_SET = `
   cost = excluded.cost,
   sales = excluded.sales,
   orders = excluded.orders,
+  units = excluded.units,
   purchases7d = excluded.purchases7d,
   sales7d = excluded.sales7d,
   purchases14d = excluded.purchases14d,
   sales14d = excluded.sales14d,
+  units_sold_clicks7d = excluded.units_sold_clicks7d,
+  units_sold_clicks14d = excluded.units_sold_clicks14d,
   currency = excluded.currency`;
 
 const METRIC_COLS = `impressions int, clicks int, cost numeric, sales numeric, orders int,
-  purchases7d int, sales7d numeric, purchases14d int, sales14d numeric, currency char(3)`;
+  units int, purchases7d int, sales7d numeric, purchases14d int, sales14d numeric,
+  units_sold_clicks7d int, units_sold_clicks14d int, currency char(3)`;
 
 async function batchUpsert<T extends object>(
   db: Db,
@@ -117,9 +124,11 @@ async function batchUpsert<T extends object>(
   ].map(toRecord);
   const result = await db.query(
     `insert into ${table} (${grainCols}, impressions, clicks, cost, sales, orders,
-       purchases7d, sales7d, purchases14d, sales14d, currency)
+       units, purchases7d, sales7d, purchases14d, sales14d,
+       units_sold_clicks7d, units_sold_clicks14d, currency)
      select ${grainCols}, impressions, clicks, cost, sales, orders,
-       purchases7d, sales7d, purchases14d, sales14d, currency
+       units, purchases7d, sales7d, purchases14d, sales14d,
+       units_sold_clicks7d, units_sold_clicks14d, currency
      from jsonb_to_recordset($1::jsonb) as x(${grainTypes}, ${METRIC_COLS})
      on conflict ${conflictTarget} do update set ${METRIC_SET}`,
     [JSON.stringify(records)],
@@ -218,6 +227,7 @@ export interface MetricTotals {
   cost: string;
   sales: string;
   orders: number;
+  units: number;
 }
 
 interface TotalsRow {
@@ -227,6 +237,7 @@ interface TotalsRow {
   cost: string;
   sales: string;
   orders: string;
+  units: string;
 }
 
 /**
@@ -249,7 +260,8 @@ export async function dashboardTotals(
             sum(clicks)::text as clicks,
             sum(cost)::text as cost,
             sum(sales)::text as sales,
-            sum(orders)::text as orders
+            sum(orders)::text as orders,
+            sum(units)::text as units
      from campaign_metrics_daily m
      where m.profile_id = $1 and m.metric_date between $2 and $3
        and (coalesce(cardinality($4::bigint[]), 0) = 0 or exists (
@@ -283,5 +295,6 @@ export async function dashboardTotals(
     cost: row.cost,
     sales: row.sales,
     orders: Number(row.orders),
+    units: Number(row.units),
   };
 }
