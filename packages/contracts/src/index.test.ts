@@ -6,6 +6,7 @@ import {
   cannibalizationResolutionContextSchema,
   campaignListRowSchema,
   campaignMaxCpcSchema,
+  metricWindowSchema,
   recommendationChangeActionType,
   recommendationSchema,
   renameCampaignSchema,
@@ -15,6 +16,14 @@ import {
 } from "./index.js";
 
 describe("contracts smoke test", () => {
+  it("parses trailing-day and month-to-date metric windows", () => {
+    expect(metricWindowSchema.parse("mtd")).toBe("mtd");
+    expect(metricWindowSchema.parse("30")).toBe(30);
+    expect(metricWindowSchema.parse(7)).toBe(7);
+    expect(() => metricWindowSchema.parse("foo")).toThrow();
+    expect(() => metricWindowSchema.parse(0)).toThrow();
+    expect(() => metricWindowSchema.parse(91)).toThrow();
+  });
   it("identifies executable and review-only recommendation types", () => {
     expect(recommendationChangeActionType.expensive_target).toBe("update_bid");
     expect(recommendationChangeActionType.wasteful_search_term).toBe(

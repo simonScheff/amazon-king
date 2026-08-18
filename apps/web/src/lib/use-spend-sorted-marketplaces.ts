@@ -1,3 +1,4 @@
+import type { MetricWindow } from "@amazon-king/contracts";
 import { useCountrySpend, useProfiles } from "../api/endpoints";
 import {
   marketplaceOptions,
@@ -12,7 +13,7 @@ import {
  * all of them rank markets the same way.
  */
 export function useSpendSortedMarketplaces(
-  days: number,
+  days: MetricWindow,
   bookIds?: string[],
 ): MarketplaceOption[] {
   const profiles = useProfiles();

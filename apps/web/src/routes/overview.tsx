@@ -10,6 +10,7 @@ import {
 import { CountrySelect } from "../components/country-select";
 import { Flag } from "../components/flag";
 import { KpiCard } from "../components/kpi-card";
+import { TimeframeSelect } from "../components/timeframe-select";
 import {
   PerformanceTrendChart,
   TREND_SERIES_COLORS,
@@ -17,7 +18,6 @@ import {
 } from "../components/performance-trend-chart";
 import { DailyProfitChart } from "../components/daily-profit-chart";
 import { Badge } from "../components/ui/badge";
-import { Button } from "../components/ui/button";
 import { Card, CardBody, CardHeader } from "../components/ui/card";
 import { EmptyState, ErrorState, Loading } from "../components/states";
 import {
@@ -30,19 +30,16 @@ import {
   percentChange,
 } from "../lib/format";
 import { resolveCountry } from "../lib/marketplaces";
+import { previousDeltaLabel, resolveTimeframe } from "../lib/timeframe";
 import { useSpendSortedMarketplaces } from "../lib/use-spend-sorted-marketplaces";
-
-const DAY_OPTIONS = [7, 14, 30, 60] as const;
 
 export function OverviewPage() {
   const search = useSearch({ strict: false }) as {
-    days?: number;
+    days?: number | "mtd";
     country?: string;
     books?: string[];
   };
-  const days = DAY_OPTIONS.includes(search.days as 7)
-    ? Number(search.days)
-    : 30;
+  const days = resolveTimeframe(search.days);
   const bookIds = search.books;
   const navigate = useNavigate();
 
@@ -71,7 +68,7 @@ export function OverviewPage() {
   const currency = summary.data?.currency ?? "USD";
   const totals = summary.data?.totals;
   const previousTotals = summary.data?.previous.totals;
-  const deltaLabel = `vs previous ${days}d`;
+  const deltaLabel = previousDeltaLabel(days);
 
   // Display-only conversion of decimal strings for the delta calculation.
   const num = (value: string | null | undefined): number | null =>
@@ -122,24 +119,16 @@ export function OverviewPage() {
               }
             />
           </label>
-          <div role="group" aria-label="Date range" className="flex gap-1">
-            {DAY_OPTIONS.map((d) => (
-              <Button
-                key={d}
-                size="sm"
-                variant={d === days ? "primary" : "secondary"}
-                onClick={() =>
-                  navigate({
-                    to: "/",
-                    search: (prev) => ({ ...prev, days: d, country }),
-                    replace: true,
-                  })
-                }
-              >
-                {d}d
-              </Button>
-            ))}
-          </div>
+          <TimeframeSelect
+            value={days}
+            onChange={(window) =>
+              navigate({
+                to: "/",
+                search: (prev) => ({ ...prev, days: window, country }),
+                replace: true,
+              })
+            }
+          />
         </div>
       </div>
 

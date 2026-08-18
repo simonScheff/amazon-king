@@ -5,15 +5,19 @@ import {
   useParams,
   useSearch,
 } from "@tanstack/react-router";
-import type { MetricTotals, NegativeKeywordRow } from "@amazon-king/contracts";
+import type {
+  MetricTotals,
+  MetricWindow,
+  NegativeKeywordRow,
+} from "@amazon-king/contracts";
 import { useCampaign, useProfiles } from "../api/endpoints";
 import { KpiCard } from "../components/kpi-card";
 import { CampaignControls } from "../components/campaign-controls";
 import { CampaignMaxCpc } from "../components/campaign-max-cpc";
 import { PerformanceTrendChart } from "../components/performance-trend-chart";
 import { ProfitabilityResult } from "../components/profitability-result";
+import { TimeframeSelect } from "../components/timeframe-select";
 import { Badge } from "../components/ui/badge";
-import { Button } from "../components/ui/button";
 import { Card, CardBody, CardHeader } from "../components/ui/card";
 import { Table, Td, Th } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
@@ -28,11 +32,10 @@ import {
   getCampaignProfitStatus,
   hasCampaignActivity,
 } from "../lib/campaign-profit";
+import { resolveTimeframe, selectedWindowLabel } from "../lib/timeframe";
 
 type Tab =
   "adGroups" | "targets" | "searchTerms" | "negativeKeywords" | "maxCpc";
-
-const DAY_OPTIONS = [7, 14, 30, 60] as const;
 
 const tabs: Array<{ key: Tab; label: string }> = [
   { key: "adGroups", label: "Ad groups" },
@@ -113,7 +116,7 @@ function MetricsTable({
 }: {
   rows: Row[];
   currency: string;
-  termLink?: { days: number; country?: string };
+  termLink?: { days: MetricWindow; country?: string };
   showProfit?: boolean;
 }) {
   if (rows.length === 0) {
@@ -204,12 +207,10 @@ function MetricsTable({
 export function CampaignDetailPage() {
   const { id } = useParams({ strict: false }) as { id: string };
   const search = useSearch({ strict: false }) as {
-    days?: number;
+    days?: number | "mtd";
     books?: string[];
   };
-  const days = DAY_OPTIONS.includes(search.days as 7)
-    ? Number(search.days)
-    : 30;
+  const days = resolveTimeframe(search.days);
   const navigate = useNavigate();
   const campaign = useCampaign(id, days, search.books);
   const profiles = useProfiles();
@@ -268,25 +269,17 @@ export function CampaignDetailPage() {
         </span>
         <div className="ml-auto flex items-center gap-3">
           <span className="text-sm text-zinc-400">Date range</span>
-          <div role="group" aria-label="Date range" className="flex gap-1">
-            {DAY_OPTIONS.map((option) => (
-              <Button
-                key={option}
-                size="sm"
-                variant={option === days ? "primary" : "secondary"}
-                onClick={() =>
-                  navigate({
-                    to: "/campaigns/$id",
-                    params: { id },
-                    search: (prev) => ({ ...prev, days: option }),
-                    replace: true,
-                  })
-                }
-              >
-                {option}d
-              </Button>
-            ))}
-          </div>
+          <TimeframeSelect
+            value={days}
+            onChange={(window) =>
+              navigate({
+                to: "/campaigns/$id",
+                params: { id },
+                search: (prev) => ({ ...prev, days: window }),
+                replace: true,
+              })
+            }
+          />
         </div>
       </div>
 
@@ -295,7 +288,7 @@ export function CampaignDetailPage() {
         <span>
           {hasActivity && estimatedProfit !== null
             ? `${formatMoney(c.totals.estimatedAdProfit, currency)} estimated ad profit`
-            : `Selected ${days}-day window`}
+            : selectedWindowLabel(days)}
         </span>
         <span aria-hidden="true">·</span>
         <span>

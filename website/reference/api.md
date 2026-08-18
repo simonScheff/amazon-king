@@ -257,8 +257,10 @@ Response `200`: SyncRun; `404 NOT_FOUND` when unknown.
 
 ## Dashboard & metrics
 
-All endpoints here take a shared `days` query parameter: integer 1–90,
-default `30`. They also accept a shared `books` query parameter: a
+All endpoints here take a shared `days` query parameter: integer 1–90
+(trailing inclusive UTC days, default `30`) or the sentinel `mtd` (calendar
+month-to-date: 1st of the current UTC month through today). They also accept a
+shared `books` query parameter: a
 comma-separated list of book ids (e.g. `?books=3,7`) restricting the view to
 ad groups that advertise any of the selected books (union; a multi-book ad
 group contributes its whole numbers). Absent or empty means all products. An
@@ -280,6 +282,7 @@ Response `200` (DashboardSummary):
 | dataCurrentThrough | timestamp         |                                                    |
 | writesDisabled     | boolean, optional | Kill switch on, or every profile read-only         |
 | daily              | array, optional   | Per-day `{date, cost, sales, orders, estimatedRoyalty}` series |
+| previous           | object            | `{dateRange, totals}` for period-over-period: trailing windows use the immediately preceding same-length range; `days=mtd` uses the same day-of-month range in the previous calendar month (clamped if that month is shorter) |
 
 Errors: `409 MIXED_CURRENCY` when the selected window spans currencies.
 
@@ -324,7 +327,7 @@ null — never guessed — when book economics are missing.
 
 | Param | Type   | Notes                                  |
 | ----- | ------ | -------------------------------------- |
-| days  | int    | 1–90, default 30                       |
+| days  | int \| `"mtd"` | 1–90 (default 30), or `mtd` for UTC month-to-date |
 | books | string | Optional comma-separated book ids; restricts the aggregate to ad groups advertising any of them (union semantics) |
 
 Response `200`: array of rows — `{searchTerm, campaignCount, countryCodes[],

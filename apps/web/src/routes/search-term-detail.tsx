@@ -13,8 +13,8 @@ import { AmazonProductLink } from "../components/amazon-product-link";
 import { ProfitabilityResult } from "../components/profitability-result";
 import { PerformanceTrendChart } from "../components/performance-trend-chart";
 import { MetricFunnel } from "../components/metric-funnel";
+import { TimeframeSelect } from "../components/timeframe-select";
 import { Badge } from "../components/ui/badge";
-import { Button } from "../components/ui/button";
 import { Card, CardBody, CardHeader } from "../components/ui/card";
 import { Select } from "../components/ui/input";
 import { SortableTh } from "../components/ui/sortable-th";
@@ -32,9 +32,11 @@ import {
 } from "../lib/format";
 import { compareNullable, nextSort, type Sort } from "../lib/sorting";
 import { countryNameForCode } from "../lib/marketplaces";
-
-const DAY_OPTIONS = [7, 14, 30, 60] as const;
-const DEFAULT_DAYS = 7;
+import {
+  resolveTimeframe,
+  selectedWindowLabel,
+  windowQualifier,
+} from "../lib/timeframe";
 
 const TEXT_COLUMNS = ["name", "profile", "state"] as const;
 
@@ -86,13 +88,11 @@ function sortValue(
 export function SearchTermDetailPage() {
   const { term } = useParams({ strict: false }) as { term: string };
   const search = useSearch({ strict: false }) as {
-    days?: number;
+    days?: number | "mtd";
     books?: string[];
     country?: string;
   };
-  const days = DAY_OPTIONS.includes(search.days as 7)
-    ? Number(search.days)
-    : DEFAULT_DAYS;
+  const days = resolveTimeframe(search.days, 7);
   const navigate = useNavigate();
   const detail = useSearchTerm(term, days, search.books, search.country);
   const marketplaces = useSpendSortedMarketplaces(days, search.books);
@@ -202,29 +202,21 @@ export function SearchTermDetailPage() {
           ) : null}
           <div className="flex items-center gap-3">
             <span className="text-sm text-zinc-400">Date range</span>
-            <div role="group" aria-label="Date range" className="flex gap-1">
-              {DAY_OPTIONS.map((option) => (
-                <Button
-                  key={option}
-                  size="sm"
-                  variant={option === days ? "primary" : "secondary"}
-                  onClick={() =>
-                    navigate({
-                      to: "/search-terms/$term",
-                      params: { term },
-                      search: (prev) => ({
-                        ...prev,
-                        days: option,
-                        country: data.countryCode,
-                      }),
-                      replace: true,
-                    })
-                  }
-                >
-                  {option}d
-                </Button>
-              ))}
-            </div>
+            <TimeframeSelect
+              value={days}
+              onChange={(window) =>
+                navigate({
+                  to: "/search-terms/$term",
+                  params: { term },
+                  search: (prev) => ({
+                    ...prev,
+                    days: window,
+                    country: data.countryCode,
+                  }),
+                  replace: true,
+                })
+              }
+            />
           </div>
         </div>
       </div>
@@ -234,7 +226,7 @@ export function SearchTermDetailPage() {
         <span>
           {hasActivity && data.totals.estimatedAdProfit !== null
             ? `${formatMoney(data.totals.estimatedAdProfit, currency)} estimated ad profit`
-            : `Selected ${days}-day window`}
+            : selectedWindowLabel(days)}
         </span>
         <span aria-hidden="true">·</span>
         <span>
@@ -288,7 +280,7 @@ export function SearchTermDetailPage() {
       </Card>
 
       <Card>
-        <CardHeader title={`${days}-day conversion funnel`} />
+        <CardHeader title={`${windowQualifier(days)} conversion funnel`} />
         <CardBody>
           <MetricFunnel
             stages={[
@@ -326,7 +318,7 @@ export function SearchTermDetailPage() {
                   onSort={onSort}
                 />
                 <SortableTh
-                  label={`${days}-day profit`}
+                  label={`${windowQualifier(days)} profit`}
                   column="profit"
                   sort={sort}
                   onSort={onSort}
@@ -403,7 +395,7 @@ export function SearchTermDetailPage() {
                       </Link>
                       <div className="mt-2 md:hidden">
                         <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-                          {days}-day profit
+                          {windowQualifier(days)} profit
                         </p>
                         <ProfitabilityResult
                           status={campaignProfitStatus}
@@ -426,7 +418,7 @@ export function SearchTermDetailPage() {
                     </Td>
                     <Td
                       className="hidden whitespace-nowrap md:table-cell"
-                      aria-label={`${c.name} ${days}-day profit: ${campaignProfitStatus.label}`}
+                      aria-label={`${c.name} ${windowQualifier(days)} profit: ${campaignProfitStatus.label}`}
                     >
                       <ProfitabilityResult
                         status={campaignProfitStatus}

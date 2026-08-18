@@ -19,7 +19,7 @@ vi.mock("@amazon-king/database", () => ({
     dashboardTotals: vi.fn(),
   },
   dashboard: {
-    latestEconomicsForProfiles: vi.fn(),
+    overviewRoyaltySeries: vi.fn(),
     dailySeries: vi.fn(),
   },
 }));
@@ -68,7 +68,7 @@ describe("dashboard country filtering", () => {
         orders: 2,
       }),
     );
-    vi.mocked(dashboard.latestEconomicsForProfiles).mockResolvedValue([]);
+    vi.mocked(dashboard.overviewRoyaltySeries).mockResolvedValue([]);
     vi.mocked(dashboard.dailySeries).mockImplementation(
       async (_db, profileIds) => [
         {
@@ -141,12 +141,14 @@ describe("dashboard country filtering", () => {
     ]);
   });
 
-  it("adds configured royalty estimates to each daily point", async () => {
-    vi.mocked(dashboard.latestEconomicsForProfiles).mockResolvedValue([
+  it("adds per-book per-market royalty estimates to each daily point", async () => {
+    vi.mocked(dashboard.overviewRoyaltySeries).mockResolvedValue([
       {
+        date: "2026-08-13",
         profilePk: US_PROFILE.id,
-        estimatedRoyaltyPerSale: "4.250000",
         currency: "USD",
+        estimatedRoyalty: "8.5000",
+        economicsMissing: false,
       },
     ]);
     const service = createReadService({
@@ -160,7 +162,48 @@ describe("dashboard country filtering", () => {
 
     expect(result.daily?.[0]?.estimatedRoyalty).toBe("8.5000");
     expect(result.totals.estimatedRoyalty).toBe("8.5000");
-    expect(result.previous.totals.estimatedRoyalty).toBe("8.5000");
+    expect(dashboard.overviewRoyaltySeries).toHaveBeenCalledWith(
+      expect.anything(),
+      [US_PROFILE.id],
+      "2026-07-15",
+      "2026-08-13",
+      null,
+    );
+  });
+
+  it("does not apply another book's marketplace royalty to the selected book", async () => {
+    vi.mocked(books.getBook).mockResolvedValue({
+      id: "7",
+      workspaceId: "workspace-1",
+    } as never);
+    vi.mocked(dashboard.overviewRoyaltySeries).mockResolvedValue([
+      {
+        date: "2026-08-13",
+        profilePk: US_PROFILE.id,
+        currency: "USD",
+        estimatedRoyalty: "20.5800",
+        economicsMissing: false,
+      },
+    ]);
+    const service = createReadService({
+      db: {} as never,
+      config: { killSwitch: false } as ApiConfig,
+      logger: {} as never,
+      now: () => new Date("2026-08-13T12:00:00.000Z"),
+    });
+
+    const result = await service.dashboardSummary("workspace-1", 30, "US", [
+      "7",
+    ]);
+
+    expect(result.totals.estimatedRoyalty).toBe("20.5800");
+    expect(dashboard.overviewRoyaltySeries).toHaveBeenCalledWith(
+      expect.anything(),
+      [US_PROFILE.id],
+      "2026-07-15",
+      "2026-08-13",
+      [7n],
+    );
   });
 
   it("forwards the product filter to the totals and daily series", async () => {
@@ -191,6 +234,13 @@ describe("dashboard country filtering", () => {
       "2026-08-13",
       [7n],
     );
+    expect(dashboard.overviewRoyaltySeries).toHaveBeenCalledWith(
+      expect.anything(),
+      [US_PROFILE.id],
+      "2026-07-15",
+      "2026-08-13",
+      [7n],
+    );
   });
 
   it("rejects an unknown book id with 404 before reading metrics", async () => {
@@ -206,6 +256,60 @@ describe("dashboard country filtering", () => {
       service.dashboardSummary("workspace-1", 30, "US", ["42"]),
     ).rejects.toMatchObject({ statusCode: 404 });
     expect(metrics.dashboardTotals).not.toHaveBeenCalled();
+  });
+
+  it("uses UTC month-to-date and prior-month MTD for days=mtd", async () => {
+    const service = createReadService({
+      db: {} as never,
+      config: { killSwitch: false } as ApiConfig,
+      logger: {} as never,
+      now: () => new Date("2026-08-13T12:00:00.000Z"),
+    });
+
+    const result = await service.dashboardSummary("workspace-1", "mtd", "US");
+
+    expect(result.dateRange).toEqual({
+      start: "2026-08-01",
+      end: "2026-08-13",
+    });
+    expect(result.previous.dateRange).toEqual({
+      start: "2026-07-01",
+      end: "2026-07-13",
+    });
+    expect(metrics.dashboardTotals).toHaveBeenCalledWith(
+      expect.anything(),
+      US_PROFILE.id,
+      "2026-08-01",
+      "2026-08-13",
+      null,
+    );
+    expect(metrics.dashboardTotals).toHaveBeenCalledWith(
+      expect.anything(),
+      US_PROFILE.id,
+      "2026-07-01",
+      "2026-07-13",
+      null,
+    );
+  });
+
+  it("clamps prior-month MTD when the previous month is shorter", async () => {
+    const service = createReadService({
+      db: {} as never,
+      config: { killSwitch: false } as ApiConfig,
+      logger: {} as never,
+      now: () => new Date("2026-03-31T12:00:00.000Z"),
+    });
+
+    const result = await service.dashboardSummary("workspace-1", "mtd", "US");
+
+    expect(result.dateRange).toEqual({
+      start: "2026-03-01",
+      end: "2026-03-31",
+    });
+    expect(result.previous.dateRange).toEqual({
+      start: "2026-02-01",
+      end: "2026-02-28",
+    });
   });
 });
 

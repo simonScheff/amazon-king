@@ -15,6 +15,7 @@ import {
   listNegativeKeywordRows,
   listSearchTermCampaignRows,
   listSearchTermRollupRows,
+  overviewRoyaltySeries,
   searchTermDailySeries,
 } from "./repositories/dashboard.js";
 import { enqueue, claim, reapExpiredLeases, complete } from "./queue.js";
@@ -1243,5 +1244,220 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     );
     expect(recent).toHaveLength(1);
     expect(recent[0]!.targetId).toBe("454063756440621");
+  });
+
+  it("values overview royalty per book and marketplace, not one rate per country", async () => {
+    const profileId = await seedProfile(pool);
+    const workspace = await pool.query<{
+      workspace_id: string;
+      connection_id: string;
+    }>(
+      `select c.workspace_id::text, c.id::text as connection_id
+       from amazon_profiles p join amazon_connections c on c.id = p.connection_id
+       where p.id = $1`,
+      [profileId],
+    );
+    const workspaceId = workspace.rows[0]!.workspace_id;
+    const ukProfile = await pool.query<{ id: string }>(
+      `insert into amazon_profiles
+         (connection_id, profile_id, region, country_code, currency_code)
+       values ($1, 'amzn-profile-uk-' || gen_random_uuid(), 'EU', 'GB', 'GBP')
+       returning id::text as id`,
+      [workspace.rows[0]!.connection_id],
+    );
+    const ukProfileId = ukProfile.rows[0]!.id;
+
+    const usCampaign = await upsertCampaign(pool, {
+      profileId,
+      amazonCampaignId: "amzn-campaign-ov-us",
+      name: "US campaign",
+      state: "enabled",
+    });
+    const usAdGroup = await upsertAdGroup(pool, {
+      profileId,
+      campaignId: usCampaign.id,
+      amazonAdGroupId: "amzn-ad-group-ov-us",
+      name: "US ad group",
+      state: "enabled",
+    });
+    await upsertAd(pool, {
+      profileId,
+      adGroupId: usAdGroup.id,
+      amazonAdId: "amzn-ad-ov-tractor",
+      asin: "B0TRACTOR1",
+      state: "enabled",
+    });
+    await upsertAd(pool, {
+      profileId,
+      adGroupId: usAdGroup.id,
+      amazonAdId: "amzn-ad-ov-other",
+      asin: "B0OTHER0001",
+      state: "enabled",
+    });
+
+    const ukCampaign = await upsertCampaign(pool, {
+      profileId: ukProfileId,
+      amazonCampaignId: "amzn-campaign-ov-uk",
+      name: "UK campaign",
+      state: "enabled",
+    });
+    const ukAdGroup = await upsertAdGroup(pool, {
+      profileId: ukProfileId,
+      campaignId: ukCampaign.id,
+      amazonAdGroupId: "amzn-ad-group-ov-uk",
+      name: "UK ad group",
+      state: "enabled",
+    });
+    await upsertAd(pool, {
+      profileId: ukProfileId,
+      adGroupId: ukAdGroup.id,
+      amazonAdId: "amzn-ad-ov-tractor-uk",
+      asin: "B0TRACTOR1",
+      state: "enabled",
+    });
+
+    const tractor = await mapAdvertisedProductToBook(pool, {
+      workspaceId,
+      profileIds: [profileId, ukProfileId],
+      asin: "B0TRACTOR1",
+      title: "Tractor Coloring Book",
+      format: "paperback",
+    });
+    const other = await mapAdvertisedProductToBook(pool, {
+      workspaceId,
+      profileIds: [profileId],
+      asin: "B0OTHER0001",
+      title: "Other Coloring Book",
+      format: "paperback",
+    });
+
+    await upsertBookEconomics(pool, {
+      bookId: tractor!.id,
+      profileId,
+      effectiveFrom: "2026-08-13",
+      currency: "USD",
+      listPrice: "10.45",
+      estimatedRoyaltyPerSale: "3.43",
+      goalMode: "balanced",
+    });
+    await upsertBookEconomics(pool, {
+      bookId: tractor!.id,
+      profileId: ukProfileId,
+      effectiveFrom: "2026-08-13",
+      currency: "GBP",
+      listPrice: "8.99",
+      estimatedRoyaltyPerSale: "1.50",
+      goalMode: "balanced",
+    });
+    await upsertBookEconomics(pool, {
+      bookId: other!.id,
+      profileId,
+      effectiveFrom: "2026-08-18",
+      currency: "USD",
+      listPrice: "9.99",
+      estimatedRoyaltyPerSale: "2.09",
+      goalMode: "balanced",
+    });
+
+    const metricValues = {
+      impressions: 100,
+      clicks: 10,
+      cost: "5.00",
+      sales: "20.00",
+      purchases7d: 2,
+      sales7d: "20.00",
+      purchases14d: 2,
+      sales14d: "20.00",
+    };
+    await upsertAdvertisedProductMetrics(pool, [
+      {
+        ...metricValues,
+        profileId,
+        campaignId: "amzn-campaign-ov-us",
+        adGroupId: "amzn-ad-group-ov-us",
+        adId: "amzn-ad-ov-tractor",
+        metricDate: "2026-08-13",
+        orders: 6,
+        currency: "USD",
+      },
+      {
+        ...metricValues,
+        profileId,
+        campaignId: "amzn-campaign-ov-us",
+        adGroupId: "amzn-ad-group-ov-us",
+        adId: "amzn-ad-ov-other",
+        metricDate: "2026-08-18",
+        orders: 4,
+        currency: "USD",
+      },
+      {
+        ...metricValues,
+        profileId: ukProfileId,
+        campaignId: "amzn-campaign-ov-uk",
+        adGroupId: "amzn-ad-group-ov-uk",
+        adId: "amzn-ad-ov-tractor-uk",
+        metricDate: "2026-08-13",
+        orders: 2,
+        currency: "GBP",
+      },
+    ]);
+
+    const tractorOnly = [BigInt(tractor!.id)];
+    const usTractor = await overviewRoyaltySeries(
+      pool,
+      [profileId],
+      "2026-08-13",
+      "2026-08-13",
+      tractorOnly,
+    );
+    expect(usTractor).toEqual([
+      {
+        date: "2026-08-13",
+        profilePk: profileId,
+        currency: "USD",
+        estimatedRoyalty: "20.5800",
+        economicsMissing: false,
+      },
+    ]);
+
+    const usAll = await overviewRoyaltySeries(
+      pool,
+      [profileId],
+      "2026-08-13",
+      "2026-08-18",
+    );
+    expect(usAll).toEqual([
+      {
+        date: "2026-08-13",
+        profilePk: profileId,
+        currency: "USD",
+        estimatedRoyalty: "20.5800",
+        economicsMissing: false,
+      },
+      {
+        date: "2026-08-18",
+        profilePk: profileId,
+        currency: "USD",
+        estimatedRoyalty: "8.3600",
+        economicsMissing: false,
+      },
+    ]);
+
+    const ukTractor = await overviewRoyaltySeries(
+      pool,
+      [ukProfileId],
+      "2026-08-13",
+      "2026-08-13",
+      tractorOnly,
+    );
+    expect(ukTractor).toEqual([
+      {
+        date: "2026-08-13",
+        profilePk: ukProfileId,
+        currency: "GBP",
+        estimatedRoyalty: "3.0000",
+        economicsMissing: false,
+      },
+    ]);
   });
 });

@@ -8,8 +8,10 @@ import {
 import {
   recommendationStateSchema,
   recommendationTypeSchema,
+  type MetricWindow,
 } from "@amazon-king/contracts";
 import { AppLayout } from "./components/layout";
+import { parseDaysSearch } from "./lib/timeframe";
 import { LoginPage } from "./routes/login";
 import { ConnectPage } from "./routes/connect";
 import { OverviewPage } from "./routes/overview";
@@ -68,14 +70,14 @@ const overviewRoute = createRoute({
   path: "/",
   validateSearch: (
     search: Record<string, unknown>,
-  ): { days?: number; country?: string } => {
-    const days = Number(search.days);
+  ): { days?: MetricWindow; country?: string } => {
+    const days = parseDaysSearch(search.days);
     const country =
       typeof search.country === "string" && /^[A-Za-z]{2}$/.test(search.country)
         ? search.country.toUpperCase()
         : undefined;
     return {
-      ...(Number.isFinite(days) && days > 0 ? { days } : {}),
+      ...(days !== undefined ? { days } : {}),
       ...(country ? { country } : {}),
     };
   },
@@ -141,10 +143,12 @@ const campaignNewRoute = createRoute({
 const campaignDetailRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/campaigns/$id",
-  validateSearch: (search: Record<string, unknown>): { days?: number } => {
-    const days = Number(search.days);
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { days?: MetricWindow } => {
+    const days = parseDaysSearch(search.days);
     return {
-      ...(Number.isFinite(days) && days > 0 ? { days } : {}),
+      ...(days !== undefined ? { days } : {}),
     };
   },
   component: CampaignDetailPage,
@@ -172,14 +176,14 @@ const searchTermDetailRoute = createRoute({
   path: "/search-terms/$term",
   validateSearch: (
     search: Record<string, unknown>,
-  ): { days?: number; country?: string } => {
-    const days = Number(search.days);
+  ): { days?: MetricWindow; country?: string } => {
+    const days = parseDaysSearch(search.days);
     const country =
       typeof search.country === "string"
         ? search.country.trim().toUpperCase()
         : undefined;
     return {
-      ...(Number.isFinite(days) && days > 0 ? { days } : {}),
+      ...(days !== undefined ? { days } : {}),
       ...(country !== undefined && /^[A-Z]{2}$/.test(country)
         ? { country }
         : {}),

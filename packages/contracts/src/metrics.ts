@@ -31,8 +31,11 @@ export const dashboardSummarySchema = z.object({
   currency: currencyCodeSchema,
   totals: dashboardTotalsSchema,
   /**
-   * Totals for the immediately preceding window of the same length, powering
-   * period-over-period comparison on the dashboard (e.g. 7d vs the 7d before).
+   * Totals for the comparison window, powering period-over-period on the
+   * dashboard. Trailing N-day views use the immediately preceding window of
+   * the same length (7d vs the 7d before). Month-to-date (`days=mtd`) uses
+   * the same day-of-month range in the previous calendar month (1–18 Aug vs
+   * 1–18 Jul), clamping the end day when that month is shorter.
    */
   previous: z.object({
     dateRange: z.object({

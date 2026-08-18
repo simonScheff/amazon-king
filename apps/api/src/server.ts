@@ -12,6 +12,7 @@ import {
   cannibalizationResolutionCreateSchema,
   changeSetCreateSchema,
   loginRequestSchema,
+  metricWindowSchema,
   profileUpdateSchema,
   recommendationStateSchema,
   recommendationTypeSchema,
@@ -347,7 +348,7 @@ export async function buildServer(
   // -------------------------------------------------------------------------
 
   const daysQuerySchema = z.object({
-    days: z.coerce.number().int().min(1).max(90).default(30),
+    days: metricWindowSchema.default(30),
   });
 
   /**

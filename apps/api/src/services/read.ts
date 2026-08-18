@@ -4,6 +4,7 @@ import type {
   CannibalizationResolutionContext,
   CountrySpend,
   DashboardSummary,
+  MetricWindow,
   SearchTermDetail,
   SearchTermListRow,
 } from "@amazon-king/contracts";
@@ -76,16 +77,62 @@ const cannibalizationEvidenceSchema = z.object({
     .min(2),
 });
 
-function dateRange(now: Date, days: number): { start: string; end: string } {
-  const clamped = Math.min(Math.max(Math.trunc(days) || 30, 1), MAX_DAYS);
-  const end = new Date(
+function utcToday(now: Date): Date {
+  return new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
   );
-  const start = new Date(end.getTime() - (clamped - 1) * 86_400_000);
-  return {
-    start: start.toISOString().slice(0, 10),
-    end: end.toISOString().slice(0, 10),
-  };
+}
+
+function isoDay(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function dateRange(
+  now: Date,
+  window: MetricWindow,
+): { start: string; end: string } {
+  const end = utcToday(now);
+  if (window === "mtd") {
+    const start = new Date(
+      Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1),
+    );
+    return { start: isoDay(start), end: isoDay(end) };
+  }
+  const clamped = Math.min(Math.max(Math.trunc(window) || 30, 1), MAX_DAYS);
+  const start = new Date(end.getTime() - (clamped - 1) * DAY_MS);
+  return { start: isoDay(start), end: isoDay(end) };
+}
+
+/** Comparison window for dashboard period-over-period totals. */
+function previousDateRange(
+  now: Date,
+  window: MetricWindow,
+): { start: string; end: string } {
+  if (window === "mtd") {
+    const end = utcToday(now);
+    const dayOfMonth = end.getUTCDate();
+    // Day 0 of this month is the last day of the previous month.
+    const prevMonthEnd = new Date(
+      Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 0),
+    );
+    const prevStart = new Date(
+      Date.UTC(prevMonthEnd.getUTCFullYear(), prevMonthEnd.getUTCMonth(), 1),
+    );
+    const prevEndDay = Math.min(dayOfMonth, prevMonthEnd.getUTCDate());
+    const prevEnd = new Date(
+      Date.UTC(
+        prevMonthEnd.getUTCFullYear(),
+        prevMonthEnd.getUTCMonth(),
+        prevEndDay,
+      ),
+    );
+    return { start: isoDay(prevStart), end: isoDay(prevEnd) };
+  }
+  const { start } = dateRange(now, window);
+  return dateRange(
+    new Date(new Date(`${start}T00:00:00.000Z`).getTime() - DAY_MS),
+    window,
+  );
 }
 
 export function createReadService(deps: ReadServiceDeps): ReadService {
@@ -253,12 +300,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       bookIds,
     ): Promise<DashboardSummary> {
       const { start, end } = dateRange(now(), days);
-      // The immediately preceding window of the same length (7d vs the 7d
-      // before), used for period-over-period comparison.
-      const previous = dateRange(
-        new Date(new Date(`${start}T00:00:00.000Z`).getTime() - DAY_MS),
-        days,
-      );
+      const previous = previousDateRange(now(), days);
       const bookPks = await requireBookPks(workspaceId, bookIds);
       const all = await profiles.listProfilesByWorkspace(db, workspaceId);
       const enabled = all.filter(
@@ -272,10 +314,6 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         let orders = 0;
         let costMicros = 0;
         let salesMicros = 0;
-        const totalsByProfile = new Map<
-          string,
-          { orders: number; costMicros: number }
-        >();
 
         for (const profile of enabled) {
           let totals: metrics.MetricTotals | null;
@@ -310,10 +348,6 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
           orders += totals.orders;
           costMicros += microsFromDecimalString(totals.cost);
           salesMicros += microsFromDecimalString(totals.sales);
-          totalsByProfile.set(profile.id, {
-            orders: totals.orders,
-            costMicros: microsFromDecimalString(totals.cost),
-          });
         }
         return {
           currency,
@@ -322,7 +356,6 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
           orders,
           costMicros,
           salesMicros,
-          totalsByProfile,
         };
       }
 
@@ -343,79 +376,81 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         );
       }
 
-      // Profit requires user-entered economics for EVERY enabled profile;
-      // otherwise it is reported as missing, never guessed (plan §9).
       const profilePks = enabled.map((p) => p.id);
-      const economics = await dashboard.latestEconomicsForProfiles(
-        db,
-        profilePks,
-        end,
-      );
-      const economicsByProfile = new Map(
-        economics.map((row) => [row.profilePk, row]),
-      );
-      const economicsMissing =
-        enabled.length === 0 ||
-        enabled.some((p) => !economicsByProfile.has(p.id));
-
-      // Previous-window royalty uses the economics in effect at that window's
-      // end; if none existed yet, the previous royalty is missing too.
-      const previousEconomics = await dashboard.latestEconomicsForProfiles(
-        db,
-        profilePks,
-        previous.end,
-      );
-      const previousEconomicsByProfile = new Map(
-        previousEconomics.map((row) => [row.profilePk, row]),
-      );
-      const previousEconomicsMissing =
-        enabled.length === 0 ||
-        enabled.some((p) => !previousEconomicsByProfile.has(p.id));
-
-      function royaltyMicros(
-        missing: boolean,
-        windowTotalsByProfile: Map<
-          string,
-          { orders: number; costMicros: number }
-        >,
-        economicsForWindow: Map<string, { estimatedRoyaltyPerSale: string }>,
-      ): number | null {
-        if (missing) return null;
-        let total = 0;
-        for (const profile of enabled) {
-          const totals = windowTotalsByProfile.get(profile.id);
-          const econ = economicsForWindow.get(profile.id);
-          if (!totals || !econ) continue;
-          total +=
-            totals.orders *
-            microsFromDecimalString(econ.estimatedRoyaltyPerSale);
-        }
-        return total;
-      }
-
-      const estimatedRoyaltyMicros = royaltyMicros(
-        economicsMissing,
-        current.totalsByProfile,
-        economicsByProfile,
-      );
-      const previousEstimatedRoyaltyMicros = royaltyMicros(
-        previousEconomicsMissing,
-        previousWindow.totalsByProfile,
-        previousEconomicsByProfile,
-      );
-
-      const dailyRows = await dashboard.dailySeries(
-        db,
-        enabled.map((p) => p.id),
-        start,
-        end,
-        bookPks,
-      );
+      // Royalty is per advertised book per marketplace (profile) per day —
+      // never one rate for the whole country. Missing economics on any
+      // attributed order hides profit rather than guessing (plan §9).
+      const [royaltyRows, previousRoyaltyRows, dailyRows] = await Promise.all([
+        dashboard.overviewRoyaltySeries(db, profilePks, start, end, bookPks),
+        dashboard.overviewRoyaltySeries(
+          db,
+          profilePks,
+          previous.start,
+          previous.end,
+          bookPks,
+        ),
+        dashboard.dailySeries(db, profilePks, start, end, bookPks),
+      ]);
+      const royaltyCurrencies = new Set(royaltyRows.map((row) => row.currency));
       const dailyCurrencies = new Set(dailyRows.map((row) => row.currency));
-      if (dailyCurrencies.size > 1) {
+      if (royaltyCurrencies.size > 1 || dailyCurrencies.size > 1) {
         throw conflict(
           "MIXED_CURRENCY",
           "Daily metrics mix currencies; refusing to aggregate (plan §9)",
+        );
+      }
+
+      function royaltyFromSeries(
+        points: readonly {
+          estimatedRoyalty: string | null;
+          economicsMissing: boolean;
+        }[],
+        orders: number,
+      ): { micros: number | null; missing: boolean } {
+        if (enabled.length === 0) {
+          return { micros: null, missing: true };
+        }
+        if (
+          points.some((p) => p.economicsMissing || p.estimatedRoyalty === null)
+        ) {
+          return { micros: null, missing: true };
+        }
+        if (orders > 0 && points.length === 0) {
+          return { micros: null, missing: true };
+        }
+        let total = 0;
+        for (const point of points) {
+          total += microsFromDecimalString(point.estimatedRoyalty ?? "0");
+        }
+        return { micros: total, missing: false };
+      }
+
+      const currentRoyalty = royaltyFromSeries(royaltyRows, current.orders);
+      const previousRoyalty = royaltyFromSeries(
+        previousRoyaltyRows,
+        previousWindow.orders,
+      );
+      const economicsMissing = currentRoyalty.missing;
+      const estimatedRoyaltyMicros = currentRoyalty.micros;
+      const previousEstimatedRoyaltyMicros = previousRoyalty.missing
+        ? null
+        : previousRoyalty.micros;
+
+      const royaltyByDate = new Map<string, number | null>();
+      for (const row of royaltyRows) {
+        if (
+          economicsMissing ||
+          row.economicsMissing ||
+          row.estimatedRoyalty === null
+        ) {
+          royaltyByDate.set(row.date, null);
+          continue;
+        }
+        const currentValue = royaltyByDate.get(row.date);
+        if (currentValue === null) continue;
+        royaltyByDate.set(
+          row.date,
+          (currentValue ?? 0) + microsFromDecimalString(row.estimatedRoyalty),
         );
       }
 
@@ -435,19 +470,13 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
           costMicros: 0,
           salesMicros: 0,
           orders: 0,
-          estimatedRoyaltyMicros: economicsMissing ? null : 0,
+          estimatedRoyaltyMicros: economicsMissing
+            ? null
+            : (royaltyByDate.get(row.date) ?? 0),
         };
         point.costMicros += microsFromDecimalString(row.cost);
         point.salesMicros += microsFromDecimalString(row.sales);
         point.orders += row.orders;
-        if (point.estimatedRoyaltyMicros !== null) {
-          const economics = economicsByProfile.get(row.profilePk);
-          if (economics) {
-            point.estimatedRoyaltyMicros +=
-              row.orders *
-              microsFromDecimalString(economics.estimatedRoyaltyPerSale);
-          }
-        }
         dailyByDate.set(row.date, point);
       }
       const daily = [...dailyByDate.values()].sort((a, b) =>

@@ -215,6 +215,20 @@ describe("CampaignDetailPage profitability", () => {
     });
   });
 
+  it("requests month-to-date when the MTD selector is clicked", () => {
+    render(<CampaignDetailPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Month to date" }));
+
+    const call = mocks.navigate.mock.calls.at(-1)?.[0] as {
+      search: (prev: Record<string, unknown>) => Record<string, unknown>;
+    };
+    expect(call.search({ days: 7, books: ["3"] })).toEqual({
+      days: "mtd",
+      books: ["3"],
+    });
+  });
+
   it("opens campaign-wide Max CPC controls from the breakdown tabs", () => {
     render(<CampaignDetailPage />);
 

@@ -34,6 +34,7 @@ import {
   type CampaignCreationCreate,
   type ChangeSetCreate,
   type LoginRequest,
+  type MetricWindow,
   type ProfileUpdate,
   type RecommendationState,
   type RecommendationType,
@@ -207,7 +208,7 @@ function booksParam(bookIds?: string[]): string | undefined {
 }
 
 export function useDashboardSummary(
-  days: number,
+  days: MetricWindow,
   country = "US",
   bookIds?: string[],
 ) {
@@ -222,7 +223,7 @@ export function useDashboardSummary(
   });
 }
 
-export function useCountrySpend(days: number, bookIds?: string[]) {
+export function useCountrySpend(days: MetricWindow, bookIds?: string[]) {
   const books = booksParam(bookIds);
   return useQuery({
     queryKey: ["dashboard-country-spend", days, books ?? null],
@@ -248,7 +249,7 @@ export function useDataFreshness() {
 // Campaigns
 // ---------------------------------------------------------------------------
 
-export function useCampaigns(days = 7, bookIds?: string[]) {
+export function useCampaigns(days: MetricWindow = 7, bookIds?: string[]) {
   const books = booksParam(bookIds);
   return useQuery({
     queryKey: ["campaigns", days, books ?? null],
@@ -262,7 +263,7 @@ export function useCampaigns(days = 7, bookIds?: string[]) {
 
 export function useCampaign(
   campaignId: string,
-  days: number,
+  days: MetricWindow,
   bookIds?: string[],
 ) {
   const books = booksParam(bookIds);
@@ -368,7 +369,7 @@ export function useCreateCampaignDrafts() {
 // ---------------------------------------------------------------------------
 
 export function useSearchTerms(
-  days = 7,
+  days: MetricWindow = 7,
   bookIds?: string[],
   countryCode?: string,
 ) {
@@ -385,7 +386,7 @@ export function useSearchTerms(
 
 export function useSearchTerm(
   term: string,
-  days: number,
+  days: MetricWindow,
   bookIds?: string[],
   countryCode?: string,
 ) {

@@ -375,6 +375,23 @@ describe("GET metric endpoints: books query param", () => {
     expect(response.statusCode).toBe(200);
     expect(read.listSearchTerms).toHaveBeenCalledWith("1", 30, null, null);
   });
+
+  it("accepts days=mtd as a metric window", async () => {
+    const { read } = await start();
+
+    const response = await app!.inject({
+      method: "GET",
+      url: "/api/dashboard/summary?days=mtd&country=US",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(read.dashboardSummary).toHaveBeenCalledWith(
+      "1",
+      "mtd",
+      "US",
+      undefined,
+    );
+  });
 });
 
 describe("POST /api/session/login", () => {

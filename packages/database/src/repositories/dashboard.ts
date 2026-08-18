@@ -996,12 +996,102 @@ export interface DailyPoint {
   currency: string;
 }
 
+export interface OverviewRoyaltyPoint {
+  date: string;
+  profilePk: string;
+  currency: string;
+  /** Null when any advertised order that day lacks in-effect book+market economics. */
+  estimatedRoyalty: string | null;
+  economicsMissing: boolean;
+}
+
+/**
+ * Estimated KDP royalty for the overview KPIs and trend chart. Each advertised
+ * product's orders are valued with that book's economics for that marketplace
+ * (profile) on that metric date — never one royalty for the whole profile, and
+ * never a book's US royalty on a UK order. `bookIds` (null or empty = no
+ * filter) keeps only facts whose ASIN is linked to one of the selected books.
+ * Callers must hide profit when `economicsMissing` is true rather than guess.
+ */
+export async function overviewRoyaltySeries(
+  db: Db,
+  profilePks: readonly string[],
+  dateStart: string,
+  dateEnd: string,
+  bookIds: bigint[] | null = null,
+): Promise<OverviewRoyaltyPoint[]> {
+  if (profilePks.length === 0) {
+    return [];
+  }
+  const result = await db.query<{
+    metric_date: string;
+    profile_id: string;
+    currency: string;
+    estimated_royalty: string | null;
+    economics_missing: boolean;
+  }>(
+    `select m.metric_date::text as metric_date,
+            m.profile_id::text as profile_id,
+            m.currency,
+            bool_or(m.orders > 0 and economics.estimated_royalty_per_sale is null)
+              as economics_missing,
+            case
+              when bool_or(
+                m.orders > 0 and economics.estimated_royalty_per_sale is null
+              )
+                then null
+              else coalesce(
+                sum(m.orders * economics.estimated_royalty_per_sale), 0
+              )::text
+            end as estimated_royalty
+     from advertised_product_metrics_daily m
+     left join ads a
+       on a.profile_id = m.profile_id and a.amazon_ad_id = m.ad_id
+     left join lateral (
+       select be.estimated_royalty_per_sale
+       from book_profile_links bpl
+       join book_economics be
+         on be.book_id = bpl.book_id and be.profile_id = bpl.profile_id
+       where bpl.profile_id = m.profile_id
+         and bpl.marketplace_asin = a.asin
+         and bpl.enabled = true
+         and be.currency = m.currency
+         and be.effective_from <= m.metric_date
+       order by be.effective_from desc, be.id desc
+       limit 1
+     ) economics on true
+     where m.profile_id = any($1::bigint[])
+       and m.metric_date between $2 and $3
+       and (coalesce(cardinality($4::bigint[]), 0) = 0 or exists (
+         select 1
+         from ads fa
+         join book_profile_links fb
+           on fb.profile_id = fa.profile_id
+          and fb.marketplace_asin = fa.asin
+          and fb.enabled = true
+         where fa.profile_id = m.profile_id
+           and fa.amazon_ad_id = m.ad_id
+           and fb.book_id = any($4)
+       ))
+     group by m.metric_date, m.profile_id, m.currency
+     order by m.metric_date, m.profile_id`,
+    [profilePks.map(String), dateStart, dateEnd, bookIds],
+  );
+  return result.rows.map((row) => ({
+    date: row.metric_date,
+    profilePk: row.profile_id,
+    currency: row.currency,
+    estimatedRoyalty: row.estimated_royalty,
+    economicsMissing: row.economics_missing,
+  }));
+}
+
 /**
  * Per-day cost/sales/orders for each given profile (trend chart). Rows remain
- * separate by profile so the caller can apply profile-specific royalty
- * economics before combining them. The caller must refuse to merge differing
- * currencies. `bookIds` (null or empty = no filter) keeps only facts of
- * campaigns with at least one ad group advertising any of the selected books.
+ * separate by profile so the caller can merge them after checking currencies.
+ * The caller must refuse to merge differing currencies. `bookIds` (null or
+ * empty = no filter) keeps only facts of campaigns with at least one ad group
+ * advertising any of the selected books.
  */
 export async function dailySeries(
   db: Db,
@@ -1064,47 +1154,6 @@ export interface DataFreshnessRow {
   dataset: string;
   lastSuccessAt: string | null;
   completeThrough: string | null;
-}
-
-export interface LatestEconomicsRow {
-  profilePk: string;
-  estimatedRoyaltyPerSale: string;
-  currency: string;
-}
-
-/**
- * The most recent in-effect economics row per profile (KDP royalty per
- * sale). Missing profiles simply have no row — callers must treat profit as
- * unavailable rather than guess (plan §7/§9).
- */
-export async function latestEconomicsForProfiles(
-  db: Db,
-  profilePks: readonly string[],
-  onDate?: string,
-): Promise<LatestEconomicsRow[]> {
-  if (profilePks.length === 0) {
-    return [];
-  }
-  const result = await db.query<{
-    profile_id: string;
-    estimated_royalty_per_sale: string;
-    currency: string;
-  }>(
-    `select distinct on (profile_id)
-            profile_id::text as profile_id,
-            estimated_royalty_per_sale::text,
-            currency
-     from book_economics
-     where profile_id = any($1::bigint[])
-       and effective_from <= coalesce($2::date, current_date)
-     order by profile_id, effective_from desc`,
-    [profilePks.map(String), onDate ?? null],
-  );
-  return result.rows.map((row) => ({
-    profilePk: row.profile_id,
-    estimatedRoyaltyPerSale: row.estimated_royalty_per_sale,
-    currency: row.currency,
-  }));
 }
 
 /**

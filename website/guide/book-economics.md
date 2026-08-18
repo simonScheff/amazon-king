@@ -69,8 +69,10 @@ economics that were in force at the time.
 With at least one effective economics row for a market:
 
 - The dashboard shows the **Est. royalty** and **Est. ad profit** KPIs and
-  the **Daily profitability** chart. Without economics these stay hidden and
-  the dashboard says so explicitly.
+  the **Daily profitability** chart. Royalty is each advertised book's own
+  figure in that marketplace (orders × that book's net royalty for the
+  country), never one rate for the whole account. Without economics these
+  stay hidden and the dashboard says so explicitly.
 - The profit-aware rules activate:
   `expensive_target` (cut bids on unprofitable targets),
   `profitable_target` (raise bids on profitable ones),

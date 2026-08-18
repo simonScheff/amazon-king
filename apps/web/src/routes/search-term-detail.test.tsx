@@ -164,6 +164,26 @@ describe("SearchTermDetailPage", () => {
     expect(within(funnel).getByText("CVR: 20.0%")).toBeInTheDocument();
   });
 
+  it("requests month-to-date when the MTD selector is clicked", () => {
+    render(<SearchTermDetailPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Month to date" }));
+
+    const call = mocks.navigate.mock.calls.at(-1)?.[0] as {
+      to: string;
+      params: { term: string };
+      search: (prev: Record<string, unknown>) => Record<string, unknown>;
+      replace: boolean;
+    };
+    expect(call.to).toBe("/search-terms/$term");
+    expect(call.params).toEqual({ term: "fantasy books" });
+    expect(call.search({ days: 7, books: ["3"] })).toEqual({
+      days: "mtd",
+      books: ["3"],
+      country: "US",
+    });
+  });
+
   it("switches between only the markets where the term has data", () => {
     const data = detail([campaign("campaign-1", "General")]);
     data.availableCountryCodes = ["US", "GB"];

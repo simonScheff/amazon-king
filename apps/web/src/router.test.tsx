@@ -26,6 +26,12 @@ vi.mock("./routes/campaigns", () => ({
 vi.mock("./routes/search-terms", () => ({
   SearchTermsPage: () => <div>search terms page</div>,
 }));
+vi.mock("./routes/campaign-detail", () => ({
+  CampaignDetailPage: () => <div>campaign detail page</div>,
+}));
+vi.mock("./routes/search-term-detail", () => ({
+  SearchTermDetailPage: () => <div>search term detail page</div>,
+}));
 
 import { router } from "./router";
 
@@ -83,5 +89,47 @@ describe("global books search param", () => {
     });
     expect(leafSearch()).toEqual({ country: "DE" });
     expect(router.state.location.href).toBe("/search-terms?country=DE");
+  });
+});
+
+describe("days search param", () => {
+  afterEach(cleanup);
+
+  it("keeps ?days=mtd on overview, campaign detail, and search-term detail", async () => {
+    render(<RouterProvider router={router} />);
+
+    await router.navigate({ to: "/", search: { days: "mtd" } as never });
+    await screen.findByText("overview page");
+    expect(leafSearch()).toEqual({ days: "mtd" });
+    expect(router.state.location.href).toBe("/?days=mtd");
+
+    await router.navigate({
+      to: "/campaigns/$id",
+      params: { id: "campaign-1" },
+      search: { days: "mtd" } as never,
+    });
+    await screen.findByText("campaign detail page");
+    expect(leafSearch()).toEqual({ days: "mtd" });
+    expect(router.state.location.href).toBe("/campaigns/campaign-1?days=mtd");
+
+    await router.navigate({
+      to: "/search-terms/$term",
+      params: { term: "fantasy books" },
+      search: { days: "mtd" } as never,
+    });
+    await screen.findByText("search term detail page");
+    expect(leafSearch()).toEqual({ days: "mtd" });
+    expect(router.state.location.href).toBe(
+      "/search-terms/fantasy%20books?days=mtd",
+    );
+  });
+
+  it("keeps numeric trailing windows", async () => {
+    render(<RouterProvider router={router} />);
+
+    await router.navigate({ to: "/", search: { days: 14 } });
+    await screen.findByText("overview page");
+    expect(leafSearch()).toEqual({ days: 14 });
+    expect(router.state.location.href).toBe("/?days=14");
   });
 });

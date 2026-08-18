@@ -20,6 +20,7 @@ import type {
   MaxCpcChangeSetResult,
   DashboardSummary,
   DataFreshness,
+  MetricWindow,
   ProfileUpdate,
   Recommendation,
   RecommendationState,
@@ -152,36 +153,36 @@ export interface ReadService {
   getSyncRun(workspaceId: string, syncRunId: string): Promise<SyncRun | null>;
   dashboardSummary(
     workspaceId: string,
-    days: number,
+    days: MetricWindow,
     countryCode: string,
     bookIds?: string[],
   ): Promise<DashboardSummary>;
   dashboardCountrySpend(
     workspaceId: string,
-    days: number,
+    days: MetricWindow,
     bookIds?: string[],
   ): Promise<CountrySpend>;
   listCampaigns(
     workspaceId: string,
-    days: number,
+    days: MetricWindow,
     bookIds?: string[],
   ): Promise<CampaignListRow[]>;
   getCampaignDetail(
     workspaceId: string,
     amazonCampaignId: string,
-    days: number,
+    days: MetricWindow,
     bookIds?: string[],
   ): Promise<CampaignDetail | null>;
   listSearchTerms(
     workspaceId: string,
-    days: number,
+    days: MetricWindow,
     bookIds?: string[] | null,
     countryCode?: string | null,
   ): Promise<SearchTermListRow[]>;
   getSearchTermDetail(
     workspaceId: string,
     searchTerm: string,
-    days: number,
+    days: MetricWindow,
     bookIds?: string[] | null,
     countryCode?: string | null,
   ): Promise<SearchTermDetail | null>;

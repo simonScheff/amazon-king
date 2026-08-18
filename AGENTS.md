@@ -140,6 +140,10 @@ route in `src/router.tsx` and retained across navigation via
 overview, campaigns, campaign detail, search terms, and recommendations pages
 pass the selection to their query hooks (query keys include the sorted id
 list); `/changes`, `/settings`, and `/connect` ignore it.
+Overview, campaign detail, and search-term detail share a date-range selector
+(`src/components/timeframe-select.tsx`): 7/14/30/60d plus month-to-date
+(`?days=mtd`, UTC 1st of the current month through today). Campaign and
+search-term **list** pages still hardcode a 7-day profitability window.
 
 `packages/database` (`@amazon-king/database`) is implemented: plain SQL
 migrations under `migrations/` (numbered `NNNN_name.sql`, applied by
@@ -181,8 +185,9 @@ cors, rate-limit. All §11 routes plus the frontend's contract extensions
 (`GET /api/change-sets`, cannibalization comparison + campaign-level
 negative-exact/negative-target draft creation, `csrfToken` on the session
 response, dashboard
-`daily` series + `writesDisabled` + `previous` (totals for the immediately
-preceding window of the same length, powering the period-over-period
+`daily` series + `writesDisabled` + `previous` (totals for the comparison
+window: the immediately preceding same-length range for trailing 7/14/30/60d,
+or prior-month MTD when `days=mtd`, powering the period-over-period
 percentage deltas on the overview KPI cards), `amazonConsoleUrl` on campaign
 list/detail payloads (built from the profile's `account_id` entity id, null
 when absent), and the cross-campaign search-term
@@ -241,7 +246,10 @@ product filter: ids are resolved to internal PKs per request via
 `requireBookPks` (404 on unknown/foreign book) and forwarded to the
 repositories, which filter with an `EXISTS (ad_groups → ads.asin →
 book_profile_links)` predicate and `book_id = any($n)` — include-all semantics
-at ad-group grain, union across selected books, null/empty = unfiltered. Route
+at ad-group grain, union across selected books, null/empty = unfiltered.
+`GET /api/dashboard/summary` estimates royalty from advertised-product facts
+valued with each book's own `book_economics` for that marketplace and metric
+date (never one royalty per country). Route
 handlers are thin wrappers
 over injectable services (`src/services/types.js`); tests use the SQL-matching
 in-memory `FakeDb` (`src/test/fake-db.ts`). Commands: `dev` (`tsx watch
