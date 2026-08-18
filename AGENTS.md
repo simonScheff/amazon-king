@@ -186,7 +186,14 @@ live in
 `purchases7d`/`sales7d`/`unitsSoldClicks7d` and the matching 14d columns, poll
 resume via persisted `amazon_report_id` + the gateway `reportOwner` callback,
 streaming download to `REPORT_STORAGE_DIR` with sha256, reconciliation, then
-transactional fact upserts; success chains `recommendation_run`). Amazon needs
+transactional fact upserts; success chains `recommendation_run`). A range longer
+than Amazon's 31-day limit is split into chunks, and the four report families of
+a chunk are driven **concurrently** (`Promise.allSettled`) because each spends
+nearly all its wall time asleep in the poll loop; chunks stay sequential, which
+caps in-flight reports per profile at four. A family that fails does not cancel
+its siblings — each records its own `report_jobs` state so the retry resumes —
+and a `TerminalJobError` from any family outranks transient sibling errors.
+Amazon needs
 roughly 19–21 minutes per daily report, so `REPORT_POLL_TIMEOUT_MS` defaults to
 45 minutes and a poll timeout leaves the report `polling` with its
 `amazon_report_id` so the retry resumes the same Amazon report instead of

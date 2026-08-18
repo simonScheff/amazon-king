@@ -190,6 +190,53 @@ describe("metrics_sync", () => {
     ).toBe(true);
   });
 
+  it("requests a chunk's four families before polling any of them", async () => {
+    const store = new FakeStore();
+    store.profiles.push(PROFILE);
+    const storage = new FakeStorage();
+    const { deps, calls } = makeMetricsDeps(store, storage);
+
+    await runHandler(createMetricsSyncHandler(deps), payload());
+
+    // Driving the families one at a time made a sync take four times longer
+    // than Amazon needed, because each family only ever waited on the poll
+    // loop. Every request must go out before the first poll.
+    const lastRequest = Math.max(
+      ...calls.requestReport.mock.invocationCallOrder,
+    );
+    const firstPoll = Math.min(...calls.getReport.mock.invocationCallOrder);
+    expect(calls.requestReport).toHaveBeenCalledTimes(4);
+    expect(lastRequest).toBeLessThan(firstPoll);
+  });
+
+  it("keeps chunks sequential so in-flight reports stay bounded", async () => {
+    const store = new FakeStore();
+    store.profiles.push(PROFILE);
+    const storage = new FakeStorage();
+    const emptyRows = Object.fromEntries(
+      Object.keys(ROWS_BY_FAMILY).map((family) => [family, []]),
+    );
+    const { deps, calls } = makeMetricsDeps(store, storage, {
+      rowsByFamily: emptyRows,
+    });
+
+    await runHandler(createMetricsSyncHandler(deps), {
+      profileId: PROFILE.id,
+      startDate: "2026-06-13",
+      endDate: "2026-08-11",
+    });
+
+    // Two chunks x four families, but the second chunk's requests only start
+    // after the first chunk has fully imported.
+    const requestedRanges = calls.requestReport.mock.calls.map(
+      ([, spec]) => `${spec.startDate}..${spec.endDate}`,
+    );
+    expect(requestedRanges).toEqual([
+      ...Array<string>(4).fill("2026-06-13..2026-07-13"),
+      ...Array<string>(4).fill("2026-07-14..2026-08-11"),
+    ]);
+  });
+
   it("recovers a previously queued manual job that has no date range", async () => {
     const store = new FakeStore();
     store.profiles.push(PROFILE);
@@ -311,10 +358,10 @@ describe("metrics_sync", () => {
     expect(calls.requestReport).not.toHaveBeenCalled();
     expect(calls.getReport).not.toHaveBeenCalled();
     expect(store.importCalls).toHaveLength(4);
-    expect(store.importCalls[0]?.rows[0]).toMatchObject({
-      orders: 2,
-      units: 4,
-    });
+    const campaignImport = store.importCalls.find(
+      (facts) => facts.reportType === "spCampaigns",
+    );
+    expect(campaignImport?.rows[0]).toMatchObject({ orders: 2, units: 4 });
   });
 
   it("resumes at polling after a restart when amazon_report_id is persisted", async () => {
@@ -417,10 +464,14 @@ describe("metrics_sync", () => {
     const campaignJob = store.reportJobs.get(campaignSpec.specFingerprint)!;
     expect(campaignJob.status).toBe("failed");
     expect(campaignJob.error).toContain("reconciliation failed");
-    // Nothing was imported and the sync run did not complete.
-    expect(store.importCalls).toHaveLength(0);
+    // The siblings run alongside the failing family, so their facts land and
+    // their report jobs stay complete for the retry to skip. What must not
+    // happen is the sync completing or recommendations running on partial data.
     expect(store.syncRuns.find((r) => r.kind === "metrics")!.status).toBe(
       "failed",
+    );
+    expect(store.jobs.some((job) => job.type === "recommendation_run")).toBe(
+      false,
     );
   });
 
@@ -488,7 +539,8 @@ describe("metrics_sync", () => {
     const timedOut = store.reportJobs.get(spec.specFingerprint)!;
     expect(timedOut.status).toBe("polling");
     expect(timedOut.amazonReportId).toBe("amz-report-1-spCampaigns");
-    expect(calls.requestReport).toHaveBeenCalledTimes(1);
+    // One request per family: the chunk asks for all four up front, then waits.
+    expect(calls.requestReport).toHaveBeenCalledTimes(4);
 
     ready = true;
     await runHandler(createMetricsSyncHandler(deps), payload());

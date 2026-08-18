@@ -82,13 +82,14 @@ export function createMetricsSyncHandler(deps: JobDeps): JobHandler {
       startDate as IsoDate,
       endDate as IsoDate,
     );
-    const familySpecs = dateChunks.flatMap((chunk) =>
+    const chunkSpecs = dateChunks.map((chunk) =>
       buildAllFamilySpecs(profile.id, chunk.startDate, chunk.endDate),
     );
+    const familySpecs = chunkSpecs.flat();
     let completed = false;
     try {
-      for (const familySpec of familySpecs) {
-        await driveFamily(deps, profile, syncRunId, familySpec, logger);
+      for (const specs of chunkSpecs) {
+        await driveChunk(deps, profile, syncRunId, specs, logger);
       }
       // The encompassing sync run completes only when every family passed
       // (plan §8 step 12). Verified via the deterministic fingerprints so
@@ -140,6 +141,41 @@ export function splitReportDateRange(
     cursor = addDays(chunkEnd, 1);
   }
   return chunks;
+}
+
+/**
+ * Drive one date chunk's report families together. Each family spends nearly
+ * all of its wall time asleep in the poll loop waiting on Amazon, which
+ * generates the four reports independently anyway, so awaiting them one at a
+ * time multiplied the sync duration by four while the worker's single job slot
+ * sat idle. Chunks stay sequential, which caps in-flight reports per profile at
+ * the four families no matter how long the requested range is.
+ */
+async function driveChunk(
+  deps: JobDeps,
+  profile: ProfileRecord,
+  syncRunId: string,
+  familySpecs: readonly FamilySpec[],
+  logger: Logger,
+): Promise<void> {
+  const results = await Promise.allSettled(
+    familySpecs.map((familySpec) =>
+      driveFamily(deps, profile, syncRunId, familySpec, logger),
+    ),
+  );
+  const failures = results.flatMap((result) =>
+    result.status === "rejected" ? [result.reason as unknown] : [],
+  );
+  if (failures.length === 0) return;
+  // Every family recorded its own report_job state before rejecting, so the
+  // next attempt resumes each one where it stopped. A terminal failure cannot
+  // heal by retrying the queue job, so it outranks transient siblings.
+  const message = failures
+    .map((error) => (error instanceof Error ? error.message : String(error)))
+    .join("; ");
+  throw failures.some((error) => error instanceof TerminalJobError)
+    ? new TerminalJobError(message)
+    : new Error(message);
 }
 
 async function driveFamily(
