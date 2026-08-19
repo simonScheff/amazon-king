@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import type { ChangeAction, ChangeSet } from "@amazon-king/contracts";
 import {
   useApplyChangeSet,
@@ -49,23 +49,19 @@ function campaignLabel(action: ChangeAction): string | null {
   );
 }
 
+/** The guarded mutation a REAUTH_REQUIRED failure interrupted. */
+type BlockedAction = { kind: "apply" } | { kind: "rollback"; actionId: string };
+
 function ChangeSetDetail({
   changeSet,
   allChangeSets,
+  resumeApply = false,
 }: {
   changeSet: ChangeSet;
   allChangeSets: ChangeSet[];
+  /** Arrived back here from re-auth with this set's apply still pending. */
+  resumeApply?: boolean;
 }) {
-  // Collapsed by default; the preview (actions, guardrails) is fetched lazily
-  // on first expand so the page does not fan out one request per set.
-  const [expanded, setExpanded] = useState(false);
-  const preview = useChangeSetPreview(expanded ? changeSet.id : null);
-  const apply = useApplyChangeSet(changeSet.id);
-  const rollback = useRollbackChangeAction();
-  const toast = useToast();
-  const [confirmApply, setConfirmApply] = useState(false);
-  const [reauthOpen, setReauthOpen] = useState(false);
-
   // Cross-set dependency (e.g. cannibalization negatives locked until their
   // new destination campaign exists on Amazon). The API enforces the same
   // gate; this only explains it and hides the Apply button.
@@ -74,6 +70,56 @@ function ChangeSetDetail({
     : undefined;
   const dependencyLocked =
     changeSet.dependsOnChangeSetId != null && dependency?.status !== "applied";
+  const applyable =
+    changeSet.status === "draft" ||
+    changeSet.status === "previewed" ||
+    changeSet.status === "failed";
+  // Only resume into a set that is still waiting to be applied: the apply may
+  // well have succeeded before the session went stale.
+  const resuming = resumeApply && applyable && !dependencyLocked;
+
+  // Collapsed by default; the preview (actions, guardrails) is fetched lazily
+  // on first expand so the page does not fan out one request per set.
+  const [expanded, setExpanded] = useState(resuming);
+  const preview = useChangeSetPreview(expanded ? changeSet.id : null);
+  const apply = useApplyChangeSet(changeSet.id);
+  const rollback = useRollbackChangeAction();
+  const toast = useToast();
+  // Re-auth returns to a fresh page, so the confirmation reopens itself rather
+  // than writing to Amazon unprompted — the write still needs a deliberate
+  // click.
+  const [confirmApply, setConfirmApply] = useState(resuming);
+  const [blocked, setBlocked] = useState<BlockedAction | null>(null);
+
+  function runApply() {
+    apply.mutate(undefined, {
+      onSuccess: () => {
+        setConfirmApply(false);
+        toast("Change set submitted to Amazon");
+      },
+      onError: (err) => {
+        setConfirmApply(false);
+        if (isReauthError(err)) {
+          setBlocked({ kind: "apply" });
+          return;
+        }
+        toast(`Apply failed: ${err.message}`, "error");
+      },
+    });
+  }
+
+  function runRollback(actionId: string) {
+    rollback.mutate(actionId, {
+      onSuccess: () => toast("Rollback requested"),
+      onError: (err) => {
+        if (isReauthError(err)) {
+          setBlocked({ kind: "rollback", actionId });
+          return;
+        }
+        toast(`Rollback failed: ${err.message}`, "error");
+      },
+    });
+  }
 
   return (
     <Card>
@@ -181,21 +227,7 @@ function ChangeSetDetail({
                               size="sm"
                               variant="ghost"
                               disabled={rollback.isPending}
-                              onClick={() =>
-                                rollback.mutate(a.id, {
-                                  onSuccess: () => toast("Rollback requested"),
-                                  onError: (err) => {
-                                    if (isReauthError(err)) {
-                                      setReauthOpen(true);
-                                      return;
-                                    }
-                                    toast(
-                                      `Rollback failed: ${err.message}`,
-                                      "error",
-                                    );
-                                  },
-                                })
-                              }
+                              onClick={() => runRollback(a.id)}
                             >
                               Roll back
                             </Button>
@@ -267,35 +299,56 @@ function ChangeSetDetail({
         confirmVariant="danger"
         busy={apply.isPending}
         onClose={() => setConfirmApply(false)}
-        onConfirm={() =>
-          apply.mutate(undefined, {
-            onSuccess: () => {
-              setConfirmApply(false);
-              toast("Change set submitted to Amazon");
-            },
-            onError: (err) => {
-              setConfirmApply(false);
-              if (isReauthError(err)) {
-                setReauthOpen(true);
-                return;
-              }
-              toast(`Apply failed: ${err.message}`, "error");
-            },
-          })
-        }
+        onConfirm={runApply}
       >
         This performs real write operations against your Amazon Ads account
         (profile <span className="font-mono">{changeSet.profileId}</span>). Each
         action is verified after applying, but spend-affecting changes take
         effect immediately.
       </Dialog>
-      <ReauthDialog open={reauthOpen} onClose={() => setReauthOpen(false)} />
+      <ReauthDialog
+        open={blocked !== null}
+        // The magic link reloads the page, so the pending apply rides back in
+        // the URL; a rollback just returns to the list.
+        next={
+          blocked?.kind === "apply"
+            ? `/changes?apply=${encodeURIComponent(changeSet.id)}`
+            : "/changes"
+        }
+        onClose={() => setBlocked(null)}
+        // Signed in without navigating away: the confirmation the user already
+        // gave is still live, so finish the action instead of asking again.
+        onReauthenticated={() => {
+          const pending = blocked;
+          setBlocked(null);
+          if (pending?.kind === "apply") runApply();
+          else if (pending) runRollback(pending.actionId);
+        }}
+      />
     </Card>
   );
 }
 
 export function ChangesPage() {
   const changeSets = useChangeSets();
+  const search = useSearch({ strict: false }) as { apply?: string };
+  const navigate = useNavigate();
+  // The apply the re-auth magic link came back to finish. Captured on mount so
+  // stripping it from the URL — which keeps a later reload from reopening the
+  // confirmation — does not cancel the resume that is already under way.
+  const [resumeApplyId] = useState(search.apply);
+
+  useEffect(() => {
+    if (search.apply === undefined) return;
+    void navigate({
+      to: "/changes",
+      search: (prev: Record<string, unknown>) => ({
+        ...prev,
+        apply: undefined,
+      }),
+      replace: true,
+    });
+  }, [search.apply, navigate]);
 
   return (
     <div className="flex max-w-5xl flex-col gap-4">
@@ -318,6 +371,7 @@ export function ChangesPage() {
             key={cs.id}
             changeSet={cs}
             allChangeSets={changeSets.data}
+            resumeApply={cs.id === resumeApplyId}
           />
         ))
       )}

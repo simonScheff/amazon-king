@@ -133,7 +133,13 @@ creation — require a sign-in from the **last 15 minutes**. If your session is
 older, the API answers `401 REAUTH_REQUIRED` and the UI opens the
 **re-authentication dialog**: one click emails a single-use magic link to
 your address (no typing), carrying the current page as its `next` path.
-Verifying the link lands you back on the same page to retry the action.
+
+The link picks the interrupted action back up. An apply blocked on the change
+center returns as `/changes?apply=<id>`, which reopens that change set with its
+confirmation showing — you only confirm the write again, never hunt for the set.
+The write itself still needs that deliberate click. In the installed app, where
+the link is pasted back instead of followed, nothing navigates away and the
+apply simply finishes once the session is fresh.
 
 ## Rollback
 

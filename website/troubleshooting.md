@@ -147,10 +147,10 @@ enabled for syncing.
 **Cause.** Spend-changing actions require authentication within the last 15
 minutes; your session is older.
 
-**Fix.** Sign in again (the dashboard opens a re-auth dialog that emails a
-magic link returning you to the same page), then retry. Retrying a `failed`
-change set is exempt — it replays an already-approved payload through the
-guarded path.
+**Fix.** Sign in again — the dashboard opens a re-auth dialog that emails a
+magic link, and following it returns to the same page with the blocked action
+ready to confirm again. Retrying a `failed` change set is exempt: it replays an
+already-approved payload through the guarded path.
 
 ### Apply fails with `STALE_BEFORE_STATE` (409)
 

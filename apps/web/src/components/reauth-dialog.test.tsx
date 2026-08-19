@@ -5,6 +5,7 @@ import { ReauthDialog } from "./reauth-dialog";
 
 const mocks = vi.hoisted(() => ({
   login: vi.fn(),
+  redeem: vi.fn(),
   isSuccess: false,
   devLoginUrl: undefined as string | undefined,
 }));
@@ -21,7 +22,7 @@ vi.mock("../api/endpoints", () => ({
       : undefined,
   }),
   useRedeemLoginLink: () => ({
-    mutate: vi.fn(),
+    mutate: mocks.redeem,
     isPending: false,
     error: null,
   }),
@@ -67,6 +68,10 @@ describe("ReauthDialog", () => {
 
   beforeEach(() => {
     mocks.login.mockReset();
+    mocks.redeem.mockReset();
+    mocks.redeem.mockImplementation(
+      (_link: string, opts: { onSuccess: () => void }) => opts.onSuccess(),
+    );
     mocks.isSuccess = false;
     mocks.devLoginUrl = undefined;
     setStandalone(false);
@@ -92,6 +97,44 @@ describe("ReauthDialog", () => {
       email: "owner@example.com",
       next: window.location.pathname + window.location.search,
     });
+  });
+
+  it("sends the caller's return path as next when it carries a pending action", () => {
+    render(
+      <ReauthDialog open={true} onClose={() => {}} next="/changes?apply=52" />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Email me a sign-in link" }),
+    );
+
+    expect(mocks.login).toHaveBeenCalledWith({
+      email: "owner@example.com",
+      next: "/changes?apply=52",
+    });
+  });
+
+  it("resumes the blocked action after a pasted link signs in", () => {
+    mocks.isSuccess = true;
+    setStandalone(true);
+    const onClose = vi.fn();
+    const onReauthenticated = vi.fn();
+    render(
+      <ReauthDialog
+        open={true}
+        onClose={onClose}
+        onReauthenticated={onReauthenticated}
+      />,
+    );
+
+    fireEvent.change(
+      screen.getByLabelText("Paste the sign-in link from your email"),
+      { target: { value: "https://app.test/api/session/verify?token=abc" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Sign in with link" }));
+
+    expect(onClose).toHaveBeenCalled();
+    expect(onReauthenticated).toHaveBeenCalled();
   });
 
   it("shows the dev sign-in link when email delivery is not configured", () => {

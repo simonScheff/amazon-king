@@ -195,6 +195,17 @@ const searchTermDetailRoute = createRoute({
 const changesRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/changes",
+  // `?apply=<change set id>` is the pending apply a re-auth magic link carries
+  // back, so the page reopens that set's confirmation instead of making the
+  // user find it again. Accepts the number JSON parsing produces for a bare
+  // numeric id.
+  validateSearch: (search: Record<string, unknown>): { apply?: string } => {
+    const apply =
+      typeof search.apply === "string" || typeof search.apply === "number"
+        ? String(search.apply).trim()
+        : "";
+    return apply !== "" ? { apply } : {};
+  },
   component: ChangesPage,
 });
 

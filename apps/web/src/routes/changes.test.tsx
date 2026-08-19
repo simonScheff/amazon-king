@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   actions: [] as Record<string, unknown>[],
   toast: vi.fn(),
   applyMutate: vi.fn(),
+  search: {} as { apply?: string },
+  navigate: vi.fn(),
 }));
 
 vi.mock("../api/endpoints", () => ({
@@ -50,6 +52,8 @@ vi.mock("@tanstack/react-router", () => ({
       {props.children}
     </a>
   ),
+  useSearch: () => mocks.search,
+  useNavigate: () => mocks.navigate,
 }));
 
 // jsdom lacks HTMLDialogElement.showModal/close; render minimal stand-ins.
@@ -76,8 +80,18 @@ vi.mock("../components/ui/dialog", () => ({
 }));
 
 vi.mock("../components/reauth-dialog", () => ({
-  ReauthDialog: (props: { open: boolean }) =>
-    props.open ? <div>REAUTH_DIALOG_OPEN</div> : null,
+  ReauthDialog: (props: {
+    open: boolean;
+    next?: string;
+    onReauthenticated?: () => void;
+  }) =>
+    props.open ? (
+      <div>
+        REAUTH_DIALOG_OPEN
+        <span>next: {props.next}</span>
+        <button onClick={props.onReauthenticated}>Signed in in place</button>
+      </div>
+    ) : null,
 }));
 
 function changeSet(overrides: Partial<ChangeSet>): ChangeSet {
@@ -97,8 +111,10 @@ describe("ChangesPage dependency gate", () => {
   beforeEach(() => {
     mocks.changeSets = [];
     mocks.actions = [];
+    mocks.search = {};
     mocks.toast.mockReset();
     mocks.applyMutate.mockReset();
+    mocks.navigate.mockReset();
   });
 
   function expand(changeSetId: string) {
@@ -170,6 +186,80 @@ describe("ChangesPage dependency gate", () => {
 
     expect(screen.getByText("REAUTH_DIALOG_OPEN")).toBeInTheDocument();
     expect(mocks.toast).not.toHaveBeenCalled();
+  });
+
+  it("carries the pending apply back in the re-auth link", () => {
+    mocks.changeSets = [changeSet({ id: "set-1", status: "previewed" })];
+    mocks.applyMutate.mockImplementation(
+      (_arg: unknown, opts: { onError: (err: unknown) => void }) =>
+        opts.onError(
+          new ApiError(401, "recent sign-in required", "REAUTH_REQUIRED"),
+        ),
+    );
+    render(<ChangesPage />);
+    expand("set-1");
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply to Amazon…" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Yes, write to Amazon" }),
+    );
+
+    expect(screen.getByText(/next:/)).toHaveTextContent(
+      "next: /changes?apply=set-1",
+    );
+  });
+
+  it("reopens the confirmation for the set the re-auth link returned to", () => {
+    mocks.search = { apply: "set-2" };
+    mocks.changeSets = [
+      changeSet({ id: "set-1", status: "previewed" }),
+      changeSet({ id: "set-2", status: "previewed" }),
+    ];
+    render(<ChangesPage />);
+
+    // Expanded and confirming without a click, and only for that set.
+    expect(
+      screen.getByRole("dialog", {
+        name: "Apply this change set to Amazon?",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "Yes, write to Amazon" }),
+    ).toHaveLength(1);
+    // Nothing is written until the user confirms.
+    expect(mocks.applyMutate).not.toHaveBeenCalled();
+    // The intent is stripped from the URL so a reload does not ask again.
+    expect(mocks.navigate).toHaveBeenCalled();
+  });
+
+  it("ignores a returned apply intent for a set that is already applied", () => {
+    mocks.search = { apply: "set-1" };
+    mocks.changeSets = [changeSet({ id: "set-1", status: "applied" })];
+    render(<ChangesPage />);
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("finishes the apply when the installed app signs in without navigating", () => {
+    mocks.changeSets = [changeSet({ id: "set-1", status: "previewed" })];
+    mocks.applyMutate.mockImplementation(
+      (_arg: unknown, opts: { onError: (err: unknown) => void }) =>
+        opts.onError(
+          new ApiError(401, "recent sign-in required", "REAUTH_REQUIRED"),
+        ),
+    );
+    render(<ChangesPage />);
+    expand("set-1");
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply to Amazon…" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Yes, write to Amazon" }),
+    );
+    expect(mocks.applyMutate).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Signed in in place" }));
+
+    expect(mocks.applyMutate).toHaveBeenCalledTimes(2);
   });
 
   it("toasts other apply errors without opening the re-auth dialog", () => {

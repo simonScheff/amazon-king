@@ -138,3 +138,12 @@ the shared `ReauthDialog` (`src/components/reauth-dialog.tsx`) rather than a
 generic error toast: one click emails a magic link carrying the current path as
 `next`, and the post-verify redirect lands the user back on the same page. Any
 new guarded mutation needs the same wiring.
+
+The dialog also resumes the action it interrupted, because the 15-minute window
+is usually spent on the review that precedes an apply, so the gate fires on
+almost every real session. `/changes` passes `next="/changes?apply=<id>"` and,
+on arrival, expands that set and reopens its confirmation (the write still needs
+the click — it is a URL param, not an instruction). `ChangesPage` strips the
+param after capturing it so a reload does not ask again. The installed-app paste
+flow never navigates, so `onReauthenticated` re-runs the blocked mutation
+directly instead.
