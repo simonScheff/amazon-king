@@ -19,6 +19,7 @@ import { PerformanceTrendChart } from "../components/performance-trend-chart";
 import { ProfitabilityResult } from "../components/profitability-result";
 import { Badge } from "../components/ui/badge";
 import { Card, CardBody, CardHeader } from "../components/ui/card";
+import { SortableTh } from "../components/ui/sortable-th";
 import { Table, Td, Th } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
 import {
@@ -33,6 +34,7 @@ import {
   getCampaignProfitStatus,
   hasCampaignActivity,
 } from "../lib/campaign-profit";
+import { compareNullable, nextSort, type Sort } from "../lib/sorting";
 import { resolveTimeframe } from "../lib/timeframe";
 
 type Tab =
@@ -54,6 +56,50 @@ interface Row {
   /** Present on search-term rows only. */
   estimatedAdProfit?: string | null;
   economicsMissing?: boolean;
+}
+
+const TEXT_COLUMNS = ["name", "state"] as const;
+
+type SortKey =
+  | "name"
+  | "state"
+  | "impressions"
+  | "clicks"
+  | "cost"
+  | "sales"
+  | "orders"
+  | "units"
+  | "acos"
+  | "profit";
+
+/** Display-only sort keys; money strings are converted to Number for ordering. */
+function sortValue(row: Row, key: SortKey): number | string | null {
+  switch (key) {
+    case "name":
+      return row.name.toLowerCase();
+    case "state":
+      return row.state;
+    case "impressions":
+      return row.totals.impressions;
+    case "clicks":
+      return row.totals.clicks;
+    case "cost":
+      return Number(row.totals.cost);
+    case "sales":
+      return Number(row.totals.sales);
+    case "orders":
+      return row.totals.orders;
+    case "units":
+      return row.totals.units;
+    case "acos":
+      return Number(row.totals.sales) > 0
+        ? Number(row.totals.cost) / Number(row.totals.sales)
+        : null;
+    case "profit":
+      return row.estimatedAdProfit == null
+        ? null
+        : Number(row.estimatedAdProfit);
+  }
 }
 
 function formatAmazonLabel(value: string) {
@@ -120,29 +166,100 @@ function MetricsTable({
   termLink?: { days: MetricWindow; country?: string };
   showProfit?: boolean;
 }) {
+  const [sort, setSort] = useState<Sort<SortKey>>({
+    key: "cost",
+    direction: "desc",
+  });
+
+  function onSort(column: SortKey) {
+    setSort((current) => nextSort(current, column, TEXT_COLUMNS));
+  }
+
   if (rows.length === 0) {
     return <EmptyState>Nothing here yet for this campaign.</EmptyState>;
   }
+
+  const sortedRows = [...rows].sort((a, b) =>
+    compareNullable(
+      sortValue(a, sort.key),
+      sortValue(b, sort.key),
+      sort.direction,
+    ),
+  );
+
   return (
     <Table stickyHeader>
       <thead>
         <tr>
-          <Th>Name</Th>
-          <Th>State</Th>
-          <Th className="text-right">Impressions</Th>
-          <Th className="text-right">Clicks</Th>
-          <Th className="text-right">Spend</Th>
-          <Th className="text-right">Sales</Th>
-          <Th className="text-right" title={ORDERS_COLUMN_TITLE}>
-            Orders
-          </Th>
-          <Th className="text-right">Units</Th>
-          <Th className="text-right">ACoS</Th>
-          {showProfit ? <Th>Profit</Th> : null}
+          <SortableTh label="Name" column="name" sort={sort} onSort={onSort} />
+          <SortableTh
+            label="State"
+            column="state"
+            sort={sort}
+            onSort={onSort}
+          />
+          <SortableTh
+            label="Impressions"
+            column="impressions"
+            sort={sort}
+            onSort={onSort}
+            className="text-right"
+          />
+          <SortableTh
+            label="Clicks"
+            column="clicks"
+            sort={sort}
+            onSort={onSort}
+            className="text-right"
+          />
+          <SortableTh
+            label="Spend"
+            column="cost"
+            sort={sort}
+            onSort={onSort}
+            className="text-right"
+          />
+          <SortableTh
+            label="Sales"
+            column="sales"
+            sort={sort}
+            onSort={onSort}
+            className="text-right"
+          />
+          <SortableTh
+            label="Orders"
+            column="orders"
+            sort={sort}
+            onSort={onSort}
+            className="text-right"
+            title={ORDERS_COLUMN_TITLE}
+          />
+          <SortableTh
+            label="Units"
+            column="units"
+            sort={sort}
+            onSort={onSort}
+            className="text-right"
+          />
+          <SortableTh
+            label="ACoS"
+            column="acos"
+            sort={sort}
+            onSort={onSort}
+            className="text-right"
+          />
+          {showProfit ? (
+            <SortableTh
+              label="Profit"
+              column="profit"
+              sort={sort}
+              onSort={onSort}
+            />
+          ) : null}
         </tr>
       </thead>
       <tbody>
-        {rows.map((r) => {
+        {sortedRows.map((r) => {
           const acos =
             Number(r.totals.sales) > 0
               ? Number(r.totals.cost) / Number(r.totals.sales)
@@ -345,6 +462,7 @@ export function CampaignDetailPage() {
               <NegativeKeywordsTable rows={campaign.data.negativeKeywords} />
             ) : (
               <MetricsTable
+                key={tab}
                 rows={campaign.data[tab]}
                 currency={currency}
                 termLink={tab === "searchTerms" ? { days, country } : undefined}

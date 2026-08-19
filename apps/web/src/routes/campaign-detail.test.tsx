@@ -317,6 +317,87 @@ describe("CampaignDetailPage profitability", () => {
     expect(missingRow).toHaveTextContent("Missing economics");
   });
 
+  it("sorts search-term rows when a column header is clicked", () => {
+    mocks.useCampaign.mockReturnValue({
+      isPending: false,
+      error: null,
+      data: {
+        ...detail,
+        searchTerms: [
+          {
+            id: "beta",
+            name: "beta",
+            state: "n/a",
+            totals: {
+              impressions: 10,
+              clicks: 2,
+              cost: "5.0000",
+              sales: "4.0000",
+              orders: 1,
+              units: 1,
+            },
+            estimatedRoyalty: "3.0000",
+            estimatedAdProfit: "1.0000",
+            economicsMissing: false,
+          },
+          {
+            id: "alpha",
+            name: "alpha",
+            state: "n/a",
+            totals: {
+              impressions: 4,
+              clicks: 1,
+              cost: "2.0000",
+              sales: "8.0000",
+              orders: 1,
+              units: 1,
+            },
+            estimatedRoyalty: "5.0000",
+            estimatedAdProfit: "3.0000",
+            economicsMissing: false,
+          },
+          {
+            id: "gamma",
+            name: "gamma",
+            state: "n/a",
+            totals: {
+              impressions: 20,
+              clicks: 4,
+              cost: "8.0000",
+              sales: "0.0000",
+              orders: 0,
+              units: 0,
+            },
+            estimatedRoyalty: null,
+            estimatedAdProfit: null,
+            economicsMissing: true,
+          },
+        ],
+      },
+    });
+    const rowNames = () =>
+      screen
+        .getAllByRole("row")
+        .slice(1)
+        .map((row) => row.querySelector("td a")?.textContent ?? "");
+
+    render(<CampaignDetailPage />);
+    fireEvent.click(screen.getByRole("tab", { name: "Search terms" }));
+
+    // Default: spend desc → gamma (8), beta (5), alpha (2).
+    expect(rowNames()).toEqual(["gamma", "beta", "alpha"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Name" }));
+    expect(rowNames()).toEqual(["alpha", "beta", "gamma"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Name" }));
+    expect(rowNames()).toEqual(["gamma", "beta", "alpha"]);
+
+    // Profit desc: unavailable profit (gamma) sorts last.
+    fireEvent.click(screen.getByRole("button", { name: "Profit" }));
+    expect(rowNames()).toEqual(["alpha", "beta", "gamma"]);
+  });
+
   it("does not show a profit column on the other metric tabs", () => {
     render(<CampaignDetailPage />);
 
