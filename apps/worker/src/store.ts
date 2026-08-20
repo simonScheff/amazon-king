@@ -136,12 +136,21 @@ export interface NegativeKeywordRow {
   state: string;
 }
 
+/** Synced Amazon negative ASIN target; `adGroupId` null = campaign level. */
+export interface NegativeTargetRow {
+  campaignId: string;
+  adGroupId: string | null;
+  asin: string;
+  state: string;
+}
+
 export interface StructureData {
   campaigns: CampaignRow[];
   adGroups: AdGroupRow[];
   ads: AdRow[];
   targets: TargetRow[];
   negativeKeywords: NegativeKeywordRow[];
+  negativeTargets: NegativeTargetRow[];
 }
 
 /** One daily metric row in micros, keyed by Amazon entity id (as stored in the fact tables). */
@@ -312,7 +321,7 @@ export interface WorkerStore {
   ): Promise<boolean>;
   /** True when the owner rejected this finding and the suppression still holds. */
   recommendationDismissed(identity: RecommendationIdentity): Promise<boolean>;
-  /** Expire pending findings that the current run no longer considers valid. */
+  /** Expire pending/approved findings that the current run no longer considers valid. */
   expirePendingRecommendations(
     identity: RecommendationIdentity,
   ): Promise<number>;
@@ -337,6 +346,18 @@ function toReportJobRecord(row: reportsRepo.ReportJob): ReportJobRecord {
     storageKey: row.storageKey,
     error: row.error,
   };
+}
+
+function asinSameAsFromExpression(
+  expression: { type: string; value?: string }[] | undefined,
+): string | null {
+  if (!expression) return null;
+  for (const entry of expression) {
+    if (entry.type === "ASIN_SAME_AS" && entry.value?.trim()) {
+      return entry.value.trim().toUpperCase();
+    }
+  }
+  return null;
 }
 
 export function createDbStore(pool: Pool): WorkerStore {
@@ -684,6 +705,32 @@ export function createDbStore(pool: Pool): WorkerStore {
           profile.id,
           persistedNegativeIds,
         );
+        const persistedNegativeTargetIds: string[] = [];
+        for (const negative of snapshot.negativeTargets ?? []) {
+          const asin = asinSameAsFromExpression(negative.expression);
+          if (!asin) continue;
+          const campaignId = campaignIds.get(negative.campaignId);
+          const adGroupId = negative.adGroupId
+            ? adGroupIds.get(negative.adGroupId)
+            : null;
+          if (!campaignId || (negative.adGroupId && !adGroupId)) continue;
+          await structureRepo.upsertNegativeTarget(client, {
+            profileId: profile.id,
+            campaignId,
+            adGroupId,
+            amazonNegativeTargetId: negative.negativeTargetId,
+            expressionAsin: asin,
+            state: negative.state,
+            rawJson: negative.raw,
+            sourceUpdatedAt: snapshot.retrievedAt,
+          });
+          persistedNegativeTargetIds.push(negative.negativeTargetId);
+        }
+        await structureRepo.deleteMissingNegativeTargets(
+          client,
+          profile.id,
+          persistedNegativeTargetIds,
+        );
       });
     },
 
@@ -713,8 +760,14 @@ export function createDbStore(pool: Pool): WorkerStore {
     },
 
     async loadStructure(profilePk) {
-      const [campaigns, adGroups, ads, targets, negativeKeywords] =
-        await Promise.all([
+      const [
+        campaigns,
+        adGroups,
+        ads,
+        targets,
+        negativeKeywords,
+        negativeTargets,
+      ] = await Promise.all([
           db.query<{
             id: string;
             amazon_campaign_id: string;
@@ -776,6 +829,16 @@ export function createDbStore(pool: Pool): WorkerStore {
            from negative_keywords where profile_id = $1`,
             [profilePk],
           ),
+          db.query<{
+            campaign_id: string;
+            ad_group_id: string | null;
+            expression_asin: string;
+            state: string;
+          }>(
+            `select campaign_id::text, ad_group_id::text, expression_asin, state
+           from negative_targets where profile_id = $1`,
+            [profilePk],
+          ),
         ]);
       return {
         campaigns: campaigns.rows.map((row) => ({
@@ -816,6 +879,12 @@ export function createDbStore(pool: Pool): WorkerStore {
           adGroupId: row.ad_group_id,
           keywordText: row.keyword_text,
           matchType: row.match_type,
+          state: row.state,
+        })),
+        negativeTargets: negativeTargets.rows.map((row) => ({
+          campaignId: row.campaign_id,
+          adGroupId: row.ad_group_id,
+          asin: row.expression_asin,
           state: row.state,
         })),
       };
@@ -982,7 +1051,7 @@ export function createDbStore(pool: Pool): WorkerStore {
     async expirePendingRecommendations(identity) {
       const result = await db.query<{ id: string }>(
         `update recommendations set state = 'expired'
-         where state = 'pending' and profile_id = $1 and type = $2
+         where state in ('pending', 'approved') and profile_id = $1 and type = $2
            and campaign_id is not distinct from $3
            and ad_group_id is not distinct from $4
            and target_id is not distinct from $5

@@ -77,6 +77,7 @@ export class FakeStore implements WorkerStore {
     ads: [],
     targets: [],
     negativeKeywords: [],
+    negativeTargets: [],
   };
   facts = {
     campaign: [] as DailyFact[],

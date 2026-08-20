@@ -47,8 +47,9 @@ cadence table.
 
 `apps/worker/src/jobs/structure-sync.ts` pulls the profile's Sponsored
 Products snapshot through the gateway (`syncCampaignStructure`: campaigns, ad
-groups, ads, keywords, product targets, negative keywords) and applies it in
-**one transaction** (`applyStructureSnapshot` in `apps/worker/src/store.ts`):
+groups, ads, keywords, product targets, negative keywords, and negative
+product targets) and applies it in **one transaction**
+(`applyStructureSnapshot` in `apps/worker/src/store.ts`):
 
 1. Campaigns, ad groups, and ads are upserted by their Amazon ids, which are
    unique per profile.
@@ -56,8 +57,10 @@ groups, ads, keywords, product targets, negative keywords) and applies it in
    `target_kind` (`keyword` | `product`); keywords store
    `{type: "keyword", value: keywordText}` in the `expression` jsonb column,
    product targets store the raw targeting expression.
-3. Negative keywords are upserted at campaign and ad-group level, then
-   `deleteMissingNegativeKeywords` removes rows Amazon no longer returns.
+3. Negative keywords and negative product targets (`ASIN_SAME_AS`) are
+   upserted at campaign and ad-group level, then
+   `deleteMissingNegativeKeywords` / `deleteMissingNegativeTargets` remove
+   rows Amazon no longer returns.
 4. Every upsert diffs name/bid/budget/state and records changes into
    `entity_change_history` (`packages/database/src/repositories/structure.ts`),
    so the dashboard can show what changed on Amazon between syncs.
@@ -202,7 +205,9 @@ reviewable recommendations:
    facts for the trailing 60 days (the longest evidence window), the latest
    effective book economics per marketplace ASIN, and applied change actions
    from the last 7 days (`cooldownDays`) so recently-touched entities stay
-   quiet.
+   quiet. After evaluation, pending findings a synced negative has already
+   resolved (`cannibalization_conflict`, `wasteful_search_term`,
+   `high_ctr_poor_conversion`) are expired immediately.
 3. **Evaluate all nine rules** — wasteful search term, expensive target,
    profitable target, search-term harvest, budget-constrained winner,
    high-CTR-poor-conversion, low impressions, placement opportunity,

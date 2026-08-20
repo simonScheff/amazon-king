@@ -13,10 +13,10 @@ export interface CannibalizingCampaign {
   orders: number;
   costMicros: number;
   /**
-   * The campaign can no longer serve this term because a negative keyword
-   * already blocks it (see negatives.ts). Historical spend stays in the
-   * evidence window long after the negative is applied, so the campaign is
-   * excluded from the conflict rather than removed from the input.
+   * The campaign can no longer serve this term because a negative keyword or
+   * negative ASIN target already blocks it (see negatives.ts). Historical spend
+   * stays in the evidence window long after the negative is applied, so the
+   * campaign is excluded from the conflict rather than removed from the input.
    */
   blockedByNegative?: boolean;
 }
@@ -31,9 +31,9 @@ export interface CannibalizationConflictInput {
  * cannibalization_conflict@2 — the same shopper term is targeted across
  * >= 2 overlapping campaigns that can all still serve it → suggest
  * consolidation or intent separation (docs/plan.md §9). Campaigns already
- * blocked by a negative keyword do not count toward the conflict, so a
- * resolved term stops being recommended. Always requires human review; no
- * automatic change is proposed.
+ * blocked by a negative keyword or negative ASIN target do not count toward
+ * the conflict, so a resolved term stops being recommended. Always requires
+ * human review; no automatic change is proposed.
  */
 export function evaluateCannibalizationConflict(
   input: CannibalizationConflictInput,

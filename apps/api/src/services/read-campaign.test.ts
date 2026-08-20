@@ -26,6 +26,7 @@ vi.mock("@amazon-king/database", () => ({
     listTargetRows: vi.fn(),
     listSearchTermRows: vi.fn(),
     listNegativeKeywordRows: vi.fn(),
+    listNegativeTargetRows: vi.fn(),
     campaignDailySeries: vi.fn(),
   },
 }));
@@ -145,6 +146,17 @@ describe("campaign profitability", () => {
         state: "ENABLED",
       },
     ]);
+    vi.mocked(dashboard.listNegativeTargetRows).mockResolvedValue([
+      {
+        id: "negative-target-1",
+        asin: "B0CRHVCT1T",
+        targetType: "ASIN_SAME_AS",
+        level: "campaign",
+        adGroupId: null,
+        adGroupName: null,
+        state: "ENABLED",
+      },
+    ]);
     vi.mocked(dashboard.campaignDailySeries).mockResolvedValue([
       {
         date: "2026-08-12",
@@ -213,6 +225,14 @@ describe("campaign profitability", () => {
           keywordText: "free books",
           level: "ad_group",
           adGroupName: "Exact ad group",
+        },
+      ],
+      negativeTargets: [
+        {
+          id: "negative-target-1",
+          asin: "B0CRHVCT1T",
+          targetType: "ASIN_SAME_AS",
+          level: "campaign",
         },
       ],
       searchTerms: [
@@ -349,6 +369,11 @@ describe("campaign profitability", () => {
       [7n],
     );
     expect(dashboard.listNegativeKeywordRows).toHaveBeenCalledWith(
+      expect.anything(),
+      "campaign-pk",
+      [7n],
+    );
+    expect(dashboard.listNegativeTargetRows).toHaveBeenCalledWith(
       expect.anything(),
       "campaign-pk",
       [7n],

@@ -67,6 +67,9 @@ function Row({ rec }: { rec: Recommendation }) {
           data as of {formatDateTime(rec.dataFreshness)}
         </span>
       </Td>
+      <Td className="whitespace-nowrap text-xs text-zinc-400">
+        <time dateTime={rec.createdAt}>{formatDateTime(rec.createdAt)}</time>
+      </Td>
       <Td>{Math.round(rec.confidence * 100)}%</Td>
       <Td>
         {rec.state === "pending" && (
@@ -172,6 +175,7 @@ export function RecommendationsPage() {
                 <Th>Finding</Th>
                 <Th>State</Th>
                 <Th>Evidence</Th>
+                <Th>Created</Th>
                 <Th>Confidence</Th>
                 <Th>
                   <span className="sr-only">Actions</span>

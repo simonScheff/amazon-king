@@ -58,6 +58,7 @@ const STRUCTURE: StructureData = {
     },
   ],
   negativeKeywords: [],
+  negativeTargets: [],
 };
 
 function fact(overrides: Partial<DailyFact>): DailyFact {
@@ -272,6 +273,40 @@ describe("recommendation_run", () => {
     ).toHaveLength(0);
   });
 
+  it("stops flagging an ASIN a campaign negative target already blocks", async () => {
+    const store = cannibalizationStore();
+    store.facts.searchTerm = [
+      fact({ subKey: "b0crhvct1t", orders: 2, clicks: 4 }),
+      fact({
+        entityKey: "t2",
+        campaignAmazonId: "c2",
+        subKey: "b0crhvct1t",
+        orders: 0,
+        clicks: 6,
+      }),
+    ];
+    store.structure = {
+      ...store.structure,
+      negativeTargets: [
+        {
+          campaignId: "11",
+          adGroupId: null,
+          asin: "B0CRHVCT1T",
+          state: "ENABLED",
+        },
+      ],
+    };
+    await runHandler(
+      createRecommendationRunHandler(makeDeps({ store, now: () => NOW })),
+      PAYLOAD,
+    );
+    expect(
+      store.recommendations.filter(
+        (rec) => rec.type === "cannibalization_conflict",
+      ),
+    ).toHaveLength(0);
+  });
+
   it("expires a pending conflict once a negative resolves it", async () => {
     const store = cannibalizationStore();
     store.recommendations.push({
@@ -314,6 +349,247 @@ describe("recommendation_run", () => {
         (rec) => rec.type === "cannibalization_conflict",
       ),
     ).toBe(false);
+  });
+
+  it("expires a pending ASIN conflict once a negative target resolves it", async () => {
+    const store = cannibalizationStore();
+    store.facts.searchTerm = [
+      fact({ subKey: "b0crhvct1t", orders: 2, clicks: 4 }),
+      fact({
+        entityKey: "t2",
+        campaignAmazonId: "c2",
+        subKey: "b0crhvct1t",
+        orders: 0,
+        clicks: 6,
+      }),
+    ];
+    store.recommendations.push({
+      profileId: PROFILE.id,
+      type: "cannibalization_conflict",
+      campaignId: null,
+      adGroupId: null,
+      targetId: null,
+      searchTerm: "b0crhvct1t",
+      priority: 1,
+      evidenceWindowStart: "2026-06-07",
+      evidenceWindowEnd: "2026-08-05",
+      currentValue: null,
+      proposedValue: null,
+      rationale: "raised by an earlier run",
+      confidence: "0.500",
+      ruleVersion: "cannibalization_conflict@2",
+      dataFreshnessAt: "2026-08-06T06:00:00.000Z",
+      expiresAt: "2026-08-09T06:00:00.000Z",
+      evidenceInputs: {},
+    });
+    store.structure = {
+      ...store.structure,
+      negativeTargets: [
+        {
+          campaignId: "11",
+          adGroupId: null,
+          asin: "B0CRHVCT1T",
+          state: "ENABLED",
+        },
+      ],
+    };
+    await runHandler(
+      createRecommendationRunHandler(makeDeps({ store, now: () => NOW })),
+      PAYLOAD,
+    );
+    expect(
+      store.recommendations.some(
+        (rec) => rec.type === "cannibalization_conflict",
+      ),
+    ).toBe(false);
+  });
+
+  it("does not flag a wasteful term a campaign negative already blocks", async () => {
+    const store = storeWithData();
+    store.structure = {
+      ...store.structure,
+      negativeKeywords: [
+        {
+          campaignId: "10",
+          adGroupId: null,
+          keywordText: "junk term",
+          matchType: "NEGATIVE_EXACT",
+          state: "ENABLED",
+        },
+      ],
+    };
+    await runHandler(
+      createRecommendationRunHandler(makeDeps({ store, now: () => NOW })),
+      PAYLOAD,
+    );
+    expect(
+      store.recommendations.filter(
+        (rec) => rec.type === "wasteful_search_term",
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("expires a pending wasteful term once a negative blocks it", async () => {
+    const store = storeWithData();
+    store.recommendations.push({
+      profileId: PROFILE.id,
+      type: "wasteful_search_term",
+      campaignId: "10",
+      adGroupId: null,
+      targetId: null,
+      searchTerm: "junk term",
+      priority: 1,
+      evidenceWindowStart: "2026-06-07",
+      evidenceWindowEnd: "2026-08-05",
+      currentValue: null,
+      proposedValue: null,
+      rationale: "raised by an earlier run",
+      confidence: "0.500",
+      ruleVersion: "wasteful_search_term@2",
+      dataFreshnessAt: "2026-08-06T06:00:00.000Z",
+      expiresAt: "2026-08-09T06:00:00.000Z",
+      evidenceInputs: {},
+    });
+    store.structure = {
+      ...store.structure,
+      negativeKeywords: [
+        {
+          campaignId: "10",
+          adGroupId: null,
+          keywordText: "junk term",
+          matchType: "NEGATIVE_EXACT",
+          state: "ENABLED",
+        },
+      ],
+    };
+    await runHandler(
+      createRecommendationRunHandler(makeDeps({ store, now: () => NOW })),
+      PAYLOAD,
+    );
+    expect(
+      store.recommendations.some((rec) => rec.type === "wasteful_search_term"),
+    ).toBe(false);
+  });
+
+  it("drops a conversion finding once blocked terms account for the wasted clicks", async () => {
+    const store = storeWithData();
+    store.facts.target = [];
+    store.facts.searchTerm = [
+      fact({
+        subKey: "tractor book for baby",
+        impressions: 2_000,
+        clicks: 10,
+        orders: 0,
+        costMicros: 5_000_000,
+        salesMicros: 0,
+      }),
+    ];
+    store.facts.campaign = [
+      fact({
+        entityKey: "c1",
+        subKey: null,
+        impressions: 2_000,
+        clicks: 10,
+        orders: 0,
+        costMicros: 5_000_000,
+        salesMicros: 0,
+      }),
+    ];
+    store.recommendations.push({
+      profileId: PROFILE.id,
+      type: "high_ctr_poor_conversion",
+      campaignId: "10",
+      adGroupId: null,
+      targetId: null,
+      searchTerm: null,
+      priority: 1,
+      evidenceWindowStart: "2026-06-07",
+      evidenceWindowEnd: "2026-08-05",
+      currentValue: null,
+      proposedValue: null,
+      rationale: "raised by an earlier run",
+      confidence: "0.600",
+      ruleVersion: "high_ctr_poor_conversion@1",
+      dataFreshnessAt: "2026-08-06T06:00:00.000Z",
+      expiresAt: "2026-08-09T06:00:00.000Z",
+      evidenceInputs: {},
+    });
+    store.structure = {
+      ...store.structure,
+      negativeKeywords: [
+        {
+          campaignId: "10",
+          adGroupId: null,
+          keywordText: "tractor book for baby",
+          matchType: "NEGATIVE_EXACT",
+          state: "ENABLED",
+        },
+      ],
+    };
+    await runHandler(
+      createRecommendationRunHandler(makeDeps({ store, now: () => NOW })),
+      PAYLOAD,
+    );
+    expect(
+      store.recommendations.some(
+        (rec) => rec.type === "high_ctr_poor_conversion",
+      ),
+    ).toBe(false);
+  });
+
+  it("still flags poor conversion when unblocked traffic would trigger the rule", async () => {
+    const store = storeWithData();
+    store.facts.target = [];
+    store.facts.searchTerm = [
+      fact({
+        subKey: "tractor book for baby",
+        impressions: 500,
+        clicks: 5,
+        orders: 0,
+        costMicros: 2_000_000,
+        salesMicros: 0,
+      }),
+      fact({
+        subKey: "tractor sticker book",
+        impressions: 1_500,
+        clicks: 10,
+        orders: 0,
+        costMicros: 4_000_000,
+        salesMicros: 0,
+      }),
+    ];
+    store.facts.campaign = [
+      fact({
+        entityKey: "c1",
+        subKey: null,
+        impressions: 2_000,
+        clicks: 15,
+        orders: 0,
+        costMicros: 6_000_000,
+        salesMicros: 0,
+      }),
+    ];
+    store.structure = {
+      ...store.structure,
+      negativeKeywords: [
+        {
+          campaignId: "10",
+          adGroupId: null,
+          keywordText: "tractor book for baby",
+          matchType: "NEGATIVE_EXACT",
+          state: "ENABLED",
+        },
+      ],
+    };
+    await runHandler(
+      createRecommendationRunHandler(makeDeps({ store, now: () => NOW })),
+      PAYLOAD,
+    );
+    expect(
+      store.recommendations.some(
+        (rec) => rec.type === "high_ctr_poor_conversion",
+      ),
+    ).toBe(true);
   });
 
   it("does not re-raise a finding the owner dismissed", async () => {

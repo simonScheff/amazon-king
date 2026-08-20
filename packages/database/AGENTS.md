@@ -40,3 +40,9 @@ To add a migration, use the `add-migration` skill.
   `campaign_creation` with the four `create_*` actions, and `campaign_update`
   with `update_campaign_state` / `update_campaign_name`. A new action type needs
   a migration, not just TypeScript.
+- `negative_targets` mirrors `negative_keywords` for `ASIN_SAME_AS` exclusions.
+  Structure sync is the source of truth; the optimizer folds them into
+  cannibalization suppression so an ASIN conflict already resolved on Amazon is
+  not re-raised from historical search-term spend. Campaign detail reads them
+  through `dashboard.listNegativeTargetRows` (same book-filter `EXISTS` as
+  `listNegativeKeywordRows`).

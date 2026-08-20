@@ -165,6 +165,17 @@ const detail: CampaignDetail = {
       state: "PAUSED",
     },
   ],
+  negativeTargets: [
+    {
+      id: "negative-product-campaign",
+      asin: "B0CRHVCT1T",
+      targetType: "ASIN_SAME_AS",
+      level: "campaign",
+      adGroupId: null,
+      adGroupName: null,
+      state: "ENABLED",
+    },
+  ],
 };
 
 describe("CampaignDetailPage profitability", () => {
@@ -294,6 +305,39 @@ describe("CampaignDetailPage profitability", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("cell", { name: "Ad group · Exact ad group" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows every synced negative product target", () => {
+    render(<CampaignDetailPage />);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Negative products" }));
+
+    expect(
+      screen.getByRole("cell", { name: /B0CRHVCT1T/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("cell", { name: "ASIN same as" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /View on Amazon/ }),
+    ).toHaveAttribute("href", "https://www.amazon.com/dp/B0CRHVCT1T");
+  });
+
+  it("shows an empty state when no negative products are synced", () => {
+    mocks.useCampaign.mockReturnValue({
+      isPending: false,
+      error: null,
+      data: { ...detail, negativeTargets: [] },
+    });
+    render(<CampaignDetailPage />);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Negative products" }));
+
+    expect(
+      screen.getByText(
+        "No negative product targets are synced for this campaign.",
+      ),
     ).toBeInTheDocument();
   });
 

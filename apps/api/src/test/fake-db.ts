@@ -34,6 +34,8 @@ export interface FakeTables {
   books: FakeRow[];
   bookProfileLinks: FakeRow[];
   searchTermMetricsDaily: FakeRow[];
+  negativeKeywords: FakeRow[];
+  negativeTargets: FakeRow[];
 }
 
 function emptyTables(): FakeTables {
@@ -62,6 +64,8 @@ function emptyTables(): FakeTables {
     books: [],
     bookProfileLinks: [],
     searchTermMetricsDaily: [],
+    negativeKeywords: [],
+    negativeTargets: [],
   };
 }
 
@@ -309,6 +313,37 @@ export class FakeDb {
       ...overrides,
     };
     this.tables.searchTermMetricsDaily.push(row);
+    return row;
+  }
+
+  seedNegativeKeyword(overrides: Partial<FakeRow> = {}): FakeRow {
+    const row = {
+      id: nextId(),
+      profile_id: "1",
+      campaign_id: "10",
+      ad_group_id: null,
+      amazon_negative_keyword_id: `negative-${nextId()}`,
+      keyword_text: "blocked term",
+      match_type: "NEGATIVE_EXACT",
+      state: "enabled",
+      ...overrides,
+    };
+    this.tables.negativeKeywords.push(row);
+    return row;
+  }
+
+  seedNegativeTarget(overrides: Partial<FakeRow> = {}): FakeRow {
+    const row = {
+      id: nextId(),
+      profile_id: "1",
+      campaign_id: "10",
+      ad_group_id: null,
+      amazon_negative_target_id: `negative-target-${nextId()}`,
+      expression_asin: "B0BLOCKED1",
+      state: "enabled",
+      ...overrides,
+    };
+    this.tables.negativeTargets.push(row);
     return row;
   }
 
@@ -1191,6 +1226,44 @@ export class FakeDb {
                 units: String(row.units),
               })),
           );
+        },
+      },
+
+      {
+        match: "from negative_keywords n",
+        handle: (p) => {
+          const rows = t.negativeKeywords
+            .filter((n) => n.campaign_id === p[0])
+            .map((n) => {
+              const adGroup = t.adGroups.find((g) => g.id === n.ad_group_id);
+              return {
+                amazon_negative_keyword_id: n.amazon_negative_keyword_id,
+                keyword_text: n.keyword_text,
+                match_type: n.match_type,
+                amazon_ad_group_id: adGroup?.amazon_ad_group_id ?? null,
+                ad_group_name: adGroup?.name ?? null,
+                state: n.state,
+              };
+            });
+          return this.ok(rows);
+        },
+      },
+      {
+        match: "from negative_targets n",
+        handle: (p) => {
+          const rows = t.negativeTargets
+            .filter((n) => n.campaign_id === p[0])
+            .map((n) => {
+              const adGroup = t.adGroups.find((g) => g.id === n.ad_group_id);
+              return {
+                amazon_negative_target_id: n.amazon_negative_target_id,
+                expression_asin: n.expression_asin,
+                amazon_ad_group_id: adGroup?.amazon_ad_group_id ?? null,
+                ad_group_name: adGroup?.name ?? null,
+                state: n.state,
+              };
+            });
+          return this.ok(rows);
         },
       },
 

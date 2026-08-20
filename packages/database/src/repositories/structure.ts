@@ -356,6 +356,64 @@ export async function deleteMissingNegativeKeywords(
   return result.rowCount ?? 0;
 }
 
+export interface NegativeTargetUpsertInput {
+  profileId: string;
+  campaignId: string; // internal campaigns.id
+  adGroupId?: string | null; // internal ad_groups.id; null is campaign-level
+  amazonNegativeTargetId: string;
+  expressionAsin: string;
+  state: string;
+  rawJson?: unknown;
+  sourceUpdatedAt?: string | null;
+}
+
+/** Idempotently persist one campaign- or ad-group-level negative ASIN target. */
+export async function upsertNegativeTarget(
+  db: Db,
+  input: NegativeTargetUpsertInput,
+): Promise<{ id: string; created: boolean }> {
+  const result = await db.query<{ id: string; created: boolean }>(
+    `insert into negative_targets
+       (profile_id, campaign_id, ad_group_id, amazon_negative_target_id,
+        expression_asin, state, raw_json, source_updated_at)
+     values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
+     on conflict (profile_id, amazon_negative_target_id) do update set
+       campaign_id = excluded.campaign_id,
+       ad_group_id = excluded.ad_group_id,
+       expression_asin = excluded.expression_asin,
+       state = excluded.state,
+       raw_json = excluded.raw_json,
+       source_updated_at = excluded.source_updated_at
+     returning id, (xmax = 0) as created`,
+    [
+      input.profileId,
+      input.campaignId,
+      input.adGroupId ?? null,
+      input.amazonNegativeTargetId,
+      input.expressionAsin,
+      input.state,
+      input.rawJson == null ? "{}" : JSON.stringify(input.rawJson),
+      input.sourceUpdatedAt ?? null,
+    ],
+  );
+  return result.rows[0]!;
+}
+
+/** Remove negative targets that were absent from a complete profile snapshot. */
+export async function deleteMissingNegativeTargets(
+  db: Db,
+  profileId: string,
+  amazonNegativeTargetIds: string[],
+): Promise<number> {
+  const result = await db.query(
+    `delete from negative_targets
+     where profile_id = $1
+       and not (amazon_negative_target_id = any($2::text[]))`,
+    [profileId, amazonNegativeTargetIds],
+  );
+  return result.rowCount ?? 0;
+}
+
 export interface EntityChange {
   id: string;
   entityType: string;

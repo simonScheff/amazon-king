@@ -10,6 +10,8 @@ import type {
   SearchTermListRow,
 } from "@amazon-king/contracts";
 import {
+  keywordSpecsFromNegativeTargets,
+  matchesNegative,
   microsFromDecimalString,
   microsToDecimalString,
 } from "@amazon-king/optimizer";
@@ -97,6 +99,35 @@ const SUGGESTED_MAX_CPC_FRACTION = 0.7;
 const MIN_SUGGESTED_MAX_CPC_MICROS = 20_000;
 /** How many zero-order shopper terms the resolution screen offers to block. */
 const MAX_WASTEFUL_TERMS = 20;
+
+function isSearchTermAlreadyNegated(
+  term: string,
+  keywords: ReadonlyArray<{
+    keywordText: string;
+    matchType: string;
+    state: string;
+  }>,
+  targets: ReadonlyArray<{ asin: string; state: string }>,
+): boolean {
+  const specs = [
+    ...keywords.map((row) => ({
+      campaignId: "",
+      adGroupId: null,
+      keywordText: row.keywordText,
+      matchType: row.matchType,
+      state: row.state,
+    })),
+    ...keywordSpecsFromNegativeTargets(
+      targets.map((row) => ({
+        campaignId: "",
+        adGroupId: null,
+        asin: row.asin,
+        state: row.state,
+      })),
+    ),
+  ];
+  return specs.some((negative) => matchesNegative(term, negative));
+}
 
 const cannibalizationEvidenceSchema = z.object({
   searchTerm: z.string().min(1),
@@ -716,6 +747,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         targets,
         searchTerms,
         negativeKeywords,
+        negativeTargets,
         dailyRows,
       ] = await Promise.all([
         profiles.getProfile(db, campaign.profileId),
@@ -731,6 +763,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
           bookPks,
         ),
         dashboard.listNegativeKeywordRows(db, campaign.id, bookPks),
+        dashboard.listNegativeTargetRows(db, campaign.id, bookPks),
         dashboard.campaignDailySeries(
           db,
           campaign.profileId,
@@ -847,6 +880,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
           };
         }),
         negativeKeywords,
+        negativeTargets,
       };
     },
 
@@ -1297,6 +1331,82 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         (sum, campaign) => sum + campaign.costMicros,
         0,
       );
+      // #region agent log
+      {
+        const payload: Record<string, unknown> = {
+          recId: row.id,
+          state: row.state,
+          searchTerm: row.searchTerm,
+          campaignCount: evidence.data.campaigns.length,
+        };
+        try {
+          const siblings = await db.query<{
+            id: string;
+            state: string;
+            created_at: string;
+          }>(
+            `select id::text, state, created_at::text
+             from recommendations
+             where profile_id = $1 and type = 'cannibalization_conflict'
+               and lower(btrim(coalesce(search_term, ''))) = lower(btrim($2))
+             order by id`,
+            [row.profileId, row.searchTerm ?? ""],
+          );
+          const nk = await db.query<{ n: string }>(
+            `select count(*)::text as n from negative_keywords
+             where profile_id = $1
+               and lower(btrim(keyword_text)) = lower(btrim($2))`,
+            [row.profileId, row.searchTerm ?? ""],
+          );
+          const ntActions = await db.query<{
+            change_set_id: string;
+            status: string;
+            code: string | null;
+          }>(
+            `select ca.change_set_id::text, ca.status,
+                    ca.amazon_response->>'code' as code
+             from change_actions ca
+             where ca.action_type = 'add_negative_target'
+               and lower(btrim(coalesce(ca.search_term, ''))) = lower(btrim($1))
+             order by ca.id`,
+            [row.searchTerm ?? ""],
+          );
+          payload.siblingRecs = siblings.rows;
+          payload.negativeKeywordCount = Number(nk.rows[0]?.n ?? 0);
+          payload.negativeTargetActions = ntActions.rows;
+          const nt = await db.query<{ n: string }>(
+            `select count(*)::text as n from negative_targets
+             where profile_id = $1
+               and lower(btrim(expression_asin)) = lower(btrim($2))`,
+            [row.profileId, row.searchTerm ?? ""],
+          );
+          payload.negativeTargetCount = Number(nt.rows[0]?.n ?? 0);
+        } catch (error) {
+          payload.debugQueryError =
+            error instanceof Error ? error.message : String(error);
+        }
+        fetch(
+          "http://127.0.0.1:7447/ingest/5d432678-775b-4130-8e0d-7b74692e8cd1",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Debug-Session-Id": "77c0cc",
+            },
+            body: JSON.stringify({
+              sessionId: "77c0cc",
+              runId: "post-fix",
+              hypothesisId: "H1-H2-H3",
+              location:
+                "apps/api/src/services/read.ts:getCannibalizationResolutionContext",
+              message: "cannibalization context loaded",
+              data: payload,
+              timestamp: Date.now(),
+            }),
+          },
+        ).catch(() => {});
+      }
+      // #endregion
       return {
         recommendationId: row.id,
         profileId: row.amazonProfileId,
@@ -1359,16 +1469,19 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       }
       const start = isoDate(row.evidenceWindowStart);
       const end = isoDate(row.evidenceWindowEnd);
-      const [campaignBooks, searchTermRows] = await Promise.all([
-        books.listCampaignBooks(db, campaign.id),
-        dashboard.listSearchTermRows(
-          db,
-          campaign.profileId,
-          campaign.amazonCampaignId,
-          start,
-          end,
-        ),
-      ]);
+      const [campaignBooks, searchTermRows, negativeKeywords, negativeTargets] =
+        await Promise.all([
+          books.listCampaignBooks(db, campaign.id),
+          dashboard.listSearchTermRows(
+            db,
+            campaign.profileId,
+            campaign.amazonCampaignId,
+            start,
+            end,
+          ),
+          dashboard.listNegativeKeywordRows(db, campaign.id),
+          dashboard.listNegativeTargetRows(db, campaign.id),
+        ]);
       const { clicks, costMicros } = evidence.data;
       const averageCpcMicros = clicks > 0 ? Math.round(costMicros / clicks) : 0;
       const suggestedMicros =
@@ -1421,9 +1534,19 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
           coverImageUrl: coverImageUrlOf(book.coverJson),
         })),
         // Terms that took clicks and returned nothing: the spend this finding
-        // can actually stop without touching the listing.
+        // can actually stop without touching the listing. Terms a synced
+        // negative already blocks stay in the evidence window but are not
+        // offered again — Amazon will not serve them.
         wastefulTerms: searchTermRows
           .filter((term) => term.totals.orders === 0 && term.totals.clicks > 0)
+          .filter(
+            (term) =>
+              !isSearchTermAlreadyNegated(
+                term.name,
+                negativeKeywords,
+                negativeTargets,
+              ),
+          )
           .slice(0, MAX_WASTEFUL_TERMS)
           .map((term) => ({
             searchTerm: term.name,

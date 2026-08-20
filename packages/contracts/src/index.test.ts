@@ -319,6 +319,23 @@ describe("contracts smoke test", () => {
 
     expect(detail.campaign.totals.estimatedAdProfit).toBe("2.0000");
     expect(detail.negativeKeywords[0]?.keywordText).toBe("free books");
+    expect(detail.negativeTargets).toEqual([]);
+
+    const withProducts = campaignDetailSchema.parse({
+      ...detail,
+      negativeTargets: [
+        {
+          id: "negative-target-1",
+          asin: "B0CRHVCT1T",
+          targetType: "ASIN_SAME_AS",
+          level: "campaign",
+          adGroupId: null,
+          adGroupName: null,
+          state: "ENABLED",
+        },
+      ],
+    });
+    expect(withProducts.negativeTargets[0]?.asin).toBe("B0CRHVCT1T");
   });
 
   it("accepts a campaign-list row with windowed profitability", () => {

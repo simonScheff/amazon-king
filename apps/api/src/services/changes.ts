@@ -1938,13 +1938,46 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
           finalStatus === "applied" ? "active" : "drifted",
         );
       }
+      const appliedNegatives = finalActions.some(
+        (action) =>
+          action.status === "applied" &&
+          (action.actionType === "add_negative_exact" ||
+            action.actionType === "add_negative_target"),
+      );
       if (
-        set.kind === "campaign_creation" &&
+        (set.kind === "campaign_creation" || appliedNegatives) &&
         (finalStatus === "applied" || finalStatus === "partially_applied")
       ) {
-        // Pull the new structure into the local mirror right away so the
-        // dashboard and future change sets see the created entities.
+        // Pull created entities and newly written negatives into the local
+        // mirror so the next recommendation run can see them.
         await enqueue(db, "structure_sync", { profileId: set.profileId });
+      }
+      if (finalStatus === "applied" || finalStatus === "partially_applied") {
+        const recIds = [
+          ...new Set(
+            finalActions
+              .filter(
+                (action) =>
+                  action.recommendationId !== null &&
+                  action.status === "applied",
+              )
+              .map((action) => action.recommendationId as string),
+          ),
+        ];
+        for (const recId of recIds) {
+          (await recommendations.transitionRecommendationState(
+            db,
+            recId,
+            "approved",
+            "applied",
+          )) ??
+            (await recommendations.transitionRecommendationState(
+              db,
+              recId,
+              "pending",
+              "applied",
+            ));
+        }
       }
       await recordAudit(auth, meta, "change_set.apply", set.id, {
         total: finalActions.length,

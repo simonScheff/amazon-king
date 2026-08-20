@@ -64,9 +64,9 @@ Concurrency and retry shape, all load-bearing:
 
 ## recommendation_run
 
-Loads structure — including the synced `negative_keywords` — plus metrics,
-economics, and cooldowns, then runs `@amazon-king/optimizer` over 7/14/30/60-day
-windows.
+Loads structure — including the synced `negative_keywords` and
+`negative_targets` — plus metrics, economics, and cooldowns, then runs
+`@amazon-king/optimizer` over 7/14/30/60-day windows.
 
 Suppression rules that must hold:
 
@@ -74,8 +74,13 @@ Suppression rules that must hold:
 - Suppress profit rules when KDP economics are missing. Never guess economics.
 - Skip any identity with an active row in `recommendation_dismissals`, so a
   rejected finding is not raised again.
-- Expire pending `cannibalization_conflict` findings whose term a negative
-  keyword now blocks.
+- Expire pending or approved `cannibalization_conflict` findings whose term a
+  negative keyword or negative ASIN target now blocks.
+- Expire pending or approved `wasteful_search_term` findings whose campaign a
+  synced negative already blocks for that term.
+- Expire pending or approved `high_ctr_poor_conversion` findings when the
+  campaign's remaining unblocked search-term traffic would no longer trigger
+  the rule.
 
 ## Tokens
 

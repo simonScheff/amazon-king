@@ -117,6 +117,7 @@ const spNegativeTargetSchema = z
     negativeTargetId: idField.optional(),
     campaignNegativeTargetingClauseId: idField.optional(),
     campaignId: idField,
+    adGroupId: optionalIdField,
     state: z.string(),
     expression: spExpressionSchema.optional(),
     resolvedExpression: spExpressionSchema.optional(),
@@ -358,6 +359,7 @@ export async function listNegativeTargets(
       raw.negativeTargetId ??
       raw.campaignNegativeTargetingClauseId) as string,
     campaignId: raw.campaignId,
+    adGroupId: raw.adGroupId ?? null,
     state: raw.state,
     expression: raw.resolvedExpression ?? raw.expression ?? [],
     raw,

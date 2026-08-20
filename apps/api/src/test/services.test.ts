@@ -1163,6 +1163,59 @@ describe("conversion finding resolution", () => {
     });
   });
 
+  it("omits shopper terms a synced negative already blocks", async () => {
+    const { db, profile, recommendation } = setupConversion();
+    db.seedNegativeKeyword({
+      campaign_id: "10",
+      keyword_text: "tractor colouring book",
+      match_type: "NEGATIVE_EXACT",
+      state: "ENABLED",
+    });
+    db.seedSearchTermMetric({
+      profile_id: profile.id,
+      search_term: "tractor sticker book",
+      clicks: 12,
+      cost: "4.0000",
+      orders: 0,
+    });
+    const service = createReadService({
+      db: db as never,
+      config: testConfig(),
+      logger: fakeLogger(),
+    });
+
+    const context = await service.getConversionResolutionContext(
+      "1",
+      recommendation.id as string,
+    );
+
+    expect(context?.wastefulTerms.map((term) => term.searchTerm)).toEqual([
+      "tractor sticker book",
+    ]);
+  });
+
+  it("omits a longer query a phrase negative already covers", async () => {
+    const { db, recommendation } = setupConversion();
+    db.seedNegativeKeyword({
+      campaign_id: "10",
+      keyword_text: "tractor colouring",
+      match_type: "NEGATIVE_PHRASE",
+      state: "enabled",
+    });
+    const service = createReadService({
+      db: db as never,
+      config: testConfig(),
+      logger: fakeLogger(),
+    });
+
+    const context = await service.getConversionResolutionContext(
+      "1",
+      recommendation.id as string,
+    );
+
+    expect(context?.wastefulTerms).toEqual([]);
+  });
+
   it("still resolves the campaign when no book is mapped to its ads", async () => {
     const { db, recommendation } = setupConversion({ mapBook: false });
     const service = createReadService({

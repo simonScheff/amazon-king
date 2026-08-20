@@ -147,4 +147,13 @@ describe("evaluateWastefulSearchTerm", () => {
     const b = evaluateWastefulSearchTerm(baseInput, makeContext());
     expect(a).toEqual(b);
   });
+
+  it("does not fire when a synced negative already blocks the term", () => {
+    expect(
+      evaluateWastefulSearchTerm(
+        { ...baseInput, alreadyBlocked: true },
+        makeContext(),
+      ),
+    ).toBeNull();
+  });
 });

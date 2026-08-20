@@ -298,6 +298,16 @@ export interface NegativeKeywordRowData {
   state: string;
 }
 
+export interface NegativeTargetRowData {
+  id: string;
+  asin: string;
+  targetType: "ASIN_SAME_AS";
+  level: "campaign" | "ad_group";
+  adGroupId: string | null;
+  adGroupName: string | null;
+  state: string;
+}
+
 /**
  * Ad groups of a campaign with totals aggregated from target-grain facts.
  * `bookIds` (null or empty = no filter) keeps only ad groups advertising any
@@ -574,6 +584,57 @@ export async function listNegativeKeywordRows(
     id: row.amazon_negative_keyword_id,
     keywordText: row.keyword_text,
     matchType: row.match_type,
+    level: row.amazon_ad_group_id === null ? "campaign" : "ad_group",
+    adGroupId: row.amazon_ad_group_id,
+    adGroupName: row.ad_group_name,
+    state: row.state,
+  }));
+}
+
+/**
+ * Current campaign- and ad-group-level negative product targets for a campaign.
+ * `bookIds` (null or empty = no filter) keeps a negative only when its scope
+ * advertises any of the selected books, matching `listNegativeKeywordRows`.
+ */
+export async function listNegativeTargetRows(
+  db: Db,
+  campaignPk: string,
+  bookIds: bigint[] | null = null,
+): Promise<NegativeTargetRowData[]> {
+  const result = await db.query<{
+    amazon_negative_target_id: string;
+    expression_asin: string;
+    amazon_ad_group_id: string | null;
+    ad_group_name: string | null;
+    state: string;
+  }>(
+    `select n.amazon_negative_target_id, n.expression_asin,
+            g.amazon_ad_group_id, g.name as ad_group_name, n.state
+     from negative_targets n
+     left join ad_groups g on g.id = n.ad_group_id
+     where n.campaign_id = $1
+       and (coalesce(cardinality($2::bigint[]), 0) = 0 or exists (
+         select 1
+         from ad_groups fg
+         join ads fa
+           on fa.profile_id = fg.profile_id and fa.ad_group_id = fg.id
+         join book_profile_links fb
+           on fb.profile_id = fg.profile_id
+          and fb.marketplace_asin = fa.asin
+          and fb.enabled = true
+         where fb.book_id = any($2)
+           and (
+             fg.id = n.ad_group_id
+             or (n.ad_group_id is null and fg.campaign_id = n.campaign_id)
+           )
+       ))
+     order by lower(n.expression_asin), n.id`,
+    [campaignPk, bookIds],
+  );
+  return result.rows.map((row) => ({
+    id: row.amazon_negative_target_id,
+    asin: row.expression_asin,
+    targetType: "ASIN_SAME_AS",
     level: row.amazon_ad_group_id === null ? "campaign" : "ad_group",
     adGroupId: row.amazon_ad_group_id,
     adGroupName: row.ad_group_name,

@@ -320,6 +320,7 @@ Response `200` (CampaignDetail); `404 NOT_FOUND` when unknown.
 | targets          | array     | Same shape                                                         |
 | searchTerms      | array     | Same shape plus `estimatedRoyalty`, `estimatedAdProfit`, `economicsMissing` per term |
 | negativeKeywords | array     | `{id, keywordText, matchType, level: "campaign" \| "ad_group", adGroupId, adGroupName, state}` |
+| negativeTargets  | array     | `{id, asin, targetType: "ASIN_SAME_AS", level: "campaign" \| "ad_group", adGroupId, adGroupName, state}` — campaign- and ad-group-level negative product targets from the last structure sync |
 
 ---
 
@@ -477,7 +478,7 @@ books, wastefulTerms}` where:
 | campaign | `{campaignId, name, state, targetingType, amazonConsoleUrl, writeEnabled}` — Amazon campaign id, never an internal key |
 | metrics | `{impressions, clicks, orders, ctr, cvr, spend, averageCpc, suggestedMaxCpc}` from `recommendation_evidence.inputs` |
 | books | `{bookId, title, asin, coverImageUrl}` per book the campaign's ads map to; empty when none is mapped |
-| wastefulTerms | Up to 20 `{searchTerm, impressions, clicks, orders, spend}` with clicks and zero orders, highest spend first |
+| wastefulTerms | Up to 20 `{searchTerm, impressions, clicks, orders, spend}` with clicks and zero orders, highest spend first. Terms a synced negative keyword or negative ASIN target already blocks are omitted. |
 
 `suggestedMaxCpc` is a display suggestion — a cut below the observed average
 CPC — not a computed break-even bid, which would require a conversion rate.

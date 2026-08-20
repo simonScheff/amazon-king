@@ -3,6 +3,7 @@ import {
   aggregateWindow,
   addDays,
   blockedCampaignIds,
+  keywordSpecsFromNegativeTargets,
   formatIsoDate,
   microsFromDecimalString,
   rankRecommendations,
@@ -108,7 +109,12 @@ export function createRecommendationRunHandler(deps: JobDeps): JobHandler {
       ).toISOString(),
     );
 
-    const { drafts, resolvedCannibalizationTerms } = evaluateAllRules({
+    const {
+      drafts,
+      resolvedCannibalizationTerms,
+      resolvedWastefulTerms,
+      resolvedConversionCampaignIds,
+    } = evaluateAllRules({
       profile,
       structure,
       facts,
@@ -128,6 +134,26 @@ export function createRecommendationRunHandler(deps: JobDeps): JobHandler {
         adGroupId: null,
         targetId: null,
         searchTerm,
+      });
+    }
+    for (const { campaignId, searchTerm } of resolvedWastefulTerms) {
+      resolved += await deps.store.expirePendingRecommendations({
+        profileId: profile.id,
+        type: "wasteful_search_term",
+        campaignId,
+        adGroupId: null,
+        targetId: null,
+        searchTerm,
+      });
+    }
+    for (const campaignId of resolvedConversionCampaignIds) {
+      resolved += await deps.store.expirePendingRecommendations({
+        profileId: profile.id,
+        type: "high_ctr_poor_conversion",
+        campaignId,
+        adGroupId: null,
+        targetId: null,
+        searchTerm: null,
       });
     }
 
@@ -239,6 +265,36 @@ function toDailyRows(facts: readonly DailyFact[]): DailyMetricRow[] {
   }));
 }
 
+/** Campaign metrics minus the search-term facts a negative already blocks. */
+function remainingMetrics(
+  metrics: WindowMetrics,
+  blocked: WindowMetrics,
+): WindowMetrics {
+  return {
+    impressions: Math.max(0, metrics.impressions - blocked.impressions),
+    clicks: Math.max(0, metrics.clicks - blocked.clicks),
+    orders: Math.max(0, metrics.orders - blocked.orders),
+    units: Math.max(0, (metrics.units ?? 0) - (blocked.units ?? 0)),
+    costMicros: Math.max(0, metrics.costMicros - blocked.costMicros),
+    salesMicros: Math.max(0, metrics.salesMicros - blocked.salesMicros),
+  };
+}
+
+function wastefulKey(campaignId: string, searchTerm: string): string {
+  return `${campaignId}\t${searchTerm}`;
+}
+
+function parseWastefulKey(key: string): {
+  campaignId: string;
+  searchTerm: string;
+} {
+  const split = key.indexOf("\t");
+  return {
+    campaignId: key.slice(0, split),
+    searchTerm: key.slice(split + 1),
+  };
+}
+
 export interface EvaluationResult {
   drafts: RecommendationDraft[];
   /**
@@ -248,6 +304,18 @@ export interface EvaluationResult {
    * lingering until `expires_at`.
    */
   resolvedCannibalizationTerms: string[];
+  /**
+   * Campaign + term pairs a synced negative already blocks. Pending
+   * `wasteful_search_term` findings for those identities are expired so a
+   * term the owner already excluded does not stay in the inbox.
+   */
+  resolvedWastefulTerms: Array<{ campaignId: string; searchTerm: string }>;
+  /**
+   * Campaigns whose remaining unblocked traffic would not trigger
+   * `high_ctr_poor_conversion`. Pending findings are expired so blocking the
+   * wasteful queries actually clears the listing-problem suggestion.
+   */
+  resolvedConversionCampaignIds: string[];
 }
 
 export function evaluateAllRules(inputs: EvaluationInputs): EvaluationResult {
@@ -333,6 +401,12 @@ export function evaluateAllRules(inputs: EvaluationInputs): EvaluationResult {
     if (draft) drafts.push(draft);
   };
   const resolvedTerms = new Set<string>();
+  const resolvedWasteful = new Set<string>();
+  const resolvedConversion = new Set<string>();
+  const allNegatives = [
+    ...structure.negativeKeywords,
+    ...keywordSpecsFromNegativeTargets(structure.negativeTargets),
+  ];
 
   const exactKeywordTerms = new Set(
     structure.targets
@@ -419,6 +493,7 @@ export function evaluateAllRules(inputs: EvaluationInputs): EvaluationResult {
     }
 
     // --- search-term grain: wasteful / harvest / cannibalization ---
+    const blockedFactsByCampaign = new Map<string, DailyFact[]>();
     const termGroups = groupBy(
       facts.searchTerm,
       (fact) => `${fact.entityKey}|${normalizeTerm(fact.subKey ?? "")}`,
@@ -431,9 +506,29 @@ export function evaluateAllRules(inputs: EvaluationInputs): EvaluationResult {
       if (!campaign || searchTerm === "") continue;
       const ctx = contextFor(campaign.id, window);
       const metrics = aggregate(rows);
+      const servingAdGroups = new Map<string, Set<string>>();
+      if (target) {
+        servingAdGroups.set(campaign.id, new Set([target.adGroupId]));
+      }
+      const alreadyBlocked = blockedCampaignIds(
+        searchTerm,
+        allNegatives,
+        servingAdGroups,
+      ).has(campaign.id);
+      if (alreadyBlocked) {
+        resolvedWasteful.add(wastefulKey(campaign.id, searchTerm));
+        const blockedRows = blockedFactsByCampaign.get(campaign.id) ?? [];
+        blockedRows.push(...rows.filter(inWindow));
+        blockedFactsByCampaign.set(campaign.id, blockedRows);
+      }
       push(
         evaluateWastefulSearchTerm(
-          { searchTerm, campaignId: campaign.id, metrics },
+          {
+            searchTerm,
+            campaignId: campaign.id,
+            metrics,
+            alreadyBlocked,
+          },
           ctx,
         ),
       );
@@ -443,21 +538,24 @@ export function evaluateAllRules(inputs: EvaluationInputs): EvaluationResult {
           : target?.targetKind === "keyword"
             ? (target.matchType ?? "exact")
             : "exact";
-      push(
-        evaluateSearchTermHarvest(
-          {
-            searchTerm,
-            sourceCampaignId: campaign.id,
-            sourceTargetingType: sourceTargetingType as
-              "auto" | "broad" | "phrase" | "exact",
-            alreadyTargetedExactly: exactKeywordTerms.has(
-              normalizeTerm(searchTerm),
-            ),
-            metrics,
-          },
-          ctx,
-        ),
-      );
+      // A term the campaign already negatives is not a harvest candidate.
+      if (!alreadyBlocked) {
+        push(
+          evaluateSearchTermHarvest(
+            {
+              searchTerm,
+              sourceCampaignId: campaign.id,
+              sourceTargetingType: sourceTargetingType as
+                "auto" | "broad" | "phrase" | "exact",
+              alreadyTargetedExactly: exactKeywordTerms.has(
+                normalizeTerm(searchTerm),
+              ),
+              metrics,
+            },
+            ctx,
+          ),
+        );
+      }
     }
     const termsAcrossCampaigns = groupBy(facts.searchTerm, (fact) =>
       normalizeTerm(fact.subKey ?? ""),
@@ -493,7 +591,7 @@ export function evaluateAllRules(inputs: EvaluationInputs): EvaluationResult {
       const searchTerm = windowRows[0]!.subKey ?? term;
       const blocked = blockedCampaignIds(
         searchTerm,
-        structure.negativeKeywords,
+        allNegatives,
         servingAdGroups,
       );
       const withBlocked = campaigns.map((entry) => ({
@@ -522,12 +620,19 @@ export function evaluateAllRules(inputs: EvaluationInputs): EvaluationResult {
       if (!campaign) continue;
       const ctx = contextFor(campaign.id, window);
       const metrics = aggregate(rows);
-      push(
-        evaluateHighCtrPoorConversion(
-          { campaignId: campaign.id, metrics },
-          ctx,
-        ),
+      const blockedMetrics = aggregate(
+        blockedFactsByCampaign.get(campaign.id) ?? [],
       );
+      const liveMetrics = remainingMetrics(metrics, blockedMetrics);
+      const conversionDraft = evaluateHighCtrPoorConversion(
+        { campaignId: campaign.id, metrics: liveMetrics },
+        ctx,
+      );
+      if (conversionDraft) {
+        push(conversionDraft);
+      } else {
+        resolvedConversion.add(campaign.id);
+      }
       if (campaign.dailyBudget) {
         const dailyBudgetMicros = microsFromDecimalString(campaign.dailyBudget);
         const byDay = groupBy(rows.filter(inWindow), (row) => row.date);
@@ -579,10 +684,28 @@ export function evaluateAllRules(inputs: EvaluationInputs): EvaluationResult {
       .filter((draft) => draft.type === "cannibalization_conflict")
       .map((draft) => draft.searchTerm),
   );
+  const flaggedWasteful = new Set(
+    drafts
+      .filter((draft) => draft.type === "wasteful_search_term")
+      .map((draft) =>
+        wastefulKey(draft.campaignId ?? "", draft.searchTerm ?? ""),
+      ),
+  );
+  const flaggedConversion = new Set(
+    drafts
+      .filter((draft) => draft.type === "high_ctr_poor_conversion")
+      .map((draft) => draft.campaignId),
+  );
   return {
     drafts,
     resolvedCannibalizationTerms: [...resolvedTerms].filter(
       (term) => !flaggedTerms.has(term),
+    ),
+    resolvedWastefulTerms: [...resolvedWasteful]
+      .filter((key) => !flaggedWasteful.has(key))
+      .map(parseWastefulKey),
+    resolvedConversionCampaignIds: [...resolvedConversion].filter(
+      (campaignId) => !flaggedConversion.has(campaignId),
     ),
   };
 }

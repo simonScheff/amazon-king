@@ -5,6 +5,7 @@ import type {
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { formatDateTime } from "../lib/format";
 import { ConversionResolution } from "./conversion-resolution";
 
 const mocks = vi.hoisted(() => ({
@@ -209,6 +210,12 @@ describe("ConversionResolution", () => {
     expect(
       screen.getByRole("link", { name: /View the listing shoppers see/ }),
     ).toHaveAttribute("href", "https://www.amazon.co.uk/dp/B0TRACTOR1");
+
+    const created = screen.getByText("Created");
+    expect(created.tagName).toBe("DT");
+    expect(created.nextElementSibling).toHaveTextContent(
+      formatDateTime(recommendation.createdAt),
+    );
   });
 
   it("offers all four responses and reveals only the chosen one", () => {
@@ -250,7 +257,7 @@ describe("ConversionResolution", () => {
     render(<ConversionResolution recommendation={recommendation} />);
     fireEvent.click(screen.getByRole("radio", { name: /Block the shopper/ }));
 
-    expect(screen.getByText(/nothing safe to block/)).toBeInTheDocument();
+    expect(screen.getByText(/Nothing left to block/)).toBeInTheDocument();
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   });
 

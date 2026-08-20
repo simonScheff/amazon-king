@@ -149,6 +149,18 @@ export const negativeKeywordRowSchema = z.object({
 });
 export type NegativeKeywordRow = z.infer<typeof negativeKeywordRowSchema>;
 
+/** Current Amazon negative product target (ASIN_SAME_AS) on a campaign or ad group. */
+export const negativeTargetRowSchema = z.object({
+  id: z.string(),
+  asin: z.string(),
+  targetType: z.literal("ASIN_SAME_AS"),
+  level: z.enum(["campaign", "ad_group"]),
+  adGroupId: z.string().nullable(),
+  adGroupName: z.string().nullable(),
+  state: z.string(),
+});
+export type NegativeTargetRow = z.infer<typeof negativeTargetRowSchema>;
+
 /**
  * One search term within a campaign, with KDP royalty estimated through the
  * ad group's book (same single-book attribution as campaign rows) — never
@@ -263,5 +275,6 @@ export const campaignDetailSchema = z.object({
   targets: z.array(namedMetricRowSchema).default([]),
   searchTerms: z.array(campaignSearchTermRowSchema).default([]),
   negativeKeywords: z.array(negativeKeywordRowSchema).default([]),
+  negativeTargets: z.array(negativeTargetRowSchema).default([]),
 });
 export type CampaignDetail = z.infer<typeof campaignDetailSchema>;

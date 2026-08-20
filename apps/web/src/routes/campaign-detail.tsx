@@ -9,10 +9,12 @@ import type {
   MetricTotals,
   MetricWindow,
   NegativeKeywordRow,
+  NegativeTargetRow,
 } from "@amazon-king/contracts";
 import { useCampaign, useProfiles } from "../api/endpoints";
-import { KpiCard } from "../components/kpi-card";
+import { AmazonProductLink } from "../components/amazon-product-link";
 import { CampaignControls } from "../components/campaign-controls";
+import { KpiCard } from "../components/kpi-card";
 import { CampaignHeader } from "../components/campaign-header";
 import { CampaignMaxCpc } from "../components/campaign-max-cpc";
 import { PerformanceTrendChart } from "../components/performance-trend-chart";
@@ -38,13 +40,19 @@ import { compareNullable, nextSort, type Sort } from "../lib/sorting";
 import { resolveTimeframe } from "../lib/timeframe";
 
 type Tab =
-  "adGroups" | "targets" | "searchTerms" | "negativeKeywords" | "maxCpc";
+  | "adGroups"
+  | "targets"
+  | "searchTerms"
+  | "negativeKeywords"
+  | "negativeTargets"
+  | "maxCpc";
 
 const tabs: Array<{ key: Tab; label: string }> = [
   { key: "adGroups", label: "Ad groups" },
   { key: "targets", label: "Targets" },
   { key: "searchTerms", label: "Search terms" },
   { key: "negativeKeywords", label: "Negative keywords" },
+  { key: "negativeTargets", label: "Negative products" },
   { key: "maxCpc", label: "Max CPC" },
 ];
 
@@ -137,6 +145,62 @@ function NegativeKeywordsTable({ rows }: { rows: NegativeKeywordRow[] }) {
             <tr key={row.id}>
               <Td className="font-medium text-zinc-100">{row.keywordText}</Td>
               <Td>{formatAmazonLabel(row.matchType)}</Td>
+              <Td>
+                {row.level === "campaign"
+                  ? "Campaign"
+                  : `Ad group · ${row.adGroupName ?? row.adGroupId ?? "Unknown"}`}
+              </Td>
+              <Td>
+                <Badge tone={state === "enabled" ? "success" : "neutral"}>
+                  {formatAmazonLabel(state)}
+                </Badge>
+              </Td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </Table>
+  );
+}
+
+function NegativeProductsTable({
+  rows,
+  countryCode,
+}: {
+  rows: NegativeTargetRow[];
+  countryCode?: string;
+}) {
+  if (rows.length === 0) {
+    return (
+      <EmptyState>
+        No negative product targets are synced for this campaign.
+      </EmptyState>
+    );
+  }
+  return (
+    <Table stickyHeader>
+      <thead>
+        <tr>
+          <Th>ASIN</Th>
+          <Th>Type</Th>
+          <Th>Applied to</Th>
+          <Th>State</Th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => {
+          const state = row.state.toLowerCase();
+          return (
+            <tr key={row.id}>
+              <Td>
+                <span className="font-medium text-zinc-100">{row.asin}</span>
+                <AmazonProductLink
+                  term={row.asin}
+                  countryCode={countryCode}
+                  className="ml-2 text-xs"
+                />
+              </Td>
+              <Td>ASIN same as</Td>
               <Td>
                 {row.level === "campaign"
                   ? "Campaign"
@@ -460,6 +524,11 @@ export function CampaignDetailPage() {
               <CampaignMaxCpc campaignId={id} />
             ) : tab === "negativeKeywords" ? (
               <NegativeKeywordsTable rows={campaign.data.negativeKeywords} />
+            ) : tab === "negativeTargets" ? (
+              <NegativeProductsTable
+                rows={campaign.data.negativeTargets}
+                countryCode={country}
+              />
             ) : (
               <MetricsTable
                 key={tab}

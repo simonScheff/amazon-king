@@ -12,6 +12,11 @@ guardrails, verification.
 
 ![Campaign detail page with the Max CPC tab](/screenshots/campaign-detail.png)
 
+The same page lists ad groups, targets, search terms, **negative keywords**,
+and **negative products** (ASIN exclusions) from the last structure sync.
+Those tables are read-only — adding or removing a negative still goes through
+a recommendation or Change center draft.
+
 ## Pause / enable / rename
 
 The campaign detail page header has one-click controls to **pause** (or

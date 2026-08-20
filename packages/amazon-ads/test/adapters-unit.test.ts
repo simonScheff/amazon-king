@@ -834,6 +834,7 @@ describe("SP target and negative-target reads", () => {
     expect(negativeTargets[0]).toMatchObject({
       negativeTargetId: "770123456",
       campaignId: "901234567",
+      adGroupId: null,
       state: "ENABLED",
       expression: [{ type: "ASIN_SAME_AS", value: "B0COMPET01" }],
     });

@@ -2,7 +2,8 @@
  * Negative keyword matching (docs/plan.md §9). Pure and deterministic: given a
  * shopper search term and the negatives currently synced from Amazon, decide
  * which campaigns can no longer serve that term. Rules use this so a conflict
- * the owner already resolved with a negative stops being recommended.
+ * the owner already resolved with a negative keyword or negative ASIN target
+ * stops being recommended.
  */
 
 /** One Amazon negative keyword as mirrored locally; `adGroupId` null = campaign level. */
@@ -13,6 +14,30 @@ export interface NegativeKeywordSpec {
   /** Amazon match type, e.g. `NEGATIVE_EXACT` / `negativePhrase`. */
   matchType: string;
   state: string;
+}
+
+/** One Amazon negative product target as mirrored locally. */
+export interface NegativeTargetSpec {
+  campaignId: string;
+  adGroupId: string | null;
+  asin: string;
+  state: string;
+}
+
+/**
+ * Exact negatives synthesized from ASIN_SAME_AS product exclusions so the
+ * same blocked-campaign logic covers ASIN shopper terms.
+ */
+export function keywordSpecsFromNegativeTargets(
+  targets: readonly NegativeTargetSpec[],
+): NegativeKeywordSpec[] {
+  return targets.map((target) => ({
+    campaignId: target.campaignId,
+    adGroupId: target.adGroupId,
+    keywordText: target.asin,
+    matchType: "NEGATIVE_EXACT",
+    state: target.state,
+  }));
 }
 
 /** Trim, lowercase, and collapse internal whitespace so terms compare stably. */

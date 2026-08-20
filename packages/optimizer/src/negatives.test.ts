@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   blockedCampaignIds,
+  keywordSpecsFromNegativeTargets,
   matchesNegative,
   type NegativeKeywordSpec,
 } from "./negatives.js";
@@ -140,6 +141,43 @@ describe("blockedCampaignIds", () => {
       blockedCampaignIds(
         term,
         [negative({ keywordText: "dinosaur colouring book" })],
+        new Map([["camp-1", new Set(["ag-1"])]]),
+      ).size,
+    ).toBe(0);
+  });
+});
+
+describe("keywordSpecsFromNegativeTargets", () => {
+  it("blocks an ASIN shopper term with a campaign-level negative target", () => {
+    const specs = keywordSpecsFromNegativeTargets([
+      {
+        campaignId: "camp-1",
+        adGroupId: null,
+        asin: "B0CRHVCT1T",
+        state: "ENABLED",
+      },
+    ]);
+    expect(
+      blockedCampaignIds(
+        "b0crhvct1t",
+        specs,
+        new Map([["camp-1", new Set(["ag-1"])]]),
+      ),
+    ).toEqual(new Set(["camp-1"]));
+  });
+
+  it("ignores paused negative targets", () => {
+    expect(
+      blockedCampaignIds(
+        "b0crhvct1t",
+        keywordSpecsFromNegativeTargets([
+          {
+            campaignId: "camp-1",
+            adGroupId: null,
+            asin: "B0CRHVCT1T",
+            state: "PAUSED",
+          },
+        ]),
         new Map([["camp-1", new Set(["ag-1"])]]),
       ).size,
     ).toBe(0);

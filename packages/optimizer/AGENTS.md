@@ -21,12 +21,16 @@ To add or change a rule, use the `add-optimizer-rule` skill.
 
 ## Two subtleties that the tests exist to protect
 
-**Negatives suppress cannibalization.** `src/negatives.ts` decides which
-campaigns a synced negative keyword blocks for a given shopper term — exact and
-phrase, enabled only, and an ad-group negative blocks a campaign only when every
-serving ad group is negated. `cannibalization_conflict@2` excludes those
-campaigns before its `minCampaigns` check, so a conflict already resolved with a
-negative stops being raised.
+**Negatives suppress already-resolved search-term findings.** `src/negatives.ts`
+decides which campaigns a synced negative keyword or negative ASIN target blocks
+for a given shopper term — exact and phrase keywords, enabled only, and an
+ad-group negative blocks a campaign only when every serving ad group is negated.
+ASIN shopper terms use `keywordSpecsFromNegativeTargets` so campaign-level
+`ASIN_SAME_AS` exclusions count the same way. `cannibalization_conflict@2`
+excludes those campaigns before its `minCampaigns` check, and
+`wasteful_search_term@2` does not propose another negative for a term the
+campaign can no longer serve. Historical search-term clicks stay in the evidence
+window after a negative is applied; the block flag is what stops the finding.
 
 **Profit is earned per copy, not per order.** `estimatedAdProfit` takes copies.
 The four profit rules — `expensive_target@2`, `profitable_target@2`,

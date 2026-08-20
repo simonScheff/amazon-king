@@ -150,9 +150,26 @@ export function CannibalizationResolution({
             </span>
             <div>
               <p className="text-xs text-zinc-500">Shopper term</p>
-              <p className="mt-1 text-lg font-semibold text-zinc-100">
-                “{data.searchTerm}”
-              </p>
+              <Link
+                to="/search-terms/$term"
+                params={{ term: data.searchTerm }}
+                search={{
+                  days: detailDays,
+                  ...(countryCode ? { country: countryCode } : {}),
+                }}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Open ${data.searchTerm} in a new tab`}
+                className="group mt-1 inline-flex items-center gap-2 rounded-sm text-lg font-semibold text-zinc-100 hover:text-sky-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sky-400"
+              >
+                <span>“{data.searchTerm}”</span>
+                <span
+                  aria-hidden="true"
+                  className="text-xs font-normal text-zinc-600 group-hover:text-sky-400"
+                >
+                  ↗
+                </span>
+              </Link>
               <AmazonProductLink
                 term={data.searchTerm}
                 countryCode={countryCode}
@@ -382,6 +399,14 @@ export function CannibalizationResolution({
               <div className="grid gap-1 py-2 sm:grid-cols-[12rem_1fr]">
                 <dt className="text-zinc-500">Recommendation expiry</dt>
                 <dd>{formatDateTime(data.expiresAt)}</dd>
+              </div>
+              <div className="grid gap-1 py-2 sm:grid-cols-[12rem_1fr]">
+                <dt className="text-zinc-500">Created</dt>
+                <dd>
+                  <time dateTime={recommendation.createdAt}>
+                    {formatDateTime(recommendation.createdAt)}
+                  </time>
+                </dd>
               </div>
               <div className="grid gap-1 py-2 sm:grid-cols-[12rem_1fr]">
                 <dt className="text-zinc-500">Protected-term check</dt>

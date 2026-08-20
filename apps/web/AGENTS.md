@@ -131,10 +131,11 @@ The conversion screen is fed by
 `GET /api/recommendations/:id/conversion-context` and offers four responses,
 because this finding has no single Amazon write: the listing checklist with
 "remind me in 30 days" (`snoozeDays` on the reject endpoint), drafting negatives
-for zero-order shopper terms, the embedded `CampaignMaxCpc` prefilled with
-`metrics.suggestedMaxCpc`, and a confirmed pause via `useUpdateCampaignState`
-with the usual `ReauthDialog` wiring. Only the pause writes immediately;
-negatives and the CPC ceiling go to Change center as drafts.
+for zero-order shopper terms that are not already excluded, the embedded
+`CampaignMaxCpc` prefilled with `metrics.suggestedMaxCpc`, and a confirmed pause
+via `useUpdateCampaignState` with the usual `ReauthDialog` wiring. Only the
+pause writes immediately; negatives and the CPC ceiling go to Change center as
+drafts.
 
 ## Campaign detail header and guarded actions
 
@@ -151,6 +152,11 @@ and immediately applying a `campaign_update` change set via
 
 Amazon has no campaign delete — only terminal `ARCHIVED` — and the app
 deliberately does not expose it.
+
+Breakdown tabs on `src/routes/campaign-detail.tsx` include **Negative
+products** (`negativeTargets`): campaign- and ad-group-level `ASIN_SAME_AS`
+exclusions from structure sync, with an Amazon retail link per ASIN. Do not
+route that tab through `MetricsTable`.
 
 ## Re-authentication
 

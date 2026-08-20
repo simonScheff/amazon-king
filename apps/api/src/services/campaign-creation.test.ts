@@ -1102,6 +1102,7 @@ describe("cannibalization-linked campaign creation", () => {
       negativeTargets: campaignIds.map((campaignId, index) => ({
         negativeTargetId: `neg-t-${index + 1}`,
         campaignId,
+        adGroupId: null,
         state: "ENABLED",
         expression: [{ type: "ASIN_SAME_AS", value: asin }],
         raw: {},

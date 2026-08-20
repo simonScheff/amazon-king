@@ -8,7 +8,7 @@ import {
   type RuleContext,
 } from "./types.js";
 
-export const WASTEFUL_SEARCH_TERM_RULE_VERSION = "wasteful_search_term@1";
+export const WASTEFUL_SEARCH_TERM_RULE_VERSION = "wasteful_search_term@2";
 
 export interface WastefulSearchTermInput {
   searchTerm: string;
@@ -16,20 +16,29 @@ export interface WastefulSearchTermInput {
   campaignId: string | null;
   adGroupId?: string | null;
   metrics: WindowMetrics;
+  /**
+   * The campaign can no longer serve this term because a synced negative
+   * keyword or negative ASIN target already blocks it (see negatives.ts).
+   * Historical clicks stay in the evidence window long after the negative
+   * is applied, so the term is excluded rather than recommended again.
+   */
+  alreadyBlocked?: boolean;
 }
 
 /**
- * wasteful_search_term@1 — meaningful clicks with zero orders → propose a
+ * wasteful_search_term@2 — meaningful clicks with zero orders → propose a
  * negative exact (docs/plan.md §9: ~20 clicks before a negative decision).
  *
  * Suppressed when: the term is protected, the goal mode is launch/discovery
- * (exploration spend is expected there), or a negative for this term was
- * already added within the cooldown window.
+ * (exploration spend is expected there), a negative for this term was
+ * already added within the cooldown window, or a synced negative already
+ * blocks this campaign for the term.
  */
 export function evaluateWastefulSearchTerm(
   input: WastefulSearchTermInput,
   ctx: RuleContext,
 ): RecommendationDraft | null {
+  if (input.alreadyBlocked === true) return null;
   if (isProtectedSearchTerm(ctx, input.searchTerm)) return null;
   if (ctx.goalMode === "launch") return null;
   if (

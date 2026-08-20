@@ -50,10 +50,10 @@ guessed — when economics are missing**.
 | Purpose    | A shopper term accumulates meaningful clicks with zero orders → add it as a negative exact keyword. |
 | Trigger    | `clicks ≥ 20` **and** `orders = 0`. |
 | Proposal   | None (no scalar value); the action is `add_negative_exact` for the term. |
-| Suppressed | Protected search term; launch goal mode (exploration spend is expected); a negative for this term was already added within the cooldown window. Does not require economics. |
+| Suppressed | Protected search term; launch goal mode (exploration spend is expected); a negative for this term was already added within the cooldown window; a synced negative keyword or negative ASIN target already blocks this campaign for the term. Does not require economics. |
 | Impact     | The term's spend over the window (the stopped waste). |
 | Human review | No. Writable: `add_negative_exact`. |
-| Version    | `wasteful_search_term@1` |
+| Version    | `wasteful_search_term@2` (v2 treats a synced negative as already resolved, so historical clicks do not keep proposing the same exclusion) |
 
 ### 4. `search_term_harvest` — promote a converting term
 
@@ -62,7 +62,7 @@ guessed — when economics are missing**.
 | Purpose    | A term converts repeatedly inside auto/broad targeting → add it as an exact keyword in a controlled manual campaign for direct bid control. |
 | Trigger    | `orders ≥ 2` from an `auto` or `broad` source, and the term is **not** already exact-targeted in a manual campaign. |
 | Proposal   | The estimated break-even CPC (smoothed CVR × royalty) when economics exist; otherwise null and the human sets the starting bid. |
-| Suppressed | Source targeting is phrase/exact; term already targeted exactly. Does not require economics to fire. |
+| Suppressed | Source targeting is phrase/exact; term already targeted exactly; a synced negative already blocks this campaign for the term. Does not require economics to fire. |
 | Impact     | The term's attributed sales over the window. |
 | Human review | **Yes.** Advisory-only — cannot enter a change set automatically. |
 | Version    | `search_term_harvest@1` |
@@ -86,7 +86,7 @@ guessed — when economics are missing**.
 | Purpose    | The ad attracts clicks but the book does not sell — flag cover, price, subtitle, listing copy, or audience mismatch. The Ads API cannot fix the KDP listing. |
 | Trigger    | `impressions ≥ 1000` **and** `CTR ≥ 0.3%` **and** `CVR < 0.5%`. |
 | Proposal   | None — diagnostic only. |
-| Suppressed | — (no economics needed). |
+| Suppressed | Remaining unblocked search-term traffic no longer meets the trigger (the wasted clicks are already negatives). No economics needed. |
 | Impact     | The spend over the window. |
 | Human review | **Yes.** No single Amazon write, but the finding opens a [resolution screen](/guide/recommendations#clicked-but-not-bought) offering a listing checklist with a 30-day snooze, negatives for zero-order terms, a Max CPC ceiling, or pausing the campaign. |
 | Version    | `high_ctr_poor_conversion@1` |
@@ -127,15 +127,17 @@ guessed — when economics are missing**.
 | Human review | **Yes.** Advisory-only. |
 | Version    | `cannibalization_conflict@2` |
 
-**Negative-keyword awareness.** Historical spend stays in the 60-day evidence
+**Negative awareness.** Historical spend stays in the 60-day evidence
 window long after a negative is applied, so the rule checks the negatives
-synced from Amazon (`negative_keywords`) rather than the metrics alone. A
-campaign counts as blocked when an enabled campaign-level negative exact or
-negative phrase matches the term, or when every ad group that served the term
-has a matching ad-group-level negative. Blocked campaigns are recorded under
-`excludedCampaigns` in the evidence and do not count toward the threshold; when
-that leaves fewer than two competing campaigns, any finding an earlier run
-raised for the term is expired instead of re-raised.
+synced from Amazon (`negative_keywords` and `negative_targets`) rather than
+the metrics alone. A campaign counts as blocked when an enabled campaign-level
+negative exact or negative phrase matches the term, when an enabled campaign-level
+negative ASIN target matches an ASIN-shaped shopper term, or when every ad group
+that served the term has a matching ad-group-level negative. Blocked campaigns
+are recorded under `excludedCampaigns` in the evidence and do not count toward
+the threshold; when that leaves fewer than two competing campaigns, any pending
+or approved finding an earlier run raised for the term is expired instead of
+re-raised.
 
 ## Shared math (`src/calc.ts`)
 

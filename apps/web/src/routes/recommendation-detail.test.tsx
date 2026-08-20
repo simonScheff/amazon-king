@@ -2,6 +2,7 @@ import type { Recommendation } from "@amazon-king/contracts";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { formatDateTime } from "../lib/format";
 import { RecommendationDetailPage } from "./recommendation-detail";
 
 const mocks = vi.hoisted(() => ({
@@ -21,11 +22,18 @@ vi.mock("@tanstack/react-router", () => ({
   }: {
     children: ReactNode;
     to: string;
-    params?: { id?: string };
+    params?: { id?: string; term?: string };
     search?: Record<string, unknown>;
     [key: string]: unknown;
   }) => {
-    const path = params?.id ? to.replace("$id", params.id) : to;
+    let path = to;
+    if (params) {
+      for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined) {
+          path = path.replace(`$${key}`, encodeURIComponent(value));
+        }
+      }
+    }
     const query = search
       ? Object.entries(search)
           .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`)
@@ -163,6 +171,22 @@ describe("RecommendationDetailPage", () => {
     expect(campaignLink).toHaveAttribute("href", "/campaigns/1?days=60");
     expect(campaignLink).toHaveAttribute("target", "_blank");
     expect(campaignLink).toHaveAttribute("rel", "noopener noreferrer");
+
+    const searchTermLink = screen.getByRole("link", {
+      name: "Open tractor colouring book in a new tab",
+    });
+    expect(searchTermLink).toHaveAttribute(
+      "href",
+      "/search-terms/tractor%20colouring%20book?days=60&country=GB",
+    );
+    expect(searchTermLink).toHaveAttribute("target", "_blank");
+    expect(searchTermLink).toHaveAttribute("rel", "noopener noreferrer");
+
+    const created = screen.getByText("Created");
+    expect(created.tagName).toBe("DT");
+    expect(created.nextElementSibling).toHaveTextContent(
+      formatDateTime(cannibalizationRecommendation.createdAt),
+    );
 
     fireEvent.click(screen.getByRole("radio", { name: /campaign 1/i }));
     fireEvent.click(

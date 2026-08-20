@@ -64,6 +64,15 @@ describe("migration files", () => {
     expect(migration?.sql).toContain("create table negative_keywords");
   });
 
+  it("adds storage for synced negative ASIN targets", async () => {
+    const migrations = await loadMigrations();
+    const migration = migrations.find(
+      (file) => file.filename === "0012_negative_targets.sql",
+    );
+    expect(migration?.sql).toContain("create table negative_targets");
+    expect(migration?.sql).toContain("expression_asin");
+  });
+
   it("allows campaign-creation change sets and create actions", async () => {
     const migrations = await loadMigrations();
     const migration = migrations.find(

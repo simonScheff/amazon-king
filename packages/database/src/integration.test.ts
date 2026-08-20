@@ -13,6 +13,7 @@ import {
   campaignDailySeries,
   listCampaignRows,
   listNegativeKeywordRows,
+  listNegativeTargetRows,
   listSearchTermCampaignRows,
   listSearchTermRollupRows,
   overviewRoyaltySeries,
@@ -24,7 +25,9 @@ import {
   upsertAdGroup,
   upsertCampaign,
   deleteMissingNegativeKeywords,
+  deleteMissingNegativeTargets,
   upsertNegativeKeyword,
+  upsertNegativeTarget,
   listEntityChanges,
 } from "./repositories/structure.js";
 import {
@@ -346,6 +349,82 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     ).toBe(1);
     await expect(listNegativeKeywordRows(pool, campaign.id)).resolves.toEqual([
       expect.objectContaining({ id: "amzn-negative-ad-group" }),
+    ]);
+  });
+
+  it("upserts negative ASIN targets idempotently and drops missing ones", async () => {
+    const profileId = await seedProfile(pool);
+    const campaign = await upsertCampaign(pool, {
+      profileId,
+      amazonCampaignId: "amzn-campaign-negative-targets",
+      name: "Negative target campaign",
+      state: "enabled",
+    });
+    const adGroup = await upsertAdGroup(pool, {
+      profileId,
+      campaignId: campaign.id,
+      amazonAdGroupId: "amzn-ad-group-negative-targets",
+      name: "Product ad group",
+      state: "enabled",
+    });
+
+    const first = await upsertNegativeTarget(pool, {
+      profileId,
+      campaignId: campaign.id,
+      amazonNegativeTargetId: "amzn-negative-target-campaign",
+      expressionAsin: "B0CRHVCT1T",
+      state: "ENABLED",
+    });
+    const repeated = await upsertNegativeTarget(pool, {
+      profileId,
+      campaignId: campaign.id,
+      amazonNegativeTargetId: "amzn-negative-target-campaign",
+      expressionAsin: "B0CRHVCT1T",
+      state: "PAUSED",
+    });
+    await upsertNegativeTarget(pool, {
+      profileId,
+      campaignId: campaign.id,
+      adGroupId: adGroup.id,
+      amazonNegativeTargetId: "amzn-negative-target-ad-group",
+      expressionAsin: "B0FR4NDK6Y",
+      state: "ENABLED",
+    });
+
+    expect(repeated.id).toBe(first.id);
+    await expect(listNegativeTargetRows(pool, campaign.id)).resolves.toEqual([
+      {
+        id: "amzn-negative-target-campaign",
+        asin: "B0CRHVCT1T",
+        targetType: "ASIN_SAME_AS",
+        level: "campaign",
+        adGroupId: null,
+        adGroupName: null,
+        state: "PAUSED",
+      },
+      {
+        id: "amzn-negative-target-ad-group",
+        asin: "B0FR4NDK6Y",
+        targetType: "ASIN_SAME_AS",
+        level: "ad_group",
+        adGroupId: "amzn-ad-group-negative-targets",
+        adGroupName: "Product ad group",
+        state: "ENABLED",
+      },
+    ]);
+
+    expect(
+      await deleteMissingNegativeTargets(pool, profileId, [
+        "amzn-negative-target-ad-group",
+      ]),
+    ).toBe(1);
+    const remaining = await pool.query<{ n: string }>(
+      `select count(*)::text as n from negative_targets where campaign_id = $1`,
+      [campaign.id],
+    );
+    expect(remaining.rows[0]?.n).toBe("1");
+    await expect(listNegativeTargetRows(pool, campaign.id)).resolves.toEqual([
+      expect.objectContaining({ id: "amzn-negative-target-ad-group" }),
     ]);
   });
 

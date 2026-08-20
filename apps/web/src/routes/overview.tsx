@@ -322,6 +322,11 @@ export function OverviewPage() {
                           <p className="mt-1.5 line-clamp-3 text-sm text-zinc-200">
                             {r.rationale}
                           </p>
+                          <p className="mt-1.5 text-xs text-zinc-500">
+                            <time dateTime={r.createdAt}>
+                              Created {formatDateTime(r.createdAt)}
+                            </time>
+                          </p>
                         </Link>
                       </li>
                     ))}

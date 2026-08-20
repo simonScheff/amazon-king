@@ -23,6 +23,8 @@ in `schema_migrations`. The shape follows `docs/plan.md` §7.
 | `0008_login_token_next_path.sql`  | `login_tokens.next_path` — same-origin return path for the re-auth flow.                                                                                                                                                                                                                  |
 | `0009_campaign_update.sql`        | Change-set kind `campaign_update`; action types `update_campaign_state` and `update_campaign_name`.                                                                                                                                                                                       |
 | `0010_metric_units.sql`           | `units`, `units_sold_clicks7d`, and `units_sold_clicks14d` on all five daily fact tables.                                                                                                                                                                                                |
+| `0011_recommendation_dismissals.sql` | `recommendation_dismissals` keyed by the worker's identity tuple so a rejected finding is not re-raised.                                                                                                                                                                               |
+| `0012_negative_targets.sql`       | `negative_targets` table persisting campaign/ad-group negative ASIN targets returned by structure sync.                                                                                                                                                                                |
 
 ## Conventions
 
@@ -158,6 +160,8 @@ erDiagram
     ad_groups ||--o{ targets : contains
     campaigns ||--o{ negative_keywords : blocks
     ad_groups |o--o{ negative_keywords : blocks
+    campaigns ||--o{ negative_targets : blocks
+    ad_groups |o--o{ negative_targets : blocks
 
     campaigns {
         bigint id PK
@@ -191,6 +195,11 @@ erDiagram
         text keyword_text
         text match_type
     }
+    negative_targets {
+        bigint id PK
+        text amazon_negative_target_id
+        text expression_asin
+    }
     entity_change_history {
         bigint id PK
         text entity_type
@@ -205,7 +214,8 @@ erDiagram
   `target_kind` (`keyword` | `product`). Keywords store
   `{type, value}` in `expression` and carry a `match_type`; product targets
   store the raw targeting expression and leave `match_type` null.
-- `negative_keywords.ad_group_id` is nullable: null means campaign-level.
+- `negative_keywords.ad_group_id` and `negative_targets.ad_group_id` are
+  nullable: null means campaign-level.
 - Every structure upsert diffs name/bid/budget/state and appends to
   `entity_change_history` (`entity_type` is `campaign`, `ad_group`, `ad`, or
   `target`; `entity_id` is the internal PK), giving an Amazon-side change

@@ -20,9 +20,9 @@ new advice.
 
 Each run:
 
-1. Loads the profile's structure, its synced negative keywords, daily metrics,
-   your [book economics](/guide/book-economics), and recent applied changes
-   (cooldowns).
+1. Loads the profile's structure, its synced negative keywords and negative
+   ASIN targets, daily metrics, your [book economics](/guide/book-economics),
+   and recent applied changes (cooldowns).
 2. Evaluates all **nine versioned rules** over four evidence windows —
    7, 14, 30, and 60 days.
 3. **Deduplicates across windows**: the same rule firing on the same entity
@@ -32,9 +32,12 @@ Each run:
 5. Skips any identity you **rejected**, for 60 days after the rejection.
 6. Expires stale pending recommendations first: each recommendation is
    created with `expires_at` three days out and transitions
-   `pending → expired` once stale. A pending cannibalization finding is also
-   expired as soon as a negative keyword resolves it, rather than waiting out
-   those three days.
+   `pending → expired` once stale. A pending or approved finding is also
+   expired as soon as a synced negative resolves it, rather than waiting out
+   those three days: `cannibalization_conflict` when the term is blocked in
+   enough campaigns, `wasteful_search_term` when this campaign can no longer
+   serve the term, and `high_ctr_poor_conversion` when the remaining
+   unblocked traffic would not trigger the rule.
 
 Every stored recommendation records its rule version, exact evidence inputs,
 evidence window, and data-freshness timestamp, so any finding can be traced
@@ -56,8 +59,10 @@ in [Optimization rules](/reference/optimization-rules).
 ## The recommendations UI
 
 `/recommendations` lists findings with filters by **type** and **state**, and
-a table with five columns: **Priority** (1–5), **Finding**, **State**,
-**Evidence** (window), and **Confidence**.
+a table with six columns: **Priority** (1–5), **Finding**, **State**,
+**Evidence** (window), **Created** (date and time the finding was stored),
+and **Confidence**. The overview's pending list shows the same created
+timestamp on each card.
 
 States are `pending`, `approved`, `rejected`, `expired`, `applied`, and
 `protected`.
@@ -149,8 +154,11 @@ links to the book's retail listing, and offers four responses:
   price against comparable titles, title and blurb, Look Inside, reviews,
   targeting fit) with "remind me in 30 days".
 - **Block the terms that never order** — the campaign's zero-order shopper
-  terms with their clicks and spend; the chosen ones become a draft change set
-  of campaign-level negatives.
+  terms that are not already a negative, with their clicks and spend; the
+  chosen ones become a draft change set of campaign-level negatives. Exact
+  negatives only hide the identical query; a phrase negative hides any query
+  that contains those words in order. Historical clicks stay in the evidence
+  window after you apply a negative, but those terms are not offered again.
 - **Cap what one click may cost** — the same
   [Max CPC ceiling](/guide/campaign-tools#max-cpc-ceiling) as the campaign
   page, prefilled below the observed average CPC. The suggestion is a cut

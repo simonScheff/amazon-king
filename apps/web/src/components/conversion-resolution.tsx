@@ -176,6 +176,14 @@ export function ConversionResolution({
                 <dd>{formatDateTime(data.expiresAt)}</dd>
               </div>
               <div className="grid gap-1 py-2 sm:grid-cols-[12rem_1fr]">
+                <dt className="text-zinc-500">Created</dt>
+                <dd>
+                  <time dateTime={recommendation.createdAt}>
+                    {formatDateTime(recommendation.createdAt)}
+                  </time>
+                </dd>
+              </div>
+              <div className="grid gap-1 py-2 sm:grid-cols-[12rem_1fr]">
                 <dt className="text-zinc-500">Before any write</dt>
                 <dd>
                   Amazon state is re-read and guardrails re-checked at apply.
@@ -463,9 +471,8 @@ function NegativesOption({ data }: { data: ConversionResolutionContext }) {
   if (data.wastefulTerms.length === 0) {
     return (
       <p className="rounded-md border border-zinc-800 bg-zinc-950/50 px-4 py-3 text-sm text-zinc-400">
-        No shopper term in this window took clicks without an order, so there is
-        nothing safe to block. The spend is spread across terms that do convert
-        somewhere.
+        Nothing left to block. Every zero-order term in this window is already a
+        negative on this campaign, or none of them took a click.
       </p>
     );
   }

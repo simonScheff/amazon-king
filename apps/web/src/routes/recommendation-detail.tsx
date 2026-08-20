@@ -215,7 +215,11 @@ export function RecommendationDetailPage() {
             </div>
             <div>
               <dt className="text-xs text-zinc-500">Created</dt>
-              <dd>{formatDateTime(r.createdAt)}</dd>
+              <dd>
+                <time dateTime={r.createdAt}>
+                  {formatDateTime(r.createdAt)}
+                </time>
+              </dd>
             </div>
           </dl>
           {action.actionable ? (

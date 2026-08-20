@@ -21,9 +21,11 @@ The route surface is `docs/plan.md` §11 plus the frontend's contract
 extensions: `GET /api/change-sets`, cannibalization comparison, campaign-level
 negative-exact and negative-target draft creation, `csrfToken` on the session
 response, `amazonConsoleUrl` on campaign list/detail payloads (built from the
-profile's `account_id` entity id, null when absent), and the cross-campaign
-search-term screens `GET /api/search-terms` and `GET /api/search-terms/:term`
-(detail includes a per-day `daily` series for the trend chart).
+profile's `account_id` entity id, null when absent), `negativeTargets` on
+`GET /api/campaigns/:id` (synced `ASIN_SAME_AS` exclusions, same book-filter
+semantics as `negativeKeywords`), and the cross-campaign search-term screens
+`GET /api/search-terms` and `GET /api/search-terms/:term` (detail includes a
+per-day `daily` series for the trend chart).
 
 `GET /api/dashboard/summary` returns a `daily` series, `writesDisabled`, and
 `previous` — totals for the comparison window, which is the immediately
@@ -77,7 +79,9 @@ exact keyword — or a negative ASIN target when the term is an ASIN — in ever
 conflicting campaign, with `metadata.dependsOnChangeSetId` pointing at the
 creation set. `applyLoadedSet` rejects such a set with `DEPENDENCY_NOT_APPLIED`
 until the referenced set is `applied`, so the term is never blocked in every
-campaign at once, which would strand the traffic with nowhere to land.
+campaign at once, which would strand the traffic with nowhere to land. A
+verified apply of those negatives (or of `add_negative_exact`) enqueues a
+`structure_sync` and moves the finding `approved → applied`.
 
 ## Conversion findings
 
@@ -89,9 +93,10 @@ guards.
 Amazon id and name, its console URL, the metrics stored in
 `recommendation_evidence.inputs`, the books its ads map to (title, marketplace
 ASIN, cover), and the campaign's zero-order shopper terms over the evidence
-window, ranked by spend. `metrics.suggestedMaxCpc` is presentation only — a cut
-below the observed average CPC, never a computed break-even, which would need a
-conversion rate the finding does not have.
+window, ranked by spend, excluding terms a synced negative already blocks.
+`metrics.suggestedMaxCpc` is presentation only — a cut below the observed
+average CPC, never a computed break-even, which would need a conversion rate
+the finding does not have.
 
 `POST /api/campaigns/:campaignId/negatives` takes `{ searchTerms }` and drafts
 one `recommendation`-kind change set adding a campaign-level negative exact per

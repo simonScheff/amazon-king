@@ -120,10 +120,12 @@ export interface Target {
   raw: unknown;
 }
 
-/** A campaign-level negative product target (e.g. an ASIN_SAME_AS exclusion). */
+/** A campaign- or ad-group-level negative product target (ASIN_SAME_AS). */
 export interface NegativeTarget {
   negativeTargetId: string;
   campaignId: string;
+  /** Null for campaign-level exclusions. */
+  adGroupId: string | null;
   state: string;
   /** Parsed expression predicates (resolvedExpression preferred over expression). */
   expression: TargetExpression[];

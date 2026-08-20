@@ -17,7 +17,7 @@ function draft(overrides: Partial<RecommendationDraft>): RecommendationDraft {
     confidence: 0.5,
     impactMicros: 0,
     evidenceWindow: TEST_WINDOW,
-    ruleVersion: "wasteful_search_term@1",
+    ruleVersion: "wasteful_search_term@2",
     evidenceInputs: {},
     requiresHumanReview: false,
     ...overrides,
