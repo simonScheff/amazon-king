@@ -34,6 +34,9 @@ import {
   listLatestBookEconomicsByWorkspace,
   listUnmappedAdvertisedProducts,
   mapAdvertisedProductToBook,
+  createBook,
+  getBook,
+  linkBookToProfiles,
   upsertBookEconomics,
 } from "./repositories/books.js";
 import {
@@ -610,6 +613,96 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         date: "2026-08-14",
         estimatedRoyalty: null,
       }),
+    ]);
+  });
+
+  it("links a catalog book to a marketplace that has no ads yet", async () => {
+    const profileId = await seedProfile(pool);
+    const workspace = await pool.query<{
+      workspace_id: string;
+      connection_id: string;
+    }>(
+      `select c.workspace_id::text, c.id::text as connection_id
+       from amazon_profiles p join amazon_connections c on c.id = p.connection_id
+       where p.id = $1`,
+      [profileId],
+    );
+    const workspaceId = workspace.rows[0]!.workspace_id;
+    const ukProfile = await pool.query<{ id: string }>(
+      `insert into amazon_profiles
+         (connection_id, profile_id, region, country_code, currency_code)
+       values ($1, 'amzn-profile-uk-' || gen_random_uuid(), 'EU', 'UK', 'GBP')
+       returning id::text as id`,
+      [workspace.rows[0]!.connection_id],
+    );
+    const ukProfileId = ukProfile.rows[0]!.id;
+
+    const book = await createBook(pool, {
+      workspaceId,
+      asin: "B0CV4BRP1G",
+      title: "Monster Truck Coloring Book",
+      format: "paperback",
+    });
+    const foreign = await createBook(pool, {
+      workspaceId,
+      asin: "B0C9SG21QX",
+      title: "Tractor Coloring Book",
+      format: "paperback",
+    });
+
+    const first = await linkBookToProfiles(pool, {
+      workspaceId,
+      bookId: book.id,
+      profileIds: [ukProfileId],
+      asin: "B0CV4BRP1G",
+    });
+    expect(first).toMatchObject({
+      ok: true,
+      book: {
+        id: book.id,
+        marketplaceAsins: [
+          { profileId: expect.any(String), asin: "B0CV4BRP1G" },
+        ],
+      },
+    });
+    if (!first.ok) throw new Error("expected link to succeed");
+    expect(first.book.marketplaceAsins[0]?.profileId).not.toBe("");
+
+    const repeated = await linkBookToProfiles(pool, {
+      workspaceId,
+      bookId: book.id,
+      profileIds: [ukProfileId],
+      asin: "B0CV4BRP1G",
+    });
+    expect(repeated).toMatchObject({ ok: true, book: { id: book.id } });
+
+    const mismatch = await linkBookToProfiles(pool, {
+      workspaceId,
+      bookId: book.id,
+      profileIds: [ukProfileId],
+      asin: "B0C9SG21QX",
+    });
+    expect(mismatch).toEqual({ ok: false, reason: "asin_mismatch" });
+
+    const taken = await linkBookToProfiles(pool, {
+      workspaceId,
+      bookId: foreign.id,
+      profileIds: [ukProfileId],
+      asin: "B0CV4BRP1G",
+    });
+    expect(taken).toEqual({ ok: false, reason: "asin_already_linked" });
+
+    const unknownProfile = await linkBookToProfiles(pool, {
+      workspaceId,
+      bookId: book.id,
+      profileIds: ["999999999"],
+      asin: "B0CV4BRP1G",
+    });
+    expect(unknownProfile).toEqual({ ok: false, reason: "not_found" });
+
+    const reloaded = await getBook(pool, book.id);
+    expect(reloaded?.marketplaceAsins).toEqual([
+      expect.objectContaining({ asin: "B0CV4BRP1G" }),
     ]);
   });
 

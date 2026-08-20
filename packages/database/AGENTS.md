@@ -46,3 +46,7 @@ To add a migration, use the `add-migration` skill.
   not re-raised from historical search-term spend. Campaign detail reads them
   through `dashboard.listNegativeTargetRows` (same book-filter `EXISTS` as
   `listNegativeKeywordRows`).
+- `book_profile_links` is unique on `(profile_id, marketplace_asin)` as well as
+  `(book_id, profile_id)`. Marketplace links come from advertised ASINs or from
+  owner-confirmed `linkBookToProfiles` when a book has no ads in that market
+  yet; two catalog books cannot claim the same ASIN in one profile.

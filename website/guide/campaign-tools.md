@@ -46,7 +46,11 @@ The wizard at `/campaigns/new` has six steps:
    before you deliberately enable it.
 3. **Ad group** — name and default bid.
 4. **Book** — pick a book from your catalog; the wizard uses its per-market
-   ASINs for the product ads.
+   ASINs for the product ads. Only books already linked to every selected
+   market appear in the dropdown. Books that are missing a selected market
+   are listed below it so you can confirm the marketplace ASIN and link them
+   in place (the listing must already exist on that Amazon store). You can
+   also add a market from [Settings](/guide/book-economics#expanding-to-another-marketplace).
 5. **Keywords & targets** — keywords (EXACT, PHRASE, or BROAD, each with a
    bid) and/or ASIN product targets (optional bid). Entering a keyword or
    ASIN switches the campaign to **MANUAL** targeting automatically: Amazon

@@ -216,6 +216,43 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
     return profile;
   }
 
+  async function toContractBook(book: books.Book): Promise<Book> {
+    const savedEconomics = await books.listLatestBookEconomicsByWorkspace(
+      db,
+      book.workspaceId,
+    );
+    const profileIds =
+      book.profileIds.length > 0
+        ? book.profileIds
+        : book.marketplaceAsins.map((entry) => entry.profileId);
+    return {
+      id: book.id,
+      asin: book.asin,
+      title: book.title,
+      format: book.format,
+      status: book.status,
+      coverImageUrl: coverImageUrlOf(book.coverJson),
+      profileIds,
+      marketplaceAsins: book.marketplaceAsins,
+      economics: savedEconomics
+        .filter((economics) => economics.bookId === book.id)
+        .map((economics) => ({
+          profileId: economics.amazonProfileId,
+          effectiveFrom: isoDate(economics.effectiveFrom),
+          currency: economics.currency,
+          listPrice: economics.listPrice,
+          estimatedRoyaltyPerSale: economics.estimatedRoyaltyPerSale,
+          targetAcos:
+            economics.targetAcos === null ? null : Number(economics.targetAcos),
+          goalMode: economics.goalMode,
+          maxSpendWithoutSale: economics.maxSpendWithoutSale,
+          maxBid: economics.maxBid,
+          maxDailyBudget: economics.maxDailyBudget,
+          notes: economics.notes,
+        })),
+    };
+  }
+
   /** Resolve an optional product filter to a workspace-owned book. */
   async function requireBook(workspaceId: string, bookId: string | null) {
     if (bookId === null) return null;
@@ -1191,6 +1228,53 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         })),
         economics: [],
       };
+    },
+
+    async linkBookToMarkets(auth, bookId, input, meta): Promise<Book> {
+      const book = await books.getBook(db, bookId);
+      if (!book || book.workspaceId !== auth.workspaceId) {
+        throw notFound("Unknown book");
+      }
+      const selectedProfiles = await Promise.all(
+        input.profileIds.map((profileId) =>
+          requireProfile(auth.workspaceId, profileId),
+        ),
+      );
+      const linked = await books.linkBookToProfiles(db, {
+        workspaceId: auth.workspaceId,
+        bookId: book.id,
+        profileIds: selectedProfiles.map((profile) => profile.id),
+        asin: input.asin,
+      });
+      if (!linked.ok) {
+        if (linked.reason === "asin_already_linked") {
+          throw conflict(
+            "ASIN_ALREADY_LINKED",
+            "Another book already uses this ASIN in one of the selected markets",
+          );
+        }
+        if (linked.reason === "asin_mismatch") {
+          throw conflict(
+            "BOOK_PROFILE_ASIN_MISMATCH",
+            "This book is already linked to one of the selected markets with a different ASIN",
+          );
+        }
+        throw notFound("Unknown book or profile");
+      }
+      await audit.insertAuditEvent(db, {
+        workspaceId: auth.workspaceId,
+        actorUserId: auth.userId,
+        event: "books.link_marketplace",
+        entityType: "book",
+        entityId: linked.book.id,
+        ip: meta.ip ?? null,
+        sessionId: auth.sessionId,
+        details: {
+          asin: input.asin,
+          profileIds: input.profileIds,
+        },
+      });
+      return toContractBook(linked.book);
     },
 
     async saveBookEconomics(auth, bookId, input, meta) {

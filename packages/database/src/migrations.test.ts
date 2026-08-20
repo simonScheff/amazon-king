@@ -73,6 +73,15 @@ describe("migration files", () => {
     expect(migration?.sql).toContain("expression_asin");
   });
 
+  it("uniques a marketplace ASIN to one book per profile", async () => {
+    const migrations = await loadMigrations();
+    const migration = migrations.find(
+      (file) => file.filename === "0013_book_profile_link_asin_unique.sql",
+    );
+    expect(migration?.sql).toContain("idx_book_profile_links_profile_asin");
+    expect(migration?.sql).toContain("(profile_id, marketplace_asin)");
+  });
+
   it("allows campaign-creation change sets and create actions", async () => {
     const migrations = await loadMigrations();
     const migration = migrations.find(

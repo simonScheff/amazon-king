@@ -1269,6 +1269,86 @@ export class FakeDb {
 
       // -- books -----------------------------------------------------------------
       {
+        match: "as asin_mismatch",
+        handle: (p, db) => {
+          const bookId = String(p[0]);
+          const profilePks = (p[1] as string[]).map(String);
+          const workspaceId = p[2];
+          const asin = String(p[3]);
+          const book = t.books.find(
+            (row) => row.id === bookId && row.workspace_id === workspaceId,
+          );
+          const selected = profilePks.map((id) =>
+            t.amazonProfiles.find(
+              (row) =>
+                row.id === id &&
+                db.profileForConnectionWorkspace(workspaceId, row),
+            ),
+          );
+          const bookOk = book !== undefined;
+          const profilesOk =
+            selected.length === profilePks.length &&
+            selected.every((row) => row !== undefined);
+          const asinMismatch = profilePks.some((profileId) =>
+            t.bookProfileLinks.some(
+              (link) =>
+                link.book_id === bookId &&
+                link.profile_id === profileId &&
+                link.marketplace_asin !== asin,
+            ),
+          );
+          const asinTaken = profilePks.some((profileId) =>
+            t.bookProfileLinks.some(
+              (link) =>
+                link.profile_id === profileId &&
+                link.marketplace_asin === asin &&
+                link.book_id !== bookId,
+            ),
+          );
+          if (!bookOk || !profilesOk || asinMismatch || asinTaken) {
+            return this.ok([
+              {
+                book_ok: bookOk,
+                profiles_ok: profilesOk,
+                asin_mismatch: asinMismatch,
+                asin_taken: asinTaken,
+                linked_count: 0,
+              },
+            ]);
+          }
+          for (const profileId of profilePks) {
+            const existing = t.bookProfileLinks.find(
+              (link) =>
+                link.book_id === bookId && link.profile_id === profileId,
+            );
+            if (existing) {
+              existing.marketplace_asin = asin;
+              existing.enabled = true;
+            } else {
+              t.bookProfileLinks.push({
+                book_id: bookId,
+                profile_id: profileId,
+                marketplace_asin: asin,
+                enabled: true,
+              });
+            }
+          }
+          return this.ok([
+            {
+              book_ok: true,
+              profiles_ok: true,
+              asin_mismatch: false,
+              asin_taken: false,
+              linked_count: profilePks.length,
+            },
+          ]);
+        },
+      },
+      {
+        match: "select distinct on (be.book_id, be.profile_id)",
+        handle: () => this.ok([]),
+      },
+      {
         match: "select distinct b.id as book_id",
         handle: (p) => {
           const adGroups = t.adGroups.filter((g) => g.campaign_id === p[0]);

@@ -3,6 +3,7 @@ import type { FastifyBaseLogger as Logger } from "fastify";
 import type { ApiConfig } from "../config.js";
 import type { AuthContext } from "./types.js";
 import { createReadService } from "./read.js";
+import { FakeDb } from "../test/fake-db.js";
 
 const auth: AuthContext = {
   sessionId: "session-1",
@@ -363,6 +364,151 @@ describe("read service book mapping", () => {
         auth,
         "book-9",
         { coverImageUrl: "https://example.com/cover.jpg" },
+        {},
+      ),
+    ).rejects.toMatchObject({ statusCode: 404 });
+  });
+});
+
+describe("read service marketplace linking", () => {
+  const owner: AuthContext = {
+    ...auth,
+    workspaceId: "1",
+  };
+
+  function setup() {
+    const db = new FakeDb();
+    db.seedWorkspace("1");
+    db.seedUser("owner@example.com", "user-1", "1");
+    const connection = db.seedConnection({ id: "conn-1", workspace_id: "1" });
+    const us = db.seedProfile({
+      id: "101",
+      connection_id: connection.id,
+      profile_id: "profile-us",
+      country_code: "US",
+      currency_code: "USD",
+    });
+    const uk = db.seedProfile({
+      id: "102",
+      connection_id: connection.id,
+      profile_id: "profile-uk",
+      region: "EU",
+      country_code: "UK",
+      currency_code: "GBP",
+    });
+    const book = db.seedBook({
+      id: "book-1",
+      workspace_id: "1",
+      asin: "B0CV4BRP1G",
+      title: "Monster Truck Coloring Book",
+      format: "paperback",
+    });
+    const other = db.seedBook({
+      id: "book-2",
+      workspace_id: "1",
+      asin: "B0C9SG21QX",
+      title: "Tractor Coloring Book",
+      format: "paperback",
+    });
+    const service = createReadService({
+      db: db as never,
+      config: {} as ApiConfig,
+      logger: {} as Logger,
+    });
+    return { db, service, us, uk, book, other };
+  }
+
+  it("links a book to a new marketplace, audits, and is idempotent", async () => {
+    const { db, service } = setup();
+
+    const linked = await service.linkBookToMarkets(
+      owner,
+      "book-1",
+      { profileIds: ["profile-uk"], asin: "B0CV4BRP1G" },
+      { ip: "127.0.0.1" },
+    );
+    expect(linked).toMatchObject({
+      id: "book-1",
+      title: "Monster Truck Coloring Book",
+      profileIds: ["profile-uk"],
+      marketplaceAsins: [{ profileId: "profile-uk", asin: "B0CV4BRP1G" }],
+      economics: [],
+    });
+
+    const repeated = await service.linkBookToMarkets(
+      owner,
+      "book-1",
+      { profileIds: ["profile-uk"], asin: "B0CV4BRP1G" },
+      { ip: "127.0.0.1" },
+    );
+    expect(repeated.marketplaceAsins).toEqual([
+      { profileId: "profile-uk", asin: "B0CV4BRP1G" },
+    ]);
+    expect(db.tables.bookProfileLinks).toHaveLength(1);
+
+    const auditEvents = db.tables.auditEvents.filter(
+      (row) => row.event === "books.link_marketplace",
+    );
+    expect(auditEvents).toHaveLength(2);
+    expect(auditEvents[0]?.details).toEqual({
+      asin: "B0CV4BRP1G",
+      profileIds: ["profile-uk"],
+    });
+  });
+
+  it("rejects a different ASIN on an existing marketplace link", async () => {
+    const { db, service } = setup();
+    db.seedBookProfileLink({
+      book_id: "book-1",
+      profile_id: "102",
+      marketplace_asin: "B0CV4BRP1G",
+    });
+
+    await expect(
+      service.linkBookToMarkets(
+        owner,
+        "book-1",
+        { profileIds: ["profile-uk"], asin: "B0C9SG21QX" },
+        {},
+      ),
+    ).rejects.toMatchObject({ code: "BOOK_PROFILE_ASIN_MISMATCH" });
+  });
+
+  it("rejects an ASIN already owned by another book in that market", async () => {
+    const { db, service } = setup();
+    db.seedBookProfileLink({
+      book_id: "book-2",
+      profile_id: "102",
+      marketplace_asin: "B0CV4BRP1G",
+    });
+
+    await expect(
+      service.linkBookToMarkets(
+        owner,
+        "book-1",
+        { profileIds: ["profile-uk"], asin: "B0CV4BRP1G" },
+        {},
+      ),
+    ).rejects.toMatchObject({ code: "ASIN_ALREADY_LINKED" });
+  });
+
+  it("404s an unknown book and a profile outside the workspace", async () => {
+    const { service } = setup();
+
+    await expect(
+      service.linkBookToMarkets(
+        owner,
+        "book-9",
+        { profileIds: ["profile-uk"], asin: "B0CV4BRP1G" },
+        {},
+      ),
+    ).rejects.toMatchObject({ statusCode: 404 });
+
+    await expect(
+      service.linkBookToMarkets(
+        owner,
+        "book-1",
+        { profileIds: ["profile-missing"], asin: "B0CV4BRP1G" },
         {},
       ),
     ).rejects.toMatchObject({ statusCode: 404 });

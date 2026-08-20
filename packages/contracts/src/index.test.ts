@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   bookSchema,
   bookMappingInputSchema,
+  bookProfileLinkInputSchema,
   campaignDetailSchema,
   cannibalizationResolutionContextSchema,
   campaignListRowSchema,
@@ -237,6 +238,27 @@ describe("contracts smoke test", () => {
       title: "My Coloring Book",
       format: "paperback",
     });
+  });
+
+  it("normalizes a marketplace link and uppercases the ASIN", () => {
+    expect(
+      bookProfileLinkInputSchema.parse({
+        profileIds: ["profile-uk", "profile-uk", "profile-de"],
+        asin: " b0cv4brp1g ",
+      }),
+    ).toEqual({
+      profileIds: ["profile-uk", "profile-de"],
+      asin: "B0CV4BRP1G",
+    });
+  });
+
+  it("rejects a marketplace link whose ASIN is not a KDP product id", () => {
+    expect(() =>
+      bookProfileLinkInputSchema.parse({
+        profileIds: ["profile-uk"],
+        asin: "not-an-asin",
+      }),
+    ).toThrow();
   });
 
   it("accepts saved marketplace economics on a book", () => {

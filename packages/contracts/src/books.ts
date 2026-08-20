@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ASIN_PATTERN } from "./asin.js";
 import {
   currencyCodeSchema,
   isoDateSchema,
@@ -78,6 +79,24 @@ export const bookMappingInputSchema = z.object({
   coverImageUrl: coverImageUrlSchema.optional(),
 });
 export type BookMappingInput = z.infer<typeof bookMappingInputSchema>;
+
+/**
+ * Attach an existing catalog book to one or more marketplaces that do not
+ * yet have ads. Owner-confirmed; Amazon validates the ASIN at apply time.
+ */
+export const bookProfileLinkInputSchema = z.object({
+  profileIds: z
+    .array(z.string().min(1))
+    .min(1)
+    .max(100)
+    .transform((values) => [...new Set(values)]),
+  asin: z
+    .string()
+    .trim()
+    .regex(ASIN_PATTERN, "Expected a 10-character ASIN starting with B0")
+    .transform((value) => value.toUpperCase()),
+});
+export type BookProfileLinkInput = z.infer<typeof bookProfileLinkInputSchema>;
 
 /** Set or clear the cover image URL of an already-mapped book. */
 export const bookCoverInputSchema = z.object({

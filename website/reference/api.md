@@ -392,6 +392,25 @@ profiles.
 | format        | enum     | `paperback`, `hardcover`, `kindle`, `other`          |
 | coverImageUrl | string   | Optional URL, max 2048 chars                         |
 
+### `POST /api/books/:bookId/profile-links`
+
+Attaches an existing catalog book to one or more marketplaces that do not
+yet have ads. Owner-confirmed; Amazon validates the ASIN when the campaign
+draft is applied.
+
+- **Auth:** session + CSRF. **Rate:** WRITE.
+- Response `201`: the updated book (same shape as `GET /api/books` items).
+
+| Field      | Type     | Constraints                                          |
+| ---------- | -------- | ---------------------------------------------------- |
+| profileIds | string[] | 1–100 entries, deduplicated                          |
+| asin       | string   | KDP ASIN (`B0` + 8 alphanumeric), trimmed, uppercased |
+
+Errors: `404 NOT_FOUND` (unknown book or profile), `409 ASIN_ALREADY_LINKED`
+(another book already uses this ASIN in one of the selected markets),
+`409 BOOK_PROFILE_ASIN_MISMATCH` (this book is already linked to one of the
+selected markets with a different ASIN).
+
 ### `POST /api/books/:bookId/economics`
 
 Sets user-entered KDP royalty economics (effective-dated).

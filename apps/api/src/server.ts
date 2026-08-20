@@ -6,6 +6,7 @@ import {
   bookEconomicsInputSchema,
   bookCoverInputSchema,
   bookMappingInputSchema,
+  bookProfileLinkInputSchema,
   campaignCreationCreateSchema,
   campaignCreationResultSchema,
   campaignNegativesCreateSchema,
@@ -481,6 +482,23 @@ export async function buildServer(
       const input = parse(bookMappingInputSchema, request.body);
       const book = await services.read.mapAdvertisedProduct(
         auth,
+        input,
+        meta(request),
+      );
+      return reply.status(201).send(book);
+    },
+  );
+
+  app.post(
+    "/api/books/:bookId/profile-links",
+    { config: { rateLimit: WRITE_RATE } },
+    async (request, reply) => {
+      const auth = await authenticate(request);
+      const { bookId } = request.params as { bookId: string };
+      const input = parse(bookProfileLinkInputSchema, request.body);
+      const book = await services.read.linkBookToMarkets(
+        auth,
+        bookId,
         input,
         meta(request),
       );

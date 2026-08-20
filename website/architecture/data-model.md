@@ -25,6 +25,7 @@ in `schema_migrations`. The shape follows `docs/plan.md` §7.
 | `0010_metric_units.sql`           | `units`, `units_sold_clicks7d`, and `units_sold_clicks14d` on all five daily fact tables.                                                                                                                                                                                                |
 | `0011_recommendation_dismissals.sql` | `recommendation_dismissals` keyed by the worker's identity tuple so a rejected finding is not re-raised.                                                                                                                                                                               |
 | `0012_negative_targets.sql`       | `negative_targets` table persisting campaign/ad-group negative ASIN targets returned by structure sync.                                                                                                                                                                                |
+| `0013_book_profile_link_asin_unique.sql` | Unique `(profile_id, marketplace_asin)` on `book_profile_links` so one catalog book owns an advertised ASIN inside a profile. |
 
 ## Conventions
 
@@ -141,7 +142,11 @@ erDiagram
 ```
 
 - `books` is unique on `(workspace_id, asin, format)`; a book links to a
-  marketplace through `book_profile_links.marketplace_asin`.
+  marketplace through `book_profile_links.marketplace_asin`. Links are
+  created from advertised ASINs (`POST /api/books/mappings`) or
+  owner-confirmed when a book has no ads in that market yet
+  (`POST /api/books/:bookId/profile-links`). `(profile_id, marketplace_asin)`
+  is unique — one catalog book owns an ASIN inside a profile.
 - `book_economics` is unique on `(book_id, profile_id, effective_from)` —
   effective-dated rows, so economic history is preserved. `goal_mode` is one
   of `profit`, `balanced`, `launch`, `visibility`; `target_acos` is a

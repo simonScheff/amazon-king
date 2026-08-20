@@ -9,8 +9,15 @@ export interface MarketplaceOption {
 
 const regionNames = new Intl.DisplayNames(["en"], { type: "region" });
 
+/** Amazon profile data can say UK; Intl.DisplayNames follows ISO 3166-1 (GB). */
+const countryCodeAliases: Readonly<Record<string, string>> = {
+  UK: "GB",
+};
+
 export function countryNameForCode(countryCode: string): string {
-  return regionNames.of(countryCode) ?? countryCode;
+  const iso =
+    countryCodeAliases[countryCode.toUpperCase()] ?? countryCode.toUpperCase();
+  return regionNames.of(iso) ?? countryCode;
 }
 
 /** Group enabled Amazon profiles into country choices for dashboard filtering. */

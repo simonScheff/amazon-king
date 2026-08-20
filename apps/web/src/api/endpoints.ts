@@ -29,9 +29,11 @@ import {
   searchTermListRowSchema,
   sessionInfoSchema,
   syncRunSchema,
+  type Book,
   type BookMappingInput,
   type BookEconomicsInput,
   type BookCoverInput,
+  type BookProfileLinkInput,
   type CampaignCreationCreate,
   type CampaignNegativesCreate,
   type ChangeSetCreate,
@@ -637,6 +639,33 @@ export function useMapAdvertisedBook() {
         schema: bookSchema,
       }),
     onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["books"] }),
+        qc.invalidateQueries({ queryKey: ["audit-events"] }),
+      ]);
+    },
+  });
+}
+
+export function useLinkBookToMarkets() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      bookId,
+      ...body
+    }: BookProfileLinkInput & { bookId: string }) =>
+      apiFetch(`/api/books/${bookId}/profile-links`, {
+        method: "POST",
+        body,
+        schema: bookSchema,
+      }),
+    onSuccess: async (updated) => {
+      qc.setQueryData<Book[]>(["books"], (previous) => {
+        if (!previous) return [updated];
+        return previous.map((book) =>
+          book.id === updated.id ? updated : book,
+        );
+      });
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["books"] }),
         qc.invalidateQueries({ queryKey: ["audit-events"] }),

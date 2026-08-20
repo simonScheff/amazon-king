@@ -56,6 +56,11 @@ filter with an `EXISTS (ad_groups → ads.asin → book_profile_links)` predicat
 and `book_id = any($n)`. The semantics are include-all at ad-group grain, union
 across selected books, and null or empty means unfiltered.
 
+`POST /api/books/:bookId/profile-links` attaches an existing catalog book to
+marketplaces that do not yet have ads (owner-confirmed ASIN). It is a local
+catalog write — CSRF + WRITE rate, no recent-auth, no Amazon call.
+`POST /api/books/mappings` remains the ads-derived identification path.
+
 ## Campaign creation
 
 `POST /api/campaign-creation-change-sets` is human-approved campaign creation.

@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   books: [] as unknown[],
   candidates: [] as unknown[],
   mapBook: vi.fn(),
+  linkMarkets: vi.fn(),
   saveEconomics: vi.fn(),
   saveCover: vi.fn(),
   mutation: vi.fn(),
@@ -18,6 +19,10 @@ vi.mock("../api/endpoints", () => ({
   useMapAdvertisedBook: () => ({
     isPending: false,
     mutate: mocks.mapBook,
+  }),
+  useLinkBookToMarkets: () => ({
+    isPending: false,
+    mutate: mocks.linkMarkets,
   }),
   useProfiles: () => ({
     isPending: false,
@@ -74,6 +79,7 @@ describe("SettingsPage book mapping", () => {
 
   beforeEach(() => {
     mocks.mapBook.mockReset();
+    mocks.linkMarkets.mockReset();
     mocks.saveEconomics.mockReset();
     mocks.saveCover.mockReset();
     mocks.mutation.mockReset();
@@ -244,6 +250,42 @@ describe("SettingsPage book mapping", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save cover" }));
     expect(mocks.saveCover).toHaveBeenLastCalledWith(
       { coverImageUrl: null },
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      }),
+    );
+  });
+
+  it("links an unmapped market with the catalog ASIN prefilled", () => {
+    mocks.books = [
+      {
+        id: "book-1",
+        asin: "B0CV4BRP1G",
+        title: "Monster Truck Coloring Book",
+        format: "paperback",
+        status: "active",
+        profileIds: ["profile-us"],
+        marketplaceAsins: [{ profileId: "profile-us", asin: "B0CV4BRP1G" }],
+        economics: [],
+      },
+    ];
+    render(<SettingsPage />);
+
+    expect(screen.getByText(/already for sale/i)).toBeInTheDocument();
+    const ukAsin = screen.getByLabelText(
+      "Monster Truck Coloring Book United Kingdom marketplace ASIN",
+    );
+    expect(ukAsin).toHaveValue("B0CV4BRP1G");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add to United Kingdom" }),
+    );
+    expect(mocks.linkMarkets).toHaveBeenCalledWith(
+      {
+        bookId: "book-1",
+        profileIds: ["profile-uk"],
+        asin: "B0CV4BRP1G",
+      },
       expect.objectContaining({
         onSuccess: expect.any(Function),
         onError: expect.any(Function),

@@ -4,6 +4,7 @@ import {
   marketplaceOptions,
   resolveCountry,
   sortMarketplacesBySpend,
+  countryNameForCode,
 } from "./marketplaces";
 
 function profile(
@@ -36,6 +37,11 @@ describe("marketplace country choices", () => {
 
     expect(options.map((option) => option.countryCode)).toEqual(["US", "GB"]);
     expect(options[1]?.profileIds).toEqual(["GB-GBP", "GB-second"]);
+  });
+
+  it("names Amazon's UK marketplace code as United Kingdom", () => {
+    expect(countryNameForCode("UK")).toBe("United Kingdom");
+    expect(countryNameForCode("GB")).toBe("United Kingdom");
   });
 
   it("defaults to the USA and falls back when no US profile is enabled", () => {

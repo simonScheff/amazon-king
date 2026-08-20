@@ -296,6 +296,110 @@ export async function mapAdvertisedProductToBook(
   return result.rows[0] ? toBook(result.rows[0]) : null;
 }
 
+export type LinkBookToProfilesFailure =
+  "not_found" | "asin_mismatch" | "asin_already_linked";
+
+export type LinkBookToProfilesResult =
+  { ok: true; book: Book } | { ok: false; reason: LinkBookToProfilesFailure };
+
+/**
+ * Attach an existing catalog book to marketplace profiles that do not yet
+ * have ads. Atomic: every requested profile is linked or none are. Same-ASIN
+ * retries are idempotent; a different ASIN on an existing link, or an ASIN
+ * already owned by another book in that profile, is rejected.
+ */
+export async function linkBookToProfiles(
+  db: Db,
+  input: {
+    workspaceId: string;
+    bookId: string;
+    profileIds: string[];
+    asin: string;
+  },
+): Promise<LinkBookToProfilesResult> {
+  const result = await db.query<{
+    book_ok: boolean;
+    profiles_ok: boolean;
+    asin_mismatch: boolean;
+    asin_taken: boolean;
+    linked_count: number;
+  }>(
+    `with requested as (
+       select unnest($2::bigint[]) as profile_id
+     ),
+     target_book as (
+       select b.id
+       from books b
+       where b.id = $1 and b.workspace_id = $3
+     ),
+     link_candidate_profiles as (
+       select p.id
+       from amazon_profiles p
+       join amazon_connections c on c.id = p.connection_id
+       join requested r on r.profile_id = p.id
+       where c.workspace_id = $3
+     ),
+     checks as (
+       select
+         exists (select 1 from target_book) as book_ok,
+         (select count(*) from link_candidate_profiles) = cardinality($2::bigint[])
+           as profiles_ok,
+         exists (
+           select 1
+           from requested r
+           join book_profile_links existing
+             on existing.book_id = $1
+            and existing.profile_id = r.profile_id
+            and existing.marketplace_asin <> $4
+         ) as asin_mismatch,
+         exists (
+           select 1
+           from requested r
+           join book_profile_links other
+             on other.profile_id = r.profile_id
+            and other.marketplace_asin = $4
+            and other.book_id <> $1
+         ) as asin_taken
+     ),
+     linked as (
+       insert into book_profile_links (book_id, profile_id, marketplace_asin, enabled)
+       select $1, p.id, $4, true
+       from link_candidate_profiles p, checks
+       where checks.book_ok
+         and checks.profiles_ok
+         and not checks.asin_mismatch
+         and not checks.asin_taken
+       on conflict (book_id, profile_id) do update set
+         marketplace_asin = excluded.marketplace_asin,
+         enabled = true
+       where book_profile_links.marketplace_asin = excluded.marketplace_asin
+       returning profile_id
+     )
+     select book_ok, profiles_ok, asin_mismatch, asin_taken,
+            (select count(*) from linked)::int as linked_count
+     from checks`,
+    [input.bookId, input.profileIds, input.workspaceId, input.asin],
+  );
+  const checks = result.rows[0];
+  if (!checks) {
+    return { ok: false, reason: "not_found" };
+  }
+  if (!checks.book_ok || !checks.profiles_ok) {
+    return { ok: false, reason: "not_found" };
+  }
+  if (checks.asin_mismatch) {
+    return { ok: false, reason: "asin_mismatch" };
+  }
+  if (checks.asin_taken) {
+    return { ok: false, reason: "asin_already_linked" };
+  }
+  const book = await getBook(db, input.bookId);
+  if (!book) {
+    return { ok: false, reason: "not_found" };
+  }
+  return { ok: true, book };
+}
+
 /** Update mutable book fields; only provided fields are changed. An explicit
  * `coverJson: null` clears the cover; `undefined` leaves it untouched. */
 export async function updateBook(

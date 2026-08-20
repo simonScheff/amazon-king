@@ -7,6 +7,7 @@ import type {
   BookCoverInput,
   BookEconomicsInput,
   BookMappingInput,
+  BookProfileLinkInput,
   CampaignCreationCreate,
   CampaignCreationResult,
   CampaignDetail,
@@ -194,6 +195,12 @@ export interface ReadService {
   mapAdvertisedProduct(
     auth: AuthContext,
     input: BookMappingInput,
+    meta: RequestMeta,
+  ): Promise<Book>;
+  linkBookToMarkets(
+    auth: AuthContext,
+    bookId: string,
+    input: BookProfileLinkInput,
     meta: RequestMeta,
   ): Promise<Book>;
   saveBookEconomics(

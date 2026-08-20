@@ -36,6 +36,26 @@ Submitting posts to `POST /api/books/mappings` and links the ASIN to a book
 in your workspace catalog, so dashboards and rules can attribute ad sales to
 a real book.
 
+## Expanding to another marketplace
+
+Catalog links are also how the new-campaign wizard knows which ASIN to put
+on a product ad. Those links are usually created from ads that already exist
+in a market. To advertise a book in a store where it has **no ads yet** —
+for example a US-only paperback you now want to run in the UK — open the
+book on **Settings** and use **Add to …**. Confirm the marketplace ASIN
+(KDP often reuses the same ASIN). The new-campaign wizard Book step offers
+the same control for books that do not yet cover every selected market.
+
+This does **not** enroll the paperback on Amazon.co.uk. The listing must
+already be for sale on that store in KDP. amazon-king only records the ASIN
+for the product ad; Amazon rejects apply if the ASIN is not yours there.
+Profit recommendations stay off for that market until you enter royalty
+economics.
+
+The API is `POST /api/books/:bookId/profile-links`. It is a local catalog
+write (session + CSRF), not an Amazon write, so it does not require recent
+sign-in.
+
 ## Entering economics
 
 Economics are entered per **book per market** (profile) on the Settings page.

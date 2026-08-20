@@ -1,11 +1,13 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 import { campaignCreationCreateSchema } from "@amazon-king/contracts";
 import { CampaignNewPage } from "./campaign-new";
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   mutate: vi.fn(),
+  linkMarkets: vi.fn(),
   search: {} as Record<string, unknown>,
   profiles: [
     {
@@ -36,6 +38,7 @@ const mocks = vi.hoisted(() => ({
   books: [
     {
       id: "book-1",
+      asin: "B0US000001",
       title: "Everywhere Book",
       format: "paperback",
       marketplaceAsins: [
@@ -45,6 +48,7 @@ const mocks = vi.hoisted(() => ({
     },
     {
       id: "book-2",
+      asin: "B0US000002",
       title: "US Only Book",
       format: "ebook",
       marketplaceAsins: [{ profileId: "profile-us", asin: "B0US000002" }],
@@ -55,6 +59,19 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mocks.navigate,
   useSearch: () => mocks.search,
+  Link: ({
+    to,
+    children,
+    className,
+  }: {
+    to: string;
+    children: ReactNode;
+    className?: string;
+  }) => (
+    <a href={to} className={className}>
+      {children}
+    </a>
+  ),
 }));
 
 vi.mock("../api/endpoints", () => ({
@@ -69,6 +86,10 @@ vi.mock("../api/endpoints", () => ({
     isPending: false,
     error: null,
     mutate: mocks.mutate,
+  }),
+  useLinkBookToMarkets: () => ({
+    isPending: false,
+    mutate: mocks.linkMarkets,
   }),
 }));
 
@@ -104,7 +125,12 @@ describe("CampaignNewPage", () => {
   beforeEach(() => {
     mocks.navigate.mockReset();
     mocks.mutate.mockReset();
+    mocks.linkMarkets.mockReset();
     mocks.search = {};
+    const usOnly = mocks.books[1] as {
+      marketplaceAsins: { profileId: string; asin: string }[];
+    };
+    usOnly.marketplaceAsins = [{ profileId: "profile-us", asin: "B0US000002" }];
   });
 
   it("requires at least one market and warns about write-disabled markets", () => {
@@ -155,6 +181,61 @@ describe("CampaignNewPage", () => {
     expect(
       screen.queryByRole("option", { name: "US Only Book (ebook)" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("links a US-only book to Germany from the Book step and then selects it", () => {
+    mocks.linkMarkets.mockImplementation(
+      (
+        body: { bookId: string; asin: string; profileIds: string[] },
+        opts: { onSuccess: (book: unknown) => void },
+      ) => {
+        const usOnly = mocks.books[1] as {
+          id: string;
+          title: string;
+          format: string;
+          asin: string;
+          marketplaceAsins: { profileId: string; asin: string }[];
+        };
+        usOnly.marketplaceAsins = [
+          ...usOnly.marketplaceAsins,
+          { profileId: body.profileIds[0]!, asin: body.asin },
+        ];
+        opts.onSuccess(usOnly);
+      },
+    );
+    render(<CampaignNewPage />);
+
+    fireEvent.click(screen.getByLabelText("United States market"));
+    fireEvent.click(screen.getByLabelText("Germany market"));
+    next();
+    fillCampaignStep();
+    next();
+    fillAdGroupStep();
+    next();
+
+    expect(
+      screen.queryByRole("option", { name: "US Only Book (ebook)" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("US Only Book")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("US Only Book Germany marketplace ASIN"),
+    ).toHaveValue("B0US000002");
+    fireEvent.click(screen.getByRole("button", { name: "Link to Germany" }));
+    expect(mocks.linkMarkets).toHaveBeenCalledWith(
+      {
+        bookId: "book-2",
+        profileIds: ["profile-de"],
+        asin: "B0US000002",
+      },
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      }),
+    );
+    expect(
+      screen.getByRole("option", { name: "US Only Book (ebook)" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Book")).toHaveValue("book-2");
   });
 
   it("adds, edits, and removes keyword rows and requires one non-empty keyword", () => {

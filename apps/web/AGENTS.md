@@ -108,6 +108,14 @@ targeting automatically. This is not a UX preference: Amazon rejects manual
 targeting clauses in AUTO campaigns and creates the default auto targets itself,
 so an AUTO campaign must submit no keywords or targets at all.
 
+The Book step lists books that already have a marketplace ASIN in every
+selected market. Catalog books missing a selected market are offered below
+the dropdown so the owner can confirm the ASIN and `POST
+/api/books/:bookId/profile-links` without leaving the wizard. That write is
+local catalog only; Amazon still validates the ASIN when the draft is
+applied. Settings has the same “Add to …” control. Do not invent a UK (or
+any) listing — KDP enrollment stays outside the app.
+
 The cannibalization resolution screen
 (`src/components/cannibalization-resolution.tsx`) offers "Create a new campaign"
 as a destination. It links here with `recommendationId` / `searchTerm` /

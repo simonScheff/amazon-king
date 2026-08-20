@@ -30,6 +30,7 @@ import { EmptyState, ErrorState, Loading } from "../components/states";
 import { Flag } from "../components/flag";
 import { formatDate, formatDateTime, labelize } from "../lib/format";
 import { countryNameForCode } from "../lib/marketplaces";
+import { LinkBookToMarketsForm } from "../components/link-book-to-markets";
 
 interface AdvertisedBookGroup {
   asin: string;
@@ -383,12 +384,27 @@ function BookEconomicsForms({
         countryNameForCode(b.countryCode),
       );
     });
+  const unlinkedEnabledProfiles = profiles
+    .filter(
+      (profile) =>
+        profile.enabled && !book.profileIds.includes(profile.profileId),
+    )
+    .sort((a, b) => {
+      if (a.countryCode === "US") return -1;
+      if (b.countryCode === "US") return 1;
+      return countryNameForCode(a.countryCode).localeCompare(
+        countryNameForCode(b.countryCode),
+      );
+    });
   const economicsByProfile = new Map(
     book.economics.map((economics) => [economics.profileId, economics]),
   );
   const configuredCount = linkedProfiles.filter((profile) =>
     economicsByProfile.has(profile.profileId),
   ).length;
+  const asinByProfile = new Map(
+    (book.marketplaceAsins ?? []).map((entry) => [entry.profileId, entry.asin]),
+  );
 
   return (
     <article className="px-4 py-4">
@@ -402,18 +418,59 @@ function BookEconomicsForms({
         </div>
         <Badge
           tone={
-            configuredCount === linkedProfiles.length ? "success" : "warning"
+            configuredCount === linkedProfiles.length &&
+            linkedProfiles.length > 0
+              ? "success"
+              : "warning"
           }
         >
           {configuredCount} of {linkedProfiles.length} countries configured
         </Badge>
       </div>
       <BookCoverForm book={book} />
-      {linkedProfiles.length === 0 ? (
-        <p className="text-xs text-zinc-500">
+      {linkedProfiles.length > 0 ? (
+        <ul className="mb-3 flex flex-col gap-1.5 text-xs text-zinc-400">
+          {linkedProfiles.map((profile) => (
+            <li
+              key={profile.profileId}
+              className="inline-flex items-center gap-2"
+            >
+              <Flag countryCode={profile.countryCode} />
+              {countryNameForCode(profile.countryCode)}
+              <span className="font-mono text-zinc-500">
+                {asinByProfile.get(profile.profileId) ?? book.asin}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mb-3 text-xs text-zinc-500">
           No profile is linked to this book.
         </p>
-      ) : (
+      )}
+      {unlinkedEnabledProfiles.length > 0 ? (
+        <div className="mb-3 flex flex-col gap-2">
+          <p className="text-xs leading-5 text-zinc-500">
+            Link a market where this paperback is already for sale. amazon-king
+            does not publish the listing — it only records the ASIN for a
+            product ad. Amazon rejects apply if the ASIN is not yours there.
+          </p>
+          {unlinkedEnabledProfiles.map((profile) => (
+            <LinkBookToMarketsForm
+              key={profile.profileId}
+              book={book}
+              targets={[
+                {
+                  profileId: profile.profileId,
+                  countryCode: profile.countryCode,
+                },
+              ]}
+              submitLabel={`Add to ${countryNameForCode(profile.countryCode)}`}
+            />
+          ))}
+        </div>
+      ) : null}
+      {linkedProfiles.length === 0 ? null : (
         <div className="flex flex-col gap-3">
           {linkedProfiles.map((profile) => (
             <BookEconomicsProfileForm

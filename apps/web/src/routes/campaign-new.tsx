@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import {
   campaignCreationCreateSchema,
   type CampaignCreationCreate,
@@ -19,7 +19,9 @@ import { Input, Select } from "../components/ui/input";
 import { EmptyState, ErrorState, Loading } from "../components/states";
 import { Flag } from "../components/flag";
 import { isAsin } from "../lib/asin";
+import { countryNameForCode } from "../lib/marketplaces";
 import { useSpendSortedMarketplaces } from "../lib/use-spend-sorted-marketplaces";
+import { LinkBookToMarketsForm } from "../components/link-book-to-markets";
 
 const STEPS = [
   "markets",
@@ -169,12 +171,25 @@ export function CampaignNewPage() {
     () =>
       (books.data ?? []).filter((book) =>
         selectedProfileIds.every((profileId) =>
-          book.marketplaceAsins.some((m) => m.profileId === profileId),
+          (book.marketplaceAsins ?? []).some((m) => m.profileId === profileId),
         ),
       ),
     [books.data, selectedProfileIds],
   );
   const selectedBook = eligibleBooks.find((b) => b.id === bookId);
+  const incompleteBooks = useMemo(
+    () =>
+      (books.data ?? []).filter(
+        (book) =>
+          selectedProfileIds.length > 0 &&
+          !selectedProfileIds.every((profileId) =>
+            (book.marketplaceAsins ?? []).some(
+              (m) => m.profileId === profileId,
+            ),
+          ),
+      ),
+    [books.data, selectedProfileIds],
+  );
 
   const effectiveAdGroupName =
     adGroupName.trim() ||
@@ -463,28 +478,98 @@ export function CampaignNewPage() {
             </>
           )}
 
-          {step === "book" &&
-            (eligibleBooks.length === 0 ? (
-              <EmptyState>
-                No book in your catalog has a marketplace ASIN in every selected
-                market. Map the book&apos;s ASINs in Settings first.
-              </EmptyState>
-            ) : (
-              <Field label="Book" htmlFor="book">
-                <Select
-                  id="book"
-                  value={bookId}
-                  onChange={(e) => setBookId(e.target.value)}
-                >
-                  <option value="">Select a book…</option>
-                  {eligibleBooks.map((book) => (
-                    <option key={book.id} value={book.id}>
-                      {book.title} ({book.format})
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-            ))}
+          {step === "book" && (
+            <div className="flex flex-col gap-4">
+              {eligibleBooks.length > 0 ? (
+                <Field label="Book" htmlFor="book">
+                  <Select
+                    id="book"
+                    value={bookId}
+                    onChange={(e) => setBookId(e.target.value)}
+                  >
+                    <option value="">Select a book…</option>
+                    {eligibleBooks.map((book) => (
+                      <option key={book.id} value={book.id}>
+                        {book.title} ({book.format})
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              ) : incompleteBooks.length === 0 ? (
+                <EmptyState>
+                  No book in your catalog has a marketplace ASIN in every
+                  selected market. Map the book&apos;s ASINs in{" "}
+                  <Link to="/settings" className="text-sky-400 underline">
+                    Settings
+                  </Link>{" "}
+                  first.
+                </EmptyState>
+              ) : null}
+              {incompleteBooks.length > 0 ? (
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-zinc-200">
+                      Not yet listed in every selected market
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-zinc-500">
+                      The paperback must already be for sale on that Amazon
+                      store. Confirm the ASIN to use on the product ad —
+                      amazon-king cannot publish the listing.
+                    </p>
+                  </div>
+                  {incompleteBooks.map((book) => {
+                    const missingTargets = selectedOptions.flatMap((option) =>
+                      option.profileIds
+                        .filter(
+                          (profileId) =>
+                            !(book.marketplaceAsins ?? []).some(
+                              (entry) => entry.profileId === profileId,
+                            ),
+                        )
+                        .map((profileId) => ({
+                          profileId,
+                          countryCode: option.countryCode,
+                        })),
+                    );
+                    const missingNames = [
+                      ...new Set(
+                        missingTargets.map((target) =>
+                          countryNameForCode(target.countryCode),
+                        ),
+                      ),
+                    ];
+                    const submitLabel =
+                      missingNames.length === 1
+                        ? `Link to ${missingNames[0]}`
+                        : "Link to these markets";
+                    return (
+                      <div key={book.id} className="flex flex-col gap-2">
+                        <p className="text-sm text-zinc-200">
+                          {book.title}{" "}
+                          <span className="text-zinc-500">({book.format})</span>
+                        </p>
+                        <LinkBookToMarketsForm
+                          book={book}
+                          targets={missingTargets}
+                          submitLabel={submitLabel}
+                          onSuccess={(updated) => setBookId(updated.id)}
+                        />
+                      </div>
+                    );
+                  })}
+                  {eligibleBooks.length === 0 ? (
+                    <p className="text-xs text-zinc-500">
+                      Or identify advertised ASINs in{" "}
+                      <Link to="/settings" className="text-sky-400 underline">
+                        Settings
+                      </Link>
+                      .
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          )}
 
           {step === "keywords" && (
             <>
