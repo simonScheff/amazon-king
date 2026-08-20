@@ -124,6 +124,50 @@ export async function listBooks(db: Db, workspaceId: string): Promise<Book[]> {
   return result.rows.map(toBook);
 }
 
+export interface CampaignBook {
+  bookId: string;
+  title: string;
+  /** ASIN the campaign's ads carry in this profile's marketplace. */
+  marketplaceAsin: string;
+  coverJson: unknown | null;
+}
+
+/**
+ * Books advertised by one campaign, resolved through its ads' ASINs. Used to
+ * point the author at the actual listing behind a campaign; a campaign whose
+ * ads are unmapped returns nothing rather than a guess.
+ */
+export async function listCampaignBooks(
+  db: Db,
+  campaignPk: string,
+): Promise<CampaignBook[]> {
+  const result = await db.query<{
+    book_id: string;
+    title: string;
+    marketplace_asin: string;
+    cover_json: unknown | null;
+  }>(
+    `select distinct b.id as book_id, b.title, bpl.marketplace_asin,
+            b.cover_json
+     from ad_groups g
+     join ads a on a.profile_id = g.profile_id and a.ad_group_id = g.id
+     join book_profile_links bpl
+       on bpl.profile_id = g.profile_id
+      and bpl.marketplace_asin = a.asin
+      and bpl.enabled = true
+     join books b on b.id = bpl.book_id
+     where g.campaign_id = $1
+     order by b.title, bpl.marketplace_asin`,
+    [campaignPk],
+  );
+  return result.rows.map((row) => ({
+    bookId: row.book_id,
+    title: row.title,
+    marketplaceAsin: row.marketplace_asin,
+    coverJson: row.cover_json,
+  }));
+}
+
 export async function isBookLinkedToProfile(
   db: Db,
   bookId: string,

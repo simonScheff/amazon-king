@@ -537,17 +537,17 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
   }
 
   /**
-   * One campaign-level negative spec per campaign for the term. ASIN terms
-   * (a shopper landed on a product detail page) can only be blocked with a
-   * negative product target; text terms use a negative exact keyword.
+   * One campaign-level negative spec: block `searchTerm` in `campaign`. ASIN
+   * terms (a shopper landed on a product detail page) can only be blocked
+   * with a negative product target; text terms use a negative exact keyword.
    */
-  function cannibalizationNegativeSpecs(
-    recommendationId: string,
+  function campaignNegativeSpec(
+    recommendationId: string | null,
     searchTerm: string,
-    campaigns: readonly structure.CampaignRow[],
+    campaign: structure.CampaignRow,
   ) {
     const asinTerm = isAsin(searchTerm);
-    return campaigns.map((campaign) => ({
+    return {
       recommendationId,
       actionType: (asinTerm ? "add_negative_target" : "add_negative_exact") as
         "add_negative_target" | "add_negative_exact",
@@ -580,7 +580,18 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
             matchType: "NEGATIVE_EXACT",
             present: true,
           },
-    }));
+    };
+  }
+
+  /** The same term blocked in every one of several campaigns. */
+  function cannibalizationNegativeSpecs(
+    recommendationId: string,
+    searchTerm: string,
+    campaigns: readonly structure.CampaignRow[],
+  ) {
+    return campaigns.map((campaign) =>
+      campaignNegativeSpec(recommendationId, searchTerm, campaign),
+    );
   }
 
   /** Persist a cannibalization negatives change set from prepared specs. */
@@ -2370,6 +2381,85 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
         },
       });
       const loaded = await loadSet(auth, changeSet.id);
+      return toResult(loaded.set, loaded.actions);
+    },
+
+    async createCampaignNegativesChangeSet(
+      auth,
+      amazonCampaignId,
+      searchTerms,
+      meta,
+    ) {
+      const campaign = await structure.findCampaignByAmazonId(
+        db,
+        auth.workspaceId,
+        amazonCampaignId,
+      );
+      if (!campaign) throw notFound("Unknown campaign");
+      // Amazon matches negatives case-insensitively, so two casings of one
+      // term are one negative; sending both would fail the second write.
+      const seen = new Set<string>();
+      const terms: string[] = [];
+      for (const raw of searchTerms) {
+        const term = raw.trim();
+        const key = term.toLowerCase();
+        if (term === "" || seen.has(key)) continue;
+        seen.add(key);
+        terms.push(term);
+      }
+      if (terms.length === 0) {
+        throw new ApiError(400, "BAD_REQUEST", "No search terms given");
+      }
+      const specs = terms.map((term) =>
+        campaignNegativeSpec(null, term, campaign),
+      );
+      const setFingerprint = buildChangeSetFingerprint({
+        profileId: campaign.profileId,
+        creatorUserId: auth.userId,
+        actions: [
+          { kind: "campaign_negatives", campaignId: amazonCampaignId },
+          ...specs,
+        ],
+      });
+      const created = await changes.createChangeSet(pool, {
+        profileId: campaign.profileId,
+        creatorUserId: auth.userId,
+        fingerprint: setFingerprint,
+        kind: "recommendation",
+        metadata: {
+          strategy: "campaign_negatives",
+          amazonCampaignId,
+          campaignName: campaign.name,
+        },
+        actions: specs.map((spec) => ({
+          ...spec,
+          fingerprint: buildChangeActionFingerprint({
+            changeSetId: setFingerprint,
+            actionType: spec.actionType,
+            targetId: spec.targetId,
+            campaignId: spec.campaignId,
+            adGroupId: spec.adGroupId,
+            searchTerm: spec.searchTerm,
+            beforeValue: spec.beforeValue,
+            afterValue: spec.afterValue,
+            beforeState: spec.beforeState,
+            afterState: spec.afterState,
+          }),
+        })),
+      });
+      await recordAudit(
+        auth,
+        meta,
+        "campaign.negatives.create",
+        created.changeSet.id,
+        {
+          amazonCampaignId,
+          searchTerms: terms,
+          actionCount: created.actions.length,
+          replayed: !created.created,
+        },
+      );
+      const loaded = await loadSet(auth, created.changeSet.id);
       return toResult(loaded.set, loaded.actions);
     },
 

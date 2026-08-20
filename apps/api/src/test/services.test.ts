@@ -1047,3 +1047,259 @@ describe("cannibalization resolution", () => {
     );
   });
 });
+
+describe("conversion finding resolution", () => {
+  function setupConversion(options: { mapBook?: boolean } = {}) {
+    const db = new FakeDb();
+    db.seedWorkspace();
+    db.seedUser("owner@example.com");
+    const connection = db.seedConnection();
+    const profile = db.seedProfile({
+      connection_id: connection.id,
+      write_enabled: true,
+      account_id: "ENTITY123",
+      country_code: "GB",
+      currency_code: "GBP",
+      profile_id: "1665213640406890",
+    });
+    db.seedCampaign({
+      id: "10",
+      profile_id: profile.id,
+      amazon_campaign_id: "camp-1",
+      name: "Colouring book – exact",
+      targeting_type: "manual",
+    });
+    db.seedAdGroup({ id: "20", profile_id: profile.id, campaign_id: "10" });
+    db.seedAd({ profile_id: profile.id, ad_group_id: "20", asin: "B0TRACTOR" });
+    if (options.mapBook !== false) {
+      const book = db.seedBook({ title: "Tractors to Colour" });
+      db.seedBookProfileLink({
+        book_id: book.id,
+        profile_id: profile.id,
+        marketplace_asin: "B0TRACTOR",
+      });
+    }
+    const recommendation = db.seedRecommendation({
+      profile_id: profile.id,
+      type: "high_ctr_poor_conversion",
+      campaign_id: "10",
+      ad_group_id: null,
+      target_id: null,
+      search_term: null,
+      current_value: null,
+      proposed_value: null,
+      confidence: "0.600",
+      evidence_window_start: "2026-07-01",
+      evidence_window_end: "2026-07-30",
+      expires_at: new Date(Date.now() + 86_400_000),
+    });
+    db.seedRecommendationEvidence(recommendation.id as string, {
+      impressions: 4000,
+      clicks: 120,
+      orders: 1,
+      costMicros: 48_000_000,
+      ctr: 0.03,
+      cvr: 0.008,
+    });
+    // One term burns clicks with no order; the other converts, so it must not
+    // be offered as something to block.
+    db.seedSearchTermMetric({
+      profile_id: profile.id,
+      search_term: "tractor colouring book",
+      clicks: 40,
+      cost: "18.0000",
+      orders: 0,
+    });
+    db.seedSearchTermMetric({
+      profile_id: profile.id,
+      search_term: "farm activity book",
+      clicks: 20,
+      cost: "9.0000",
+      orders: 1,
+      units: 2,
+      sales: "12.0000",
+    });
+    return { db, profile, recommendation };
+  }
+
+  it("names the campaign, its book, and the terms that never convert", async () => {
+    const { db, recommendation } = setupConversion();
+    const service = createReadService({
+      db: db as never,
+      config: testConfig(),
+      logger: fakeLogger(),
+    });
+
+    const context = await service.getConversionResolutionContext(
+      "1",
+      recommendation.id as string,
+    );
+
+    expect(context).toMatchObject({
+      profileId: "1665213640406890",
+      countryCode: "GB",
+      currency: "GBP",
+      campaign: {
+        campaignId: "camp-1",
+        name: "Colouring book – exact",
+        targetingType: "manual",
+        amazonConsoleUrl:
+          "https://advertising.amazon.com/cm/campaigns?entityId=ENTITY123",
+        writeEnabled: true,
+      },
+      metrics: {
+        impressions: 4000,
+        clicks: 120,
+        orders: 1,
+        spend: "48.0000",
+        averageCpc: "0.4000",
+        // 70% of a £0.40 click, rounded to whole cents.
+        suggestedMaxCpc: "0.2800",
+      },
+      books: [{ title: "Tractors to Colour", asin: "B0TRACTOR" }],
+      wastefulTerms: [
+        { searchTerm: "tractor colouring book", clicks: 40, orders: 0 },
+      ],
+    });
+  });
+
+  it("still resolves the campaign when no book is mapped to its ads", async () => {
+    const { db, recommendation } = setupConversion({ mapBook: false });
+    const service = createReadService({
+      db: db as never,
+      config: testConfig(),
+      logger: fakeLogger(),
+    });
+
+    const context = await service.getConversionResolutionContext(
+      "1",
+      recommendation.id as string,
+    );
+
+    expect(context?.books).toEqual([]);
+    expect(context?.campaign.campaignId).toBe("camp-1");
+  });
+
+  it("refuses the conversion context for another finding type", async () => {
+    const { db } = setupConversion();
+    const other = db.seedRecommendation({
+      profile_id: db.tables.amazonProfiles[0]!.id,
+      type: "expensive_target",
+      campaign_id: "10",
+    });
+    const service = createReadService({
+      db: db as never,
+      config: testConfig(),
+      logger: fakeLogger(),
+    });
+
+    await expect(
+      service.getConversionResolutionContext("1", other.id as string),
+    ).rejects.toMatchObject({ code: "INVALID_RECOMMENDATION_TYPE" });
+  });
+
+  it("snoozes a rejected finding for the requested number of days", async () => {
+    const { db, recommendation } = setupConversion();
+    const service = createReadService({
+      db: db as never,
+      config: testConfig(),
+      logger: fakeLogger(),
+    });
+
+    await service.rejectRecommendation(
+      authFixture(),
+      recommendation.id as string,
+      META,
+      { snoozeDays: 30 },
+    );
+
+    const dismissal = db.tables.recommendationDismissals[0]!;
+    const days = Math.round(
+      (new Date(dismissal.dismissed_until as string).getTime() - Date.now()) /
+        86_400_000,
+    );
+    expect(days).toBe(30);
+  });
+
+  it("drafts one campaign-level negative per chosen term", async () => {
+    const { db } = setupConversion();
+    const gateway = {
+      syncCampaignStructure: vi.fn(async () => {
+        throw new Error("Unexpected structure read");
+      }),
+      getCampaignBidControls: vi.fn(async () => {
+        throw new Error("Unexpected Max CPC controls call");
+      }),
+      applyActions: vi.fn(async () => []),
+    };
+    const service = createChangeService({
+      db: db as never,
+      pool: db.asPool() as never,
+      config: testConfig(),
+      logger: fakeLogger(),
+      gateway: gateway as unknown as Pick<
+        AmazonAdsGateway,
+        "syncCampaignStructure" | "getCampaignBidControls" | "applyActions"
+      >,
+    });
+
+    const result = await service.createCampaignNegativesChangeSet(
+      authFixture(),
+      "camp-1",
+      // The duplicate casing collapses; Amazon matches negatives case-insensitively.
+      ["tractor colouring book", "Tractor Colouring Book", "B0RIVAL123"],
+      META,
+    );
+
+    expect(result.changeSet.status).toBe("draft");
+    expect(result.actions).toHaveLength(2);
+    expect(db.tables.changeActions).toMatchObject([
+      {
+        action_type: "add_negative_exact",
+        campaign_id: "10",
+        ad_group_id: null,
+        search_term: "tractor colouring book",
+        entity_name: "Colouring book – exact",
+      },
+      { action_type: "add_negative_target", search_term: "B0RIVAL123" },
+    ]);
+    expect(db.tables.changeSets[0]!.metadata).toMatchObject({
+      strategy: "campaign_negatives",
+      amazonCampaignId: "camp-1",
+    });
+    expect(gateway.applyActions).not.toHaveBeenCalled();
+  });
+
+  it("replays an identical negatives submission instead of duplicating it", async () => {
+    const { db } = setupConversion();
+    const service = createChangeService({
+      db: db as never,
+      pool: db.asPool() as never,
+      config: testConfig(),
+      logger: fakeLogger(),
+      gateway: {
+        applyActions: vi.fn(async () => []),
+      } as unknown as Pick<
+        AmazonAdsGateway,
+        "syncCampaignStructure" | "getCampaignBidControls" | "applyActions"
+      >,
+    });
+
+    const first = await service.createCampaignNegativesChangeSet(
+      authFixture(),
+      "camp-1",
+      ["tractor colouring book"],
+      META,
+    );
+    const second = await service.createCampaignNegativesChangeSet(
+      authFixture(),
+      "camp-1",
+      ["tractor colouring book"],
+      META,
+    );
+
+    expect(second.changeSet.id).toBe(first.changeSet.id);
+    expect(db.tables.changeSets).toHaveLength(1);
+    expect(db.tables.changeActions).toHaveLength(1);
+  });
+});

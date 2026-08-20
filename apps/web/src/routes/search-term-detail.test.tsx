@@ -330,5 +330,14 @@ describe("SearchTermDetailPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Orders/ }));
     expect(rowNames()).toEqual(["Research", "General"]);
+
+    // Profit desc: Research is a loss, so General sorts first.
+    fireEvent.click(
+      within(screen.getByRole("columnheader", { name: /Campaign/ })).getByRole(
+        "button",
+        { name: /7-day profit/ },
+      ),
+    );
+    expect(rowNames()).toEqual(["General", "Research"]);
   });
 });

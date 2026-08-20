@@ -79,6 +79,33 @@ creation set. `applyLoadedSet` rejects such a set with `DEPENDENCY_NOT_APPLIED`
 until the referenced set is `applied`, so the term is never blocked in every
 campaign at once, which would strand the traffic with nowhere to land.
 
+## Conversion findings
+
+`high_ctr_poor_conversion` has no single Amazon write, so instead of one
+approval it gets a context endpoint plus the campaign actions the app already
+guards.
+
+`GET /api/recommendations/:id/conversion-context` returns the campaign by
+Amazon id and name, its console URL, the metrics stored in
+`recommendation_evidence.inputs`, the books its ads map to (title, marketplace
+ASIN, cover), and the campaign's zero-order shopper terms over the evidence
+window, ranked by spend. `metrics.suggestedMaxCpc` is presentation only — a cut
+below the observed average CPC, never a computed break-even, which would need a
+conversion rate the finding does not have.
+
+`POST /api/campaigns/:campaignId/negatives` takes `{ searchTerms }` and drafts
+one `recommendation`-kind change set adding a campaign-level negative exact per
+term (a negative ASIN target when the term is an ASIN, via the shared
+`campaignNegativeSpec` the cannibalization flow also uses). Terms are deduped
+case-insensitively because Amazon matches negatives that way. Drafting writes
+nothing to Amazon, so it is not recent-auth gated; the apply in Change center
+keeps the gate.
+
+`POST /api/recommendations/:id/reject` accepts an optional
+`{ snoozeDays: 1–365 }`, which shortens the default 60-day dismissal
+suppression so a finding the owner intends to fix returns to confirm the fix
+worked.
+
 ## One-click campaign updates
 
 `POST /api/campaigns/:campaignId/state` (pause/enable) and

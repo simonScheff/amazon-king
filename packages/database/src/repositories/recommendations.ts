@@ -205,13 +205,37 @@ export async function expireStaleRecommendations(
 export interface RecommendationWithProfile extends Recommendation {
   /** Amazon's profile id (what API payloads expose as profileId). */
   amazonProfileId: string;
+  /**
+   * Campaign identity resolved through `campaign_id`, so payloads can name
+   * and link the campaign instead of exposing its internal row id. Null when
+   * the finding has no campaign grain.
+   */
+  amazonCampaignId: string | null;
+  campaignName: string | null;
+  campaignState: string | null;
 }
 
-function withProfile(
-  row: RecommendationRow & { amazon_profile_id: string },
-): RecommendationWithProfile {
-  return { ...toRecommendation(row), amazonProfileId: row.amazon_profile_id };
+type RecommendationJoinRow = RecommendationRow & {
+  amazon_profile_id: string;
+  amazon_campaign_id: string | null;
+  campaign_name: string | null;
+  campaign_state: string | null;
+};
+
+function withProfile(row: RecommendationJoinRow): RecommendationWithProfile {
+  return {
+    ...toRecommendation(row),
+    amazonProfileId: row.amazon_profile_id,
+    amazonCampaignId: row.amazon_campaign_id ?? null,
+    campaignName: row.campaign_name ?? null,
+    campaignState: row.campaign_state ?? null,
+  };
 }
+
+/** Profile and campaign identity columns shared by the workspace queries. */
+const RECOMMENDATION_IDENTITY_COLUMNS = `p.profile_id as amazon_profile_id,
+            rc.amazon_campaign_id, rc.name as campaign_name,
+            rc.state as campaign_state`;
 
 export interface RecommendationListFilter {
   type?: RecommendationType;
@@ -232,13 +256,12 @@ export async function listRecommendationsByWorkspace(
   workspaceId: string,
   filter: RecommendationListFilter = {},
 ): Promise<RecommendationWithProfile[]> {
-  const result = await db.query<
-    RecommendationRow & { amazon_profile_id: string }
-  >(
-    `select r.*, p.profile_id as amazon_profile_id
+  const result = await db.query<RecommendationJoinRow>(
+    `select r.*, ${RECOMMENDATION_IDENTITY_COLUMNS}
      from recommendations r
      join amazon_profiles p on p.id = r.profile_id
      join amazon_connections c on c.id = p.connection_id
+     left join campaigns rc on rc.id = r.campaign_id
      where c.workspace_id = $1
        and ($2::text is null or r.type = $2)
        and ($3::text is null or r.state = $3)
@@ -287,13 +310,12 @@ export async function getRecommendationForWorkspace(
   workspaceId: string,
   recommendationId: string,
 ): Promise<RecommendationWithProfile | null> {
-  const result = await db.query<
-    RecommendationRow & { amazon_profile_id: string }
-  >(
-    `select r.*, p.profile_id as amazon_profile_id
+  const result = await db.query<RecommendationJoinRow>(
+    `select r.*, ${RECOMMENDATION_IDENTITY_COLUMNS}
      from recommendations r
      join amazon_profiles p on p.id = r.profile_id
      join amazon_connections c on c.id = p.connection_id
+     left join campaigns rc on rc.id = r.campaign_id
      where c.workspace_id = $1 and r.id = $2`,
     [workspaceId, recommendationId],
   );

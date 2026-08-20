@@ -12,6 +12,7 @@ function recommendation(
     priority: 1,
     profileId: "profile-1",
     campaignId: null,
+    campaign: null,
     adGroupId: null,
     targetId: null,
     searchTerm: "tractor colouring book",

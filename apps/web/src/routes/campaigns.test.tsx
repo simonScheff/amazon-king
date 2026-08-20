@@ -128,6 +128,12 @@ describe("CampaignsPage thirty-day profitability", () => {
       screen.getByRole("columnheader", { name: "30-day profit" }),
     ).toBeInTheDocument();
     expect(
+      within(screen.getByRole("columnheader", { name: /Campaign/ })).getByRole(
+        "button",
+        { name: /30-day profit/ },
+      ),
+    ).toBeInTheDocument();
+    expect(
       screen.getByRole("columnheader", { name: "Units" }),
     ).toBeInTheDocument();
 
@@ -336,7 +342,12 @@ describe("CampaignsPage thirty-day profitability", () => {
     ]);
 
     // Profit desc: unavailable profit (Discovery, New campaign) sorts last.
-    fireEvent.click(screen.getByRole("button", { name: /30-day profit/ }));
+    fireEvent.click(
+      within(screen.getByRole("columnheader", { name: /Campaign/ })).getByRole(
+        "button",
+        { name: /30-day profit/ },
+      ),
+    );
     expect(rowNames()).toEqual([
       "General",
       "Research",

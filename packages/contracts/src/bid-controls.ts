@@ -98,6 +98,19 @@ export const renameCampaignSchema = z.object({
 });
 export type RenameCampaign = z.infer<typeof renameCampaignSchema>;
 
+/**
+ * Block shopper terms in one campaign. Each term becomes a campaign-level
+ * negative exact keyword, or a negative ASIN product target when the term is
+ * an ASIN. The result is a draft change set — nothing reaches Amazon until it
+ * is applied from Change center.
+ */
+export const campaignNegativesCreateSchema = z.object({
+  searchTerms: z.array(z.string().trim().min(1)).min(1).max(50),
+});
+export type CampaignNegativesCreate = z.infer<
+  typeof campaignNegativesCreateSchema
+>;
+
 /** The applied one-click campaign update (pause/enable or rename). */
 export const campaignUpdateResultSchema = z.object({
   changeSet: changeSetSchema,

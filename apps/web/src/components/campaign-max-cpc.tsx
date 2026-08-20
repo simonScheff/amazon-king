@@ -32,7 +32,14 @@ function actionLabel(action: {
   return `${name}: ${action.afterDetail ?? action.actionType}`;
 }
 
-export function CampaignMaxCpc({ campaignId }: { campaignId: string }) {
+export function CampaignMaxCpc({
+  campaignId,
+  suggestedMaxCpc,
+}: {
+  campaignId: string;
+  /** Prefill when no ceiling is configured yet (conversion resolution). */
+  suggestedMaxCpc?: string | null;
+}) {
   const controls = useCampaignMaxCpc(campaignId);
   const setMaxCpc = useSetCampaignMaxCpc(campaignId);
   const [value, setValue] = useState("");
@@ -42,10 +49,12 @@ export function CampaignMaxCpc({ campaignId }: { campaignId: string }) {
   const apply = useApplyChangeSet(draftId ?? "");
 
   useEffect(() => {
-    if (controls.data?.maxCpc && value === "") {
-      setValue(controls.data.maxCpc);
-    }
-  }, [controls.data?.maxCpc, value]);
+    // Wait for the live controls: the configured ceiling wins, so a
+    // suggestion must never propose raising a cap the owner already chose.
+    if (!controls.data || value !== "") return;
+    const prefill = controls.data.maxCpc ?? suggestedMaxCpc;
+    if (prefill) setValue(prefill);
+  }, [controls.data, suggestedMaxCpc, value]);
 
   if (controls.isPending) return <Loading />;
   if (controls.error) return <ErrorState error={controls.error} />;

@@ -6,8 +6,12 @@ import { BookCoverStack } from "../components/book-covers";
 import { Badge } from "../components/ui/badge";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
-import { SortableTh } from "../components/ui/sortable-th";
-import { Table, Td } from "../components/ui/table";
+import {
+  columnAriaSort,
+  SortButton,
+  SortableTh,
+} from "../components/ui/sortable-th";
+import { Table, Td, Th } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
 import { Flag } from "../components/flag";
 import { CountrySelect } from "../components/country-select";
@@ -165,12 +169,23 @@ export function CampaignsPage() {
           <Table stickyHeader>
             <thead>
               <tr>
-                <SortableTh
-                  label="Campaign"
-                  column="name"
-                  sort={sort}
-                  onSort={onSort}
-                />
+                <Th aria-sort={columnAriaSort(sort, ["name", "profit"])}>
+                  <div className="flex flex-col items-start gap-1">
+                    <SortButton
+                      label="Campaign"
+                      column="name"
+                      sort={sort}
+                      onSort={onSort}
+                    />
+                    <SortButton
+                      label={`${PROFITABILITY_DAYS}-day profit`}
+                      column="profit"
+                      sort={sort}
+                      onSort={onSort}
+                      className="md:hidden"
+                    />
+                  </div>
+                </Th>
                 <SortableTh
                   label="Profile"
                   column="profile"

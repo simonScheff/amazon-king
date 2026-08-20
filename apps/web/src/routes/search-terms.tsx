@@ -4,7 +4,11 @@ import type { SearchTermListRow } from "@amazon-king/contracts";
 import { useBooks, useProfiles, useSearchTerms } from "../api/endpoints";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
-import { SortableTh } from "../components/ui/sortable-th";
+import {
+  columnAriaSort,
+  SortButton,
+  SortableTh,
+} from "../components/ui/sortable-th";
 import { Table, Td, Th } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
 import { Flag } from "../components/flag";
@@ -168,12 +172,23 @@ export function SearchTermsPage() {
           <Table stickyHeader>
             <thead>
               <tr>
-                <SortableTh
-                  label="Search term"
-                  column="searchTerm"
-                  sort={sort}
-                  onSort={onSort}
-                />
+                <Th aria-sort={columnAriaSort(sort, ["searchTerm", "profit"])}>
+                  <div className="flex flex-col items-start gap-1">
+                    <SortButton
+                      label="Search term"
+                      column="searchTerm"
+                      sort={sort}
+                      onSort={onSort}
+                    />
+                    <SortButton
+                      label={`${PROFITABILITY_DAYS}-day profit`}
+                      column="profit"
+                      sort={sort}
+                      onSort={onSort}
+                      className="md:hidden"
+                    />
+                  </div>
+                </Th>
                 <Th>Market</Th>
                 <SortableTh
                   label="Campaigns"

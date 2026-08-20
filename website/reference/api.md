@@ -440,7 +440,8 @@ Response `200`: array of Recommendation:
 | -------------------------------- | ----------------- | ----------------------------------------- |
 | id, type, state                  | string / enums    |                                           |
 | priority                         | int 1–5           | 1 = highest impact                        |
-| profileId, campaignId, adGroupId, targetId | string \| null | Entity grain depends on the rule   |
+| profileId, campaignId, adGroupId, targetId | string \| null | Entity grain depends on the rule; these are internal row ids |
+| campaign                         | object \| null    | `{campaignId, name, state}` — the **Amazon** campaign id, for display and links |
 | searchTerm                       | string \| null    |                                           |
 | currentValue, proposedValue      | money \| null     | Null for diagnostics and negative keywords |
 | rationale                        | string            | Human-readable explanation                |
@@ -463,9 +464,32 @@ where `campaigns` (min 2) holds `{campaignId, name, state, targetingType,
 spend, orders}` — Amazon campaign ids, never internal keys. `404 NOT_FOUND`
 when unknown.
 
+### `GET /api/recommendations/:id/conversion-context`
+
+Everything needed to act on one `high_ctr_poor_conversion` finding.
+
+Response `200`: `{recommendationId, profileId, countryCode, currency,
+confidence, evidenceWindow, dataFreshness, expiresAt, campaign, metrics,
+books, wastefulTerms}` where:
+
+| Field | Notes |
+| --- | --- |
+| campaign | `{campaignId, name, state, targetingType, amazonConsoleUrl, writeEnabled}` — Amazon campaign id, never an internal key |
+| metrics | `{impressions, clicks, orders, ctr, cvr, spend, averageCpc, suggestedMaxCpc}` from `recommendation_evidence.inputs` |
+| books | `{bookId, title, asin, coverImageUrl}` per book the campaign's ads map to; empty when none is mapped |
+| wastefulTerms | Up to 20 `{searchTerm, impressions, clicks, orders, spend}` with clicks and zero orders, highest spend first |
+
+`suggestedMaxCpc` is a display suggestion — a cut below the observed average
+CPC — not a computed break-even bid, which would require a conversion rate.
+
+Errors: `404 NOT_FOUND`, `409 INVALID_RECOMMENDATION_TYPE` (not a conversion
+finding), `409 INCOMPLETE_EVIDENCE` (evidence or campaign missing; re-sync).
+
 ### `POST /api/recommendations/:id/reject`
 
 - **Auth:** session + CSRF.
+- Body (optional): `{ "snoozeDays": 30 }` — 1–365. Shortens the default
+  60-day dismissal suppression, so the finding returns sooner.
 - Response `200`: the Recommendation in state `rejected`. `404 NOT_FOUND`
   when unknown.
 
@@ -498,6 +522,25 @@ keeping `destinationCampaignId` as the surviving target.
 - Response `200`: the created ChangeSet.
 - Errors: `409 INVALID_RECOMMENDATION_TYPE` (not a cannibalization finding),
   plus the recommendation state errors above.
+
+---
+
+## Campaign negatives
+
+### `POST /api/campaigns/:campaignId/negatives`
+
+Blocks shopper terms in one campaign. Offered by the conversion resolution
+screen, but campaign-scoped rather than finding-scoped.
+
+- **Auth:** session + CSRF. **Rate:** WRITE. No recent-auth gate — drafting
+  sends nothing to Amazon; the apply in Change center keeps the gate.
+- Body: `{ "searchTerms": ["tractor colouring book"] }` — 1–50 terms, trimmed
+  and deduplicated case-insensitively (Amazon matches negatives that way).
+- Response `200`: the created draft ChangeSet. Each term becomes a
+  campaign-level `add_negative_exact`, or `add_negative_target` when the term
+  is an ASIN. Re-submitting the same terms replays the existing set.
+- Errors: `404 NOT_FOUND` (unknown campaign), `400 BAD_REQUEST` (no usable
+  terms).
 
 ---
 

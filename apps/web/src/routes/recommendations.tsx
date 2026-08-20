@@ -7,6 +7,7 @@ import {
   type RecommendationType,
 } from "@amazon-king/contracts";
 import { useRecommendations, useRejectRecommendation } from "../api/endpoints";
+import { CampaignLink } from "../components/campaign-link";
 import { useToast } from "../components/toast";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -46,6 +47,11 @@ function Row({ rec }: { rec: Recommendation }) {
         >
           {labelize(rec.type)}
         </Link>
+        {rec.campaign ? (
+          <p className="mt-0.5 text-xs">
+            <CampaignLink campaign={rec.campaign} />
+          </p>
+        ) : null}
         <p className="mt-0.5 line-clamp-2 max-w-md text-xs text-zinc-500">
           {rec.rationale}
         </p>

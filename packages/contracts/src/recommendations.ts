@@ -4,6 +4,7 @@ import {
   decimalStringSchema,
   isoDateSchema,
   isoDateTimeSchema,
+  nonNegativeDecimalStringSchema,
 } from "./common.js";
 
 export const recommendationTypeSchema = z.enum([
@@ -30,6 +31,21 @@ export const recommendationStateSchema = z.enum([
 export type RecommendationState = z.infer<typeof recommendationStateSchema>;
 
 /**
+ * Identity of the campaign a finding belongs to. `campaignId` is the Amazon
+ * campaign id (the key the app's campaign routes use), so the dashboard can
+ * name and link the campaign instead of printing the internal row id that
+ * `Recommendation.campaignId` carries.
+ */
+export const recommendationCampaignSchema = z.object({
+  campaignId: z.string(),
+  name: z.string(),
+  state: z.string(),
+});
+export type RecommendationCampaign = z.infer<
+  typeof recommendationCampaignSchema
+>;
+
+/**
  * A deterministic, evidence-backed recommendation produced by the optimizer.
  * Values are string-encoded decimals; entity refs are nullable because not
  * every recommendation type targets the same entity grain.
@@ -41,6 +57,8 @@ export const recommendationSchema = z.object({
   priority: z.number().int().min(1).max(5),
   profileId: z.string().nullable(),
   campaignId: z.string().nullable(),
+  /** Named campaign identity for display and links; null when unresolved. */
+  campaign: recommendationCampaignSchema.nullable().default(null),
   adGroupId: z.string().nullable(),
   targetId: z.string().nullable(),
   searchTerm: z.string().nullable(),
@@ -101,6 +119,83 @@ export const cannibalizationResolutionCreateSchema = z.object({
 export type CannibalizationResolutionCreate = z.infer<
   typeof cannibalizationResolutionCreateSchema
 >;
+
+/** One book advertised by the campaign a conversion finding covers. */
+export const conversionBookSchema = z.object({
+  bookId: z.string(),
+  title: z.string(),
+  /** ASIN in this profile's marketplace, for the retail listing link. */
+  asin: z.string(),
+  coverImageUrl: z.string().nullable(),
+});
+export type ConversionBook = z.infer<typeof conversionBookSchema>;
+
+/** A shopper term of the campaign that took clicks without ordering. */
+export const conversionWastefulTermSchema = z.object({
+  searchTerm: z.string(),
+  impressions: z.number().int().nonnegative(),
+  clicks: z.number().int().nonnegative(),
+  orders: z.number().int().nonnegative(),
+  spend: nonNegativeDecimalStringSchema,
+});
+export type ConversionWastefulTerm = z.infer<
+  typeof conversionWastefulTermSchema
+>;
+
+/**
+ * Everything a human needs to act on one `high_ctr_poor_conversion` finding:
+ * which campaign and book it is about, what the rule measured, and the
+ * campaign's zero-order shopper terms. Campaign ids are Amazon ids; the
+ * browser never receives internal database primary keys.
+ */
+export const conversionResolutionContextSchema = z.object({
+  recommendationId: z.string(),
+  profileId: z.string(),
+  countryCode: z.string(),
+  currency: currencyCodeSchema,
+  confidence: z.number().min(0).max(1),
+  evidenceWindow: z.object({
+    start: isoDateSchema,
+    end: isoDateSchema,
+  }),
+  dataFreshness: isoDateTimeSchema,
+  expiresAt: isoDateTimeSchema,
+  campaign: recommendationCampaignSchema.extend({
+    targetingType: z.string().nullable(),
+    amazonConsoleUrl: z.string().nullable(),
+    writeEnabled: z.boolean(),
+  }),
+  metrics: z.object({
+    impressions: z.number().int().nonnegative(),
+    clicks: z.number().int().nonnegative(),
+    orders: z.number().int().nonnegative(),
+    ctr: z.number().nonnegative(),
+    cvr: z.number().nonnegative(),
+    spend: nonNegativeDecimalStringSchema,
+    averageCpc: nonNegativeDecimalStringSchema.nullable(),
+    /**
+     * A starting point for a CPC ceiling, not a break-even bid: break-even
+     * needs a conversion rate and this finding has none worth trusting. It is
+     * simply a cut below the observed average CPC, and the user edits it.
+     */
+    suggestedMaxCpc: nonNegativeDecimalStringSchema.nullable(),
+  }),
+  books: z.array(conversionBookSchema).default([]),
+  wastefulTerms: z.array(conversionWastefulTermSchema).default([]),
+});
+export type ConversionResolutionContext = z.infer<
+  typeof conversionResolutionContextSchema
+>;
+
+/**
+ * Optional body of `POST /api/recommendations/:id/reject`. `snoozeDays`
+ * shortens the default suppression so a finding the user intends to fix can
+ * come back and confirm whether the fix worked.
+ */
+export const rejectRecommendationSchema = z.object({
+  snoozeDays: z.number().int().min(1).max(365).optional(),
+});
+export type RejectRecommendation = z.infer<typeof rejectRecommendationSchema>;
 
 export const changeSetCreateSchema = z.object({
   recommendationIds: z.array(z.string()).min(1),

@@ -13,6 +13,7 @@ import type {
   CampaignListRow,
   CampaignMaxCpc,
   CannibalizationResolutionContext,
+  ConversionResolutionContext,
   ChangeAction,
   ChangeSet,
   ChangeSetStatus,
@@ -219,10 +220,17 @@ export interface ReadService {
     workspaceId: string,
     recommendationId: string,
   ): Promise<CannibalizationResolutionContext | null>;
+  /** Campaign, book, and shopper-term context for one conversion finding. */
+  getConversionResolutionContext(
+    workspaceId: string,
+    recommendationId: string,
+  ): Promise<ConversionResolutionContext | null>;
   rejectRecommendation(
     auth: AuthContext,
     recommendationId: string,
     meta: RequestMeta,
+    /** `snoozeDays` shortens the default dismissal suppression window. */
+    options?: { snoozeDays?: number },
   ): Promise<Recommendation | null>;
   listChangeSets(workspaceId: string): Promise<ChangeSet[]>;
   listAuditEvents(workspaceId: string): Promise<AuditEvent[]>;
@@ -271,6 +279,17 @@ export interface ChangeService {
   createChangeSet(
     auth: AuthContext,
     recommendationIds: string[],
+    meta: RequestMeta,
+  ): Promise<ChangeSetWithActions>;
+  /**
+   * Block shopper terms in one campaign: a draft change set adding a
+   * campaign-level negative exact per term (a negative ASIN target for ASIN
+   * terms). Fingerprinted, so re-submitting the same terms replays the set.
+   */
+  createCampaignNegativesChangeSet(
+    auth: AuthContext,
+    amazonCampaignId: string,
+    searchTerms: string[],
     meta: RequestMeta,
   ): Promise<ChangeSetWithActions>;
   /** Route one conflicted shopper term with campaign-level negative exacts. */

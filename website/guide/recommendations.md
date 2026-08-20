@@ -91,14 +91,21 @@ drift apart:
 | `profitable_target` | `update_bid` |
 | `search_term_harvest` | review-only |
 | `budget_constrained_winner` | review-only |
-| `high_ctr_poor_conversion` | review-only |
+| `high_ctr_poor_conversion` | review-only (resolved via a dedicated flow) |
 | `low_impressions` | review-only |
 | `placement_opportunity` | review-only |
 | `cannibalization_conflict` | review-only (resolved via a dedicated flow) |
 
 Review-only findings are diagnostics. They carry the same evidence but no
 Amazon write; the detail page says "Review-only finding — no change set can
-be created" and offers **Dismiss finding**.
+be created" and offers **Dismiss finding**. Two types have no single write but
+several sensible responses, so they open their own resolution screen instead:
+`cannibalization_conflict` and `high_ctr_poor_conversion`.
+
+Every finding names its campaign and links to it. The `campaign` object on the
+payload carries the Amazon campaign id, name, and state; the numeric
+`campaignId` beside it is an internal database row id and addresses nothing in
+Amazon.
 
 ## Approving, rejecting, dismissing
 
@@ -112,6 +119,9 @@ be created" and offers **Dismiss finding**.
   exact identity for 60 days (the longest evidence window) instead of raising
   it again from the same metrics.
 - **Dismiss finding** — the review-only equivalent of reject.
+- **Snooze** — the same dismissal with a shorter window. The conversion
+  resolution screen uses 30 days, so a finding you are actively fixing comes
+  back to confirm whether the fix worked.
 
 All transitions are audited.
 
@@ -123,6 +133,31 @@ yet — the button is disabled, and no `protected_entities` table is
 implemented. Treat protection as a planned feature, not a safety mechanism:
 today, nothing is implicitly protected, and guardrails are what stand between
 a recommendation and a write.
+
+## Clicked, but not bought
+
+A `high_ctr_poor_conversion` finding means shoppers click the ad and then do
+not buy: the cover, title, and price in the search results are working, and
+the product page is not. No bid change fixes that, and the Ads API cannot
+touch a KDP listing, so the detail page opens a resolution screen instead of a
+dead end.
+
+It names the campaign, links to it in the app and in the Amazon Ads console,
+links to the book's retail listing, and offers four responses:
+
+- **Fix the listing and keep running** — a checklist (cover at thumbnail size,
+  price against comparable titles, title and blurb, Look Inside, reviews,
+  targeting fit) with "remind me in 30 days".
+- **Block the terms that never order** — the campaign's zero-order shopper
+  terms with their clicks and spend; the chosen ones become a draft change set
+  of campaign-level negatives.
+- **Cap what one click may cost** — the same
+  [Max CPC ceiling](/guide/campaign-tools#max-cpc-ceiling) as the campaign
+  page, prefilled below the observed average CPC. The suggestion is a cut
+  below what clicks cost today, not a break-even bid: break-even needs a
+  conversion rate, which is exactly what this finding says is missing.
+- **Pause the campaign** — stops the spend after a confirmation, and is the
+  only one of the four that writes to Amazon immediately.
 
 ## Cannibalization conflicts
 

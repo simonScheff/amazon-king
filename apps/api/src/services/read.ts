@@ -2,6 +2,7 @@ import type {
   AmazonProfile,
   Book,
   CannibalizationResolutionContext,
+  ConversionResolutionContext,
   CountrySpend,
   DashboardSummary,
   MetricWindow,
@@ -69,6 +70,33 @@ function coverImageUrlOf(coverJson: unknown): string | null {
   }
   return null;
 }
+
+/**
+ * Inputs `evaluateHighCtrPoorConversion` stores. Only the measurements the
+ * resolution screen shows are required; the rule's thresholds are ignored
+ * here because the screen states what was observed, not how it was judged.
+ */
+const conversionEvidenceSchema = z.object({
+  impressions: z.number().int().nonnegative(),
+  clicks: z.number().int().nonnegative(),
+  orders: z.number().int().nonnegative(),
+  costMicros: z.number().nonnegative(),
+  ctr: z.number().nonnegative(),
+  cvr: z.number().nonnegative(),
+});
+
+/**
+ * Fraction of the observed average CPC offered as a starting ceiling. A
+ * break-even CPC cannot be computed for this finding — that needs a
+ * conversion rate, and the whole point of the finding is that there is none —
+ * so the screen offers a cut below what clicks currently cost and lets the
+ * author change it.
+ */
+const SUGGESTED_MAX_CPC_FRACTION = 0.7;
+/** Amazon's lowest accepted bid in every marketplace the MVP supports. */
+const MIN_SUGGESTED_MAX_CPC_MICROS = 20_000;
+/** How many zero-order shopper terms the resolution screen offers to block. */
+const MAX_WASTEFUL_TERMS = 20;
 
 const cannibalizationEvidenceSchema = z.object({
   searchTerm: z.string().min(1),
@@ -1293,7 +1321,121 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       };
     },
 
-    async rejectRecommendation(auth, recommendationId, meta) {
+    async getConversionResolutionContext(
+      workspaceId,
+      recommendationId,
+    ): Promise<ConversionResolutionContext | null> {
+      const row = await recommendations.getRecommendationForWorkspace(
+        db,
+        workspaceId,
+        recommendationId,
+      );
+      if (!row) return null;
+      if (row.type !== "high_ctr_poor_conversion") {
+        throw conflict(
+          "INVALID_RECOMMENDATION_TYPE",
+          "Only high-CTR/poor-conversion findings have a conversion context",
+        );
+      }
+      const evidence = conversionEvidenceSchema.safeParse(
+        await recommendations.getRecommendationEvidence(db, row.id),
+      );
+      if (!evidence.success || row.campaignId === null) {
+        throw conflict(
+          "INCOMPLETE_EVIDENCE",
+          "This finding does not contain the campaign evidence needed for a safe resolution",
+        );
+      }
+      const [profile, campaign] = await Promise.all([
+        profiles.getProfile(db, row.profileId),
+        structure.getCampaign(db, row.campaignId),
+      ]);
+      if (!profile) throw new ApiError(500, "INTERNAL", "Profile row missing");
+      if (!campaign || campaign.profileId !== row.profileId) {
+        throw conflict(
+          "INCOMPLETE_EVIDENCE",
+          "The campaign is missing or no longer belongs to this profile; re-sync before resolving",
+        );
+      }
+      const start = isoDate(row.evidenceWindowStart);
+      const end = isoDate(row.evidenceWindowEnd);
+      const [campaignBooks, searchTermRows] = await Promise.all([
+        books.listCampaignBooks(db, campaign.id),
+        dashboard.listSearchTermRows(
+          db,
+          campaign.profileId,
+          campaign.amazonCampaignId,
+          start,
+          end,
+        ),
+      ]);
+      const { clicks, costMicros } = evidence.data;
+      const averageCpcMicros = clicks > 0 ? Math.round(costMicros / clicks) : 0;
+      const suggestedMicros =
+        averageCpcMicros > 0
+          ? Math.max(
+              MIN_SUGGESTED_MAX_CPC_MICROS,
+              // Round to whole cents: a ceiling is a price the author reads.
+              Math.round(
+                (averageCpcMicros * SUGGESTED_MAX_CPC_FRACTION) / 10_000,
+              ) * 10_000,
+            )
+          : null;
+      return {
+        recommendationId: row.id,
+        profileId: row.amazonProfileId,
+        countryCode: profile.countryCode,
+        currency: profile.currencyCode,
+        confidence: Number(row.confidence),
+        evidenceWindow: { start, end },
+        dataFreshness: isoDateTime(row.dataFreshnessAt),
+        expiresAt: isoDateTime(row.expiresAt),
+        campaign: {
+          campaignId: campaign.amazonCampaignId,
+          name: campaign.name,
+          state: campaign.state,
+          targetingType: campaign.targetingType,
+          amazonConsoleUrl: amazonConsoleUrl(profile.accountId),
+          writeEnabled: profile.writeEnabled,
+        },
+        metrics: {
+          impressions: evidence.data.impressions,
+          clicks,
+          orders: evidence.data.orders,
+          ctr: evidence.data.ctr,
+          cvr: evidence.data.cvr,
+          spend: microsToDecimalString(costMicros),
+          averageCpc:
+            averageCpcMicros > 0
+              ? microsToDecimalString(averageCpcMicros)
+              : null,
+          suggestedMaxCpc:
+            suggestedMicros === null
+              ? null
+              : microsToDecimalString(suggestedMicros),
+        },
+        books: campaignBooks.map((book) => ({
+          bookId: book.bookId,
+          title: book.title,
+          asin: book.marketplaceAsin,
+          coverImageUrl: coverImageUrlOf(book.coverJson),
+        })),
+        // Terms that took clicks and returned nothing: the spend this finding
+        // can actually stop without touching the listing.
+        wastefulTerms: searchTermRows
+          .filter((term) => term.totals.orders === 0 && term.totals.clicks > 0)
+          .slice(0, MAX_WASTEFUL_TERMS)
+          .map((term) => ({
+            searchTerm: term.name,
+            impressions: term.totals.impressions,
+            clicks: term.totals.clicks,
+            orders: term.totals.orders,
+            spend: term.totals.cost,
+          })),
+      };
+    },
+
+    async rejectRecommendation(auth, recommendationId, meta, options) {
       const row = await recommendations.getRecommendationForWorkspace(
         db,
         auth.workspaceId,
@@ -1321,7 +1463,9 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       }
       // Rejecting only changes this row's state; without a dismissal the next
       // recommendation run re-inserts an identical finding from the same
-      // evidence. Suppress it for as long as that evidence can persist.
+      // evidence. Suppress it for as long as that evidence can persist, or
+      // for the shorter window the caller asked to be reminded after.
+      const suppressionDays = options?.snoozeDays ?? REJECTION_SUPPRESSION_DAYS;
       await recommendations.upsertRecommendationDismissal(db, {
         profileId: rejected.profileId,
         type: rejected.type,
@@ -1331,7 +1475,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         searchTerm: rejected.searchTerm,
         recommendationId: rejected.id,
         dismissedUntil: new Date(
-          now().getTime() + REJECTION_SUPPRESSION_DAYS * DAY_MS,
+          now().getTime() + suppressionDays * DAY_MS,
         ).toISOString(),
       });
       await audit.insertAuditEvent(db, {
@@ -1342,10 +1486,14 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         entityId: recommendationId,
         ip: meta.ip ?? null,
         sessionId: auth.sessionId,
+        details: { suppressionDays },
       });
       return toContractRecommendation({
         ...rejected,
         amazonProfileId: row.amazonProfileId,
+        amazonCampaignId: row.amazonCampaignId,
+        campaignName: row.campaignName,
+        campaignState: row.campaignState,
       });
     },
 

@@ -17,8 +17,12 @@ import { TimeframeSelect } from "../components/timeframe-select";
 import { Badge } from "../components/ui/badge";
 import { Card, CardBody, CardHeader } from "../components/ui/card";
 import { Select } from "../components/ui/input";
-import { SortableTh } from "../components/ui/sortable-th";
-import { Table, Td } from "../components/ui/table";
+import {
+  columnAriaSort,
+  SortButton,
+  SortableTh,
+} from "../components/ui/sortable-th";
+import { Table, Td, Th } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
 import {
   getCampaignProfitStatus,
@@ -309,12 +313,23 @@ export function SearchTermDetailPage() {
           <Table>
             <thead>
               <tr>
-                <SortableTh
-                  label="Campaign"
-                  column="name"
-                  sort={sort}
-                  onSort={onSort}
-                />
+                <Th aria-sort={columnAriaSort(sort, ["name", "profit"])}>
+                  <div className="flex flex-col items-start gap-1">
+                    <SortButton
+                      label="Campaign"
+                      column="name"
+                      sort={sort}
+                      onSort={onSort}
+                    />
+                    <SortButton
+                      label={`${windowQualifier(days)} profit`}
+                      column="profit"
+                      sort={sort}
+                      onSort={onSort}
+                      className="md:hidden"
+                    />
+                  </div>
+                </Th>
                 <SortableTh
                   label="Profile"
                   column="profile"

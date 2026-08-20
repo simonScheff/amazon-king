@@ -19,6 +19,7 @@ import {
   cannibalizationResolutionContextSchema,
   changeActionSchema,
   changeSetSchema,
+  conversionResolutionContextSchema,
   countrySpendSchema,
   dashboardSummarySchema,
   dataFreshnessSchema,
@@ -32,12 +33,14 @@ import {
   type BookEconomicsInput,
   type BookCoverInput,
   type CampaignCreationCreate,
+  type CampaignNegativesCreate,
   type ChangeSetCreate,
   type LoginRequest,
   type MetricWindow,
   type ProfileUpdate,
   type RecommendationState,
   type RecommendationType,
+  type RejectRecommendation,
 } from "@amazon-king/contracts";
 import { ApiError, apiFetch, redeemLoginToken, setCsrfToken } from "./client";
 import { parseLoginToken } from "../lib/login-link";
@@ -494,11 +497,39 @@ export function useCreateCannibalizationChangeSet(id: string) {
   });
 }
 
+export function useConversionResolutionContext(id: string) {
+  return useQuery({
+    queryKey: ["recommendation", id, "conversion-context"],
+    queryFn: () =>
+      apiFetch(`/api/recommendations/${id}/conversion-context`, {
+        schema: conversionResolutionContextSchema,
+      }),
+  });
+}
+
+/** Draft campaign-level negatives for chosen shopper terms (no apply). */
+export function useCreateCampaignNegatives(campaignId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CampaignNegativesCreate) =>
+      apiFetch(`/api/campaigns/${campaignId}/negatives`, {
+        method: "POST",
+        body,
+        schema: changeSetSchema,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["change-sets"] }),
+  });
+}
+
+/** Reject a finding; `snoozeDays` asks to be reminded sooner than the default. */
 export function useRejectRecommendation(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () =>
-      apiFetch(`/api/recommendations/${id}/reject`, { method: "POST" }),
+    mutationFn: (body?: RejectRecommendation) =>
+      apiFetch(`/api/recommendations/${id}/reject`, {
+        method: "POST",
+        body: body ?? {},
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["recommendations"] });
       qc.invalidateQueries({ queryKey: ["recommendation", id] });

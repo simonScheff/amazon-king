@@ -8,6 +8,7 @@ import {
   bookMappingInputSchema,
   campaignCreationCreateSchema,
   campaignCreationResultSchema,
+  campaignNegativesCreateSchema,
   campaignUpdateResultSchema,
   cannibalizationResolutionCreateSchema,
   changeSetCreateSchema,
@@ -16,6 +17,7 @@ import {
   profileUpdateSchema,
   recommendationStateSchema,
   recommendationTypeSchema,
+  rejectRecommendationSchema,
   renameCampaignSchema,
   setCampaignMaxCpcSchema,
   updateCampaignStateSchema,
@@ -548,13 +550,27 @@ export async function buildServer(
     },
   );
 
+  app.get("/api/recommendations/:id/conversion-context", async (request) => {
+    const auth = await authenticate(request);
+    const { id } = request.params as { id: string };
+    const context = await services.read.getConversionResolutionContext(
+      auth.workspaceId,
+      id,
+    );
+    if (!context) throw notFound("Unknown recommendation");
+    return context;
+  });
+
   app.post("/api/recommendations/:id/reject", async (request) => {
     const auth = await authenticate(request);
     const { id } = request.params as { id: string };
+    // The body is optional: dismissing from a list sends none at all.
+    const body = parse(rejectRecommendationSchema, request.body ?? {});
     const rec = await services.read.rejectRecommendation(
       auth,
       id,
       meta(request),
+      body,
     );
     if (!rec) throw notFound("Unknown recommendation");
     return rec;
@@ -608,6 +624,26 @@ export async function buildServer(
         body.maxCpc,
         meta(request),
       );
+    },
+  );
+
+  // Drafting negatives writes nothing to Amazon, so like the other
+  // draft-creating routes it is not recent-auth gated; the spend stops at
+  // apply, which keeps the gate.
+  app.post(
+    "/api/campaigns/:campaignId/negatives",
+    { config: { rateLimit: WRITE_RATE } },
+    async (request) => {
+      const auth = await authenticate(request);
+      const { campaignId } = request.params as { campaignId: string };
+      const body = parse(campaignNegativesCreateSchema, request.body);
+      const result = await services.changes.createCampaignNegativesChangeSet(
+        auth,
+        campaignId,
+        body.searchTerms,
+        meta(request),
+      );
+      return result.changeSet;
     },
   );
 

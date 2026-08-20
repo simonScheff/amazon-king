@@ -30,8 +30,10 @@ export interface FakeTables {
   syncRuns: FakeRow[];
   jobQueue: FakeRow[];
   auditEvents: FakeRow[];
+  ads: FakeRow[];
   books: FakeRow[];
   bookProfileLinks: FakeRow[];
+  searchTermMetricsDaily: FakeRow[];
 }
 
 function emptyTables(): FakeTables {
@@ -56,8 +58,10 @@ function emptyTables(): FakeTables {
     syncRuns: [],
     jobQueue: [],
     auditEvents: [],
+    ads: [],
     books: [],
     bookProfileLinks: [],
+    searchTermMetricsDaily: [],
   };
 }
 
@@ -256,6 +260,55 @@ export class FakeDb {
       ...overrides,
     };
     this.tables.campaigns.push(row);
+    return row;
+  }
+
+  seedAdGroup(overrides: Partial<FakeRow> = {}): FakeRow {
+    const row = {
+      id: "20",
+      profile_id: "1",
+      campaign_id: "10",
+      amazon_ad_group_id: "ag-1",
+      name: "Ad group",
+      state: "enabled",
+      default_bid: "0.5000",
+      ...overrides,
+    };
+    this.tables.adGroups.push(row);
+    return row;
+  }
+
+  seedAd(overrides: Partial<FakeRow> = {}): FakeRow {
+    const row = {
+      id: nextId(),
+      profile_id: "1",
+      ad_group_id: "20",
+      amazon_ad_id: "ad-1",
+      asin: "B012345678",
+      state: "enabled",
+      ...overrides,
+    };
+    this.tables.ads.push(row);
+    return row;
+  }
+
+  seedSearchTermMetric(overrides: Partial<FakeRow> = {}): FakeRow {
+    const row = {
+      profile_id: "1",
+      campaign_id: "camp-1",
+      ad_group_id: "ag-1",
+      search_term: "term",
+      metric_date: "2026-07-01",
+      impressions: 100,
+      clicks: 10,
+      cost: "5.0000",
+      sales: "0.0000",
+      orders: 0,
+      units: 0,
+      currency: "USD",
+      ...overrides,
+    };
+    this.tables.searchTermMetricsDaily.push(row);
     return row;
   }
 
@@ -749,12 +802,18 @@ export class FakeDb {
                 db.profileForConnectionWorkspace(p[0], profile)
               );
             })
-            .map((r): FakeRow => ({
-              ...r,
-              amazon_profile_id: t.amazonProfiles.find(
-                (ap) => ap.id === r.profile_id,
-              )!.profile_id,
-            }));
+            .map((r): FakeRow => {
+              const campaign = t.campaigns.find((c) => c.id === r.campaign_id);
+              return {
+                ...r,
+                amazon_profile_id: t.amazonProfiles.find(
+                  (ap) => ap.id === r.profile_id,
+                )!.profile_id,
+                amazon_campaign_id: campaign?.amazon_campaign_id ?? null,
+                campaign_name: campaign?.name ?? null,
+                campaign_state: campaign?.state ?? null,
+              };
+            });
           if (text.includes("and r.id = $2")) {
             return this.ok(rows.filter((r) => r.id === p[1]));
           }
@@ -1081,7 +1140,91 @@ export class FakeDb {
         handle: (p) => this.ok(t.targets.filter((r) => r.id === p[0])),
       },
 
+      // -- campaign metrics ----------------------------------------------------
+      {
+        match:
+          "from search_term_metrics_daily m where m.profile_id = $1 and m.campaign_id = $2",
+        handle: (p) => {
+          const totals = new Map<string, FakeRow>();
+          for (const fact of t.searchTermMetricsDaily) {
+            const date = String(fact.metric_date);
+            if (
+              fact.profile_id !== p[0] ||
+              fact.campaign_id !== p[1] ||
+              date < String(p[2]) ||
+              date > String(p[3])
+            ) {
+              continue;
+            }
+            const term = String(fact.search_term);
+            const row = totals.get(term) ?? {
+              search_term: term,
+              impressions: 0,
+              clicks: 0,
+              cost: 0,
+              sales: 0,
+              orders: 0,
+              units: 0,
+              estimated_royalty: null,
+              economics_missing: true,
+            };
+            row.impressions =
+              Number(row.impressions) + Number(fact.impressions);
+            row.clicks = Number(row.clicks) + Number(fact.clicks);
+            row.cost = Number(row.cost) + Number(fact.cost);
+            row.sales = Number(row.sales) + Number(fact.sales);
+            row.orders = Number(row.orders) + Number(fact.orders);
+            row.units = Number(row.units) + Number(fact.units);
+            totals.set(term, row);
+          }
+          // The real query returns numeric sums as strings, highest spend first.
+          return this.ok(
+            [...totals.values()]
+              .sort((left, right) => Number(right.cost) - Number(left.cost))
+              .map((row) => ({
+                ...row,
+                impressions: String(row.impressions),
+                clicks: String(row.clicks),
+                cost: Number(row.cost).toFixed(4),
+                sales: Number(row.sales).toFixed(4),
+                orders: String(row.orders),
+                units: String(row.units),
+              })),
+          );
+        },
+      },
+
       // -- books -----------------------------------------------------------------
+      {
+        match: "select distinct b.id as book_id",
+        handle: (p) => {
+          const adGroups = t.adGroups.filter((g) => g.campaign_id === p[0]);
+          const rows: FakeRow[] = [];
+          for (const group of adGroups) {
+            for (const ad of t.ads.filter(
+              (a) =>
+                a.ad_group_id === group.id && a.profile_id === group.profile_id,
+            )) {
+              const link = t.bookProfileLinks.find(
+                (l) =>
+                  l.profile_id === group.profile_id &&
+                  l.marketplace_asin === ad.asin &&
+                  l.enabled === true,
+              );
+              const book = t.books.find((b) => b.id === link?.book_id);
+              if (!link || !book) continue;
+              if (rows.some((row) => row.book_id === book.id)) continue;
+              rows.push({
+                book_id: book.id,
+                title: book.title,
+                marketplace_asin: link.marketplace_asin,
+                cover_json: book.cover_json,
+              });
+            }
+          }
+          return this.ok(rows);
+        },
+      },
       {
         match: "from books b",
         handle: (p) =>

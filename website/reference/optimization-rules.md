@@ -88,7 +88,7 @@ guessed — when economics are missing**.
 | Proposal   | None — diagnostic only. |
 | Suppressed | — (no economics needed). |
 | Impact     | The spend over the window. |
-| Human review | **Yes.** Advisory-only. |
+| Human review | **Yes.** No single Amazon write, but the finding opens a [resolution screen](/guide/recommendations#clicked-but-not-bought) offering a listing checklist with a 30-day snooze, negatives for zero-order terms, a Max CPC ceiling, or pausing the campaign. |
 | Version    | `high_ctr_poor_conversion@1` |
 
 ### 7. `low_impressions` — no-traffic diagnostic

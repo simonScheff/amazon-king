@@ -6,9 +6,12 @@ import {
   cannibalizationResolutionContextSchema,
   campaignListRowSchema,
   campaignMaxCpcSchema,
+  campaignNegativesCreateSchema,
+  conversionResolutionContextSchema,
   metricWindowSchema,
   recommendationChangeActionType,
   recommendationSchema,
+  rejectRecommendationSchema,
   renameCampaignSchema,
   sessionInfoSchema,
   setCampaignMaxCpcSchema,
@@ -102,6 +105,110 @@ describe("contracts smoke test", () => {
       createdAt: "2026-08-05T12:00:00Z",
     });
     expect(parsed.currentValue).toBe("0.45");
+    // Payloads written before campaign identity was joined stay valid.
+    expect(parsed.campaign).toBeNull();
+  });
+
+  it("carries named campaign identity alongside the internal row id", () => {
+    const parsed = recommendationSchema.parse({
+      id: "rec_2",
+      type: "high_ctr_poor_conversion",
+      state: "pending",
+      priority: 2,
+      profileId: "prf_1",
+      campaignId: "23",
+      campaign: {
+        campaignId: "298374982374",
+        name: "Colouring book - Exact",
+        state: "enabled",
+      },
+      adGroupId: null,
+      targetId: null,
+      searchTerm: null,
+      currentValue: null,
+      proposedValue: null,
+      rationale: "120 clicks, 1 order in the evidence window.",
+      confidence: 0.6,
+      evidenceWindow: { start: "2026-07-01", end: "2026-07-31" },
+      dataFreshness: "2026-08-05T00:00:00Z",
+      ruleVersion: "high_ctr_poor_conversion.v1",
+      expiresAt: "2026-08-12T00:00:00Z",
+      createdAt: "2026-08-05T12:00:00Z",
+    });
+    expect(parsed.campaign?.campaignId).toBe("298374982374");
+  });
+
+  it("validates the resolution context for a conversion finding", () => {
+    const context = conversionResolutionContextSchema.parse({
+      recommendationId: "rec-2",
+      profileId: "profile-1",
+      countryCode: "GB",
+      currency: "GBP",
+      confidence: 0.6,
+      evidenceWindow: { start: "2026-07-01", end: "2026-07-30" },
+      dataFreshness: "2026-08-01T10:00:00Z",
+      expiresAt: "2026-08-08T10:00:00Z",
+      campaign: {
+        campaignId: "amazon-campaign-1",
+        name: "Book - Exact",
+        state: "enabled",
+        targetingType: "MANUAL",
+        amazonConsoleUrl:
+          "https://advertising.amazon.com/cm/campaigns?entityId=ENTITY123",
+        writeEnabled: false,
+      },
+      metrics: {
+        impressions: 4000,
+        clicks: 120,
+        orders: 1,
+        ctr: 0.03,
+        cvr: 0.0083,
+        spend: "48.00",
+        averageCpc: "0.40",
+        suggestedMaxCpc: "0.28",
+      },
+      books: [
+        {
+          bookId: "7",
+          title: "Tractors to Colour",
+          asin: "B0TRACTOR1",
+          coverImageUrl: null,
+        },
+      ],
+      wastefulTerms: [
+        {
+          searchTerm: "tractor colouring book",
+          impressions: 900,
+          clicks: 40,
+          orders: 0,
+          spend: "18.00",
+        },
+      ],
+    });
+    expect(context.books).toHaveLength(1);
+    expect(context.wastefulTerms[0]?.orders).toBe(0);
+  });
+
+  it("bounds a snooze to a year and rejects a zero-day one", () => {
+    expect(rejectRecommendationSchema.parse({}).snoozeDays).toBeUndefined();
+    expect(rejectRecommendationSchema.parse({ snoozeDays: 30 })).toEqual({
+      snoozeDays: 30,
+    });
+    expect(() => rejectRecommendationSchema.parse({ snoozeDays: 0 })).toThrow();
+    expect(() =>
+      rejectRecommendationSchema.parse({ snoozeDays: 400 }),
+    ).toThrow();
+  });
+
+  it("requires at least one search term to draft campaign negatives", () => {
+    expect(
+      campaignNegativesCreateSchema.parse({
+        searchTerms: [" tractor colouring book "],
+      }),
+    ).toEqual({ searchTerms: ["tractor colouring book"] });
+    expect(() =>
+      campaignNegativesCreateSchema.parse({ searchTerms: [] }),
+    ).toThrow();
   });
 
   it("rejects a float-style money payload with too many decimals", () => {

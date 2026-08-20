@@ -124,6 +124,11 @@ describe("SearchTermsPage", () => {
       screen.getByRole("columnheader", { name: "30-day profit" }),
     ).toBeInTheDocument();
     expect(
+      within(
+        screen.getByRole("columnheader", { name: /Search term/ }),
+      ).getByRole("button", { name: /30-day profit/ }),
+    ).toBeInTheDocument();
+    expect(
       screen.getByRole("columnheader", { name: "Campaigns" }),
     ).toBeInTheDocument();
 
@@ -205,7 +210,11 @@ describe("SearchTermsPage", () => {
     expect(rowTexts()).toEqual(["beta", "gamma", "alpha"]);
 
     // Profit desc: unavailable profit (gamma) sorts last.
-    fireEvent.click(screen.getByRole("button", { name: /30-day profit/ }));
+    fireEvent.click(
+      within(
+        screen.getByRole("columnheader", { name: /Search term/ }),
+      ).getByRole("button", { name: /30-day profit/ }),
+    );
     expect(rowTexts()).toEqual(["beta", "alpha", "gamma"]);
   });
 

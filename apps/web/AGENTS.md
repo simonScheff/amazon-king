@@ -115,6 +115,27 @@ as a destination. It links here with `recommendationId` / `searchTerm` /
 campaign name, MANUAL targeting, and the term as an EXACT keyword, and are
 submitted as `cannibalization.recommendationId` on the payload.
 
+## Recommendation resolution screens
+
+`src/routes/recommendation-detail.tsx` renders the generic finding layout and
+branches by type: `cannibalization_conflict` to
+`src/components/cannibalization-resolution.tsx`, `high_ctr_poor_conversion` to
+`src/components/conversion-resolution.tsx`.
+
+Never print `recommendation.campaignId` — it is an internal database row id
+that matches nothing in Amazon and cannot address `/campaigns/$id`. Use
+`recommendation.campaign` (Amazon id, name, state) through
+`src/components/campaign-link.tsx`, which both the list and the detail page use.
+
+The conversion screen is fed by
+`GET /api/recommendations/:id/conversion-context` and offers four responses,
+because this finding has no single Amazon write: the listing checklist with
+"remind me in 30 days" (`snoozeDays` on the reject endpoint), drafting negatives
+for zero-order shopper terms, the embedded `CampaignMaxCpc` prefilled with
+`metrics.suggestedMaxCpc`, and a confirmed pause via `useUpdateCampaignState`
+with the usual `ReauthDialog` wiring. Only the pause writes immediately;
+negatives and the CPC ceiling go to Change center as drafts.
+
 ## Campaign detail header and guarded actions
 
 `src/components/campaign-header.tsx` orders the header in four tiers: a

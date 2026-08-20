@@ -73,6 +73,13 @@ export function toContractRecommendation(
     priority: row.priority,
     profileId: row.amazonProfileId,
     campaignId: row.campaignId,
+    campaign: row.amazonCampaignId
+      ? {
+          campaignId: row.amazonCampaignId,
+          name: row.campaignName ?? row.amazonCampaignId,
+          state: row.campaignState ?? "unknown",
+        }
+      : null,
     adGroupId: row.adGroupId,
     targetId: row.targetId,
     searchTerm: row.searchTerm,

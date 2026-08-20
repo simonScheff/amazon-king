@@ -17,7 +17,9 @@ import { useToast } from "../components/toast";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardBody, CardHeader } from "../components/ui/card";
+import { CampaignLink } from "../components/campaign-link";
 import { CannibalizationResolution } from "../components/cannibalization-resolution";
+import { ConversionResolution } from "../components/conversion-resolution";
 import { ErrorState, Loading } from "../components/states";
 import { formatDate, formatDateTime, labelize } from "../lib/format";
 import { getRecommendationActionDetails } from "../lib/recommendation-action";
@@ -37,6 +39,9 @@ export function RecommendationDetailPage() {
   if (r.type === "cannibalization_conflict") {
     return <CannibalizationResolution recommendation={r} />;
   }
+  if (r.type === "high_ctr_poor_conversion") {
+    return <ConversionResolution recommendation={r} />;
+  }
   const pending = r.state === "pending";
   const action = getRecommendationActionDetails(r);
 
@@ -50,9 +55,6 @@ export function RecommendationDetailPage() {
 
   const entities: Array<[string, string | null]> = [
     ["Profile", r.profileId],
-    ["Campaign", r.campaignId],
-    ["Ad group", r.adGroupId],
-    ["Target", r.targetId],
     ["Search term", r.searchTerm],
   ];
 
@@ -82,6 +84,14 @@ export function RecommendationDetailPage() {
         <CardBody>
           <p className="text-sm text-zinc-200">{r.rationale}</p>
           <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm md:grid-cols-3">
+            {r.campaign ? (
+              <div>
+                <dt className="text-xs text-zinc-500">Campaign</dt>
+                <dd>
+                  <CampaignLink campaign={r.campaign} />
+                </dd>
+              </div>
+            ) : null}
             {entities
               .filter(([, v]) => v != null)
               .map(([label, value]) => (

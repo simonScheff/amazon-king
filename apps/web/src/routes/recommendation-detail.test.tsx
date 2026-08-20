@@ -51,6 +51,7 @@ const cannibalizationRecommendation: Recommendation = {
   priority: 1,
   profileId: "1665213640406890",
   campaignId: null,
+  campaign: null,
   adGroupId: null,
   targetId: null,
   searchTerm: "tractor colouring book",
