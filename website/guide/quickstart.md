@@ -87,7 +87,8 @@ From here, the worker takes over automatically:
    hours). The optimizer evaluates all nine rules over 7/14/30/60-day windows.
 
 A `schedule_tick` job fires every 15 minutes to enqueue whatever is due —
-structure syncs, the daily metrics jobs, hourly-adjacent health checks — so a
+structure syncs, the daily metrics jobs, connection-health checks (every 4
+hours) — so a
 fresh profile gets its first structure sync within minutes even if you never
 press anything.
 
@@ -99,14 +100,15 @@ evidence and will stay quiet until the data supports them.
 
 ## 5. Enter book economics
 
-Go to `/settings`. The book economics section lists advertised ASINs the sync
-discovered; identify each one (title, format) and enter, per marketplace:
+Go to `/settings`. The **New ASINs** tab lists advertised ASINs the sync
+discovered; identify each one (title, format). Then, on the **Books &
+economics** tab, expand the book and enter per marketplace:
 
-- **List price** and **estimated royalty per sale** — what you actually earn
+- **List price** and **net royalty per sale** — what you actually earn
   per order (check your KDP royalty reports),
-- **target ACoS** as a 0–1 fraction (e.g. `0.30`, not `30`),
+- **target ACoS** as a percentage (e.g. `25`, not `0.25`),
 - **goal mode** — `profit`, `balanced`, `launch`, or `visibility`,
-- optional ceilings: max spend without a sale, max bid, max daily budget.
+- under **Details**: the effective-from date and optional notes.
 
 ![Settings page with book economics forms for entering royalty per sale and target ACoS](/screenshots/settings.png)
 
@@ -117,7 +119,8 @@ how to compute royalty per sale for each format.
 
 ## 6. Review your first recommendation
 
-Open `/recommendations`. Filter by profile, priority (P1–P5), or rule type.
+Open `/recommendations`. Filter by rule type or state (pending, applied,
+expired, …).
 Each row shows the finding, its evidence window, and its confidence; expanding
 it shows the exact inputs the rule stored — spend, orders, clicks, smoothed
 conversion rate, and the rule version that produced it.

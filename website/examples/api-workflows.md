@@ -145,9 +145,14 @@ curl -s -b ak.cookies \
     "state": "pending",
     "priority": 2,
     "profileId": "345678901234567",
-    "campaignId": "551234567890123",
-    "adGroupId": "441234567890123",
-    "targetId": "331234567890123",
+    "campaignId": "42",
+    "adGroupId": "57",
+    "targetId": "913",
+    "campaign": {
+      "campaignId": "551234567890123",
+      "name": "Paperback — exact",
+      "state": "enabled"
+    },
     "searchTerm": null,
     "currentValue": "0.8500",
     "proposedValue": "0.7225",
@@ -312,7 +317,7 @@ curl -s -X POST http://localhost:3000/api/profiles/345678901234567/syncs \
   "id": "88",
   "profileId": "345678901234567",
   "kind": "structure",
-  "status": "queued",
+  "status": "running",
   "startedAt": "2026-08-16T15:41:10.402Z",
   "finishedAt": null,
   "error": null

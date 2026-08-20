@@ -12,7 +12,9 @@ export default defineConfig({
     allowedHosts: [".trycloudflare.com"],
     proxy: {
       "/api": {
-        target: "http://localhost:3000",
+        // Override with VITE_API_PROXY_TARGET to point the dev server at a
+        // non-default API (e.g. the demo seed on :3100).
+        target: process.env.VITE_API_PROXY_TARGET ?? "http://localhost:3000",
         changeOrigin: true,
       },
     },

@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   bookFormatSchema,
   goalModeSchema,
@@ -23,14 +24,25 @@ import {
 import { useToast } from "../components/toast";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
-import { Card, CardBody, CardHeader } from "../components/ui/card";
+import { Card, CardHeader } from "../components/ui/card";
 import { Input, Select } from "../components/ui/input";
 import { Table, Td, Th } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
 import { Flag } from "../components/flag";
+import { BookCoverThumb } from "../components/book-covers";
 import { formatDate, formatDateTime, labelize } from "../lib/format";
 import { countryNameForCode } from "../lib/marketplaces";
 import { LinkBookToMarketsForm } from "../components/link-book-to-markets";
+
+export const SETTINGS_TABS = ["profiles", "books", "asins", "audit"] as const;
+export type SettingsTab = (typeof SETTINGS_TABS)[number];
+
+const TAB_LABELS: Record<SettingsTab, string> = {
+  profiles: "Profiles & sync",
+  books: "Books & economics",
+  asins: "New ASINs",
+  audit: "Audit log",
+};
 
 interface AdvertisedBookGroup {
   asin: string;
@@ -61,6 +73,23 @@ const BOOK_FORMAT_LABELS: Record<BookFormat, string> = {
   kindle: "Kindle eBook",
   other: "Other",
 };
+
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`h-4 w-4 shrink-0 text-zinc-500 transition-transform ${open ? "rotate-180" : ""}`}
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
 
 function AdvertisedBookMappingForm({ asin, candidates }: AdvertisedBookGroup) {
   const mapBook = useMapAdvertisedBook();
@@ -175,7 +204,7 @@ function BookCoverForm({ book }: { book: Book }) {
     <form
       aria-label={`${book.title} cover image`}
       onSubmit={onSubmit}
-      className="mb-3 flex flex-wrap items-end gap-3"
+      className="flex flex-wrap items-end gap-3"
     >
       {book.coverImageUrl ? (
         <img
@@ -208,7 +237,14 @@ function inputDecimal(value: string | null | undefined): string {
   return Number.isFinite(numeric) ? String(numeric) : value;
 }
 
-function BookEconomicsProfileForm({
+const ECONOMICS_COLUMN_COUNT = 6;
+
+/**
+ * One country's economics as a single editable table row. The rarely changed
+ * fields (effective-from date, notes) live behind a per-row Details toggle so
+ * the common case — price, royalty, target ACoS — fits on one line.
+ */
+function BookEconomicsRow({
   book,
   profile,
   economics,
@@ -237,11 +273,13 @@ function BookEconomicsProfileForm({
     economics?.goalMode ?? "balanced",
   );
   const [notes, setNotes] = useState(economics?.notes ?? "");
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const countryName = countryNameForCode(profile.countryCode);
   const saved = economics !== undefined;
+  const canSave =
+    listPrice.trim() !== "" && royalty.trim() !== "" && effectiveFrom !== "";
 
-  function onSubmit(e: FormEvent) {
-    e.preventDefault();
+  function onSave() {
     const pct = targetAcosPct.trim();
     save.mutate(
       {
@@ -262,80 +300,53 @@ function BookEconomicsProfileForm({
   }
 
   return (
-    <form
-      aria-label={`${countryName} book economics`}
-      onSubmit={onSubmit}
-      className="rounded-md border border-zinc-800 bg-zinc-950/40 p-3"
-    >
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-sm font-semibold text-zinc-100">
-            <span className="mr-2" aria-hidden="true">
-              <Flag countryCode={profile.countryCode} />
-            </span>
+    <>
+      <tr className={saved ? undefined : "bg-amber-950/10"}>
+        <Td className="whitespace-nowrap align-middle">
+          <span className="inline-flex items-center gap-2 text-sm text-zinc-200">
+            <Flag countryCode={profile.countryCode} />
             {countryName}
-          </p>
-          <p className="mt-0.5 text-xs text-zinc-500">
-            {profile.currencyCode} · Marketplace-specific price and royalty
-          </p>
-        </div>
-        <Badge tone={saved ? "success" : "warning"}>
-          {saved
-            ? `Saved ${formatDate(economics.effectiveFrom)}`
-            : "Needs setup"}
-        </Badge>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <label className="flex flex-col gap-1 text-xs text-zinc-500">
-          List price ({profile.currencyCode})
+            <span className="text-xs text-zinc-500">
+              {profile.currencyCode}
+            </span>
+          </span>
+        </Td>
+        <Td className="align-middle">
           <Input
             aria-label={`${countryName} list price`}
             inputMode="decimal"
-            required
             placeholder="9.99"
             value={listPrice}
             onChange={(e) => setListPrice(e.target.value)}
+            className={`w-20 px-2 py-1.5 ${saved ? "" : "border-amber-700/50"}`}
           />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-zinc-500">
-          Net royalty per sale ({profile.currencyCode})
+        </Td>
+        <Td className="align-middle">
           <Input
             aria-label={`${countryName} net royalty per sale`}
             inputMode="decimal"
-            required
             placeholder="2.04"
             value={royalty}
             onChange={(e) => setRoyalty(e.target.value)}
+            className={`w-20 px-2 py-1.5 ${saved ? "" : "border-amber-700/50"}`}
           />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-zinc-500">
-          Effective from
-          <Input
-            aria-label={`${countryName} economics effective from`}
-            type="date"
-            required
-            max={new Date().toISOString().slice(0, 10)}
-            value={effectiveFrom}
-            onChange={(e) => setEffectiveFrom(e.target.value)}
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-zinc-500">
-          Target ACoS (%)
+        </Td>
+        <Td className="align-middle">
           <Input
             aria-label={`${countryName} target ACoS`}
             inputMode="decimal"
             placeholder="e.g. 25"
             value={targetAcosPct}
             onChange={(e) => setTargetAcosPct(e.target.value)}
+            className="w-[4.5rem] px-2 py-1.5"
           />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-zinc-500">
-          Goal mode
+        </Td>
+        <Td className="align-middle">
           <Select
             aria-label={`${countryName} goal mode`}
             value={goalMode}
             onChange={(e) => setGoalMode(goalModeSchema.parse(e.target.value))}
+            className="px-2 py-1.5"
           >
             {goalModeSchema.options.map((g) => (
               <option key={g} value={g}>
@@ -343,32 +354,76 @@ function BookEconomicsProfileForm({
               </option>
             ))}
           </Select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-zinc-500 sm:col-span-2">
-          Notes (optional)
-          <Input
-            aria-label={`${countryName} notes`}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-          />
-        </label>
-      </div>
-      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="max-w-xl text-xs text-zinc-600">
-          Use the first date these economics were valid. Historical profit is
-          available only for data on or after that date.
-        </p>
-        <Button type="submit" variant="primary" disabled={save.isPending}>
-          {save.isPending
-            ? "Saving…"
-            : `${saved ? "Update" : "Save"} ${countryName}`}
-        </Button>
-      </div>
-    </form>
+        </Td>
+        <Td className="whitespace-nowrap align-middle">
+          <span className="flex flex-col items-end gap-1.5">
+            {saved ? (
+              <span className="text-xs text-emerald-400">
+                Saved {formatDate(economics.effectiveFrom)}
+              </span>
+            ) : (
+              <span className="text-xs text-amber-300">Needs setup</span>
+            )}
+            <span className="flex items-center gap-1.5">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                aria-expanded={detailsOpen}
+                aria-label={`${countryName} economics details`}
+                onClick={() => setDetailsOpen((open) => !open)}
+              >
+                Details
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="primary"
+                aria-label={`${saved ? "Update" : "Save"} ${countryName}`}
+                disabled={save.isPending || !canSave}
+                onClick={onSave}
+              >
+                {save.isPending ? "Saving…" : saved ? "Update" : "Save"}
+              </Button>
+            </span>
+          </span>
+        </Td>
+      </tr>
+      {detailsOpen ? (
+        <tr>
+          <Td colSpan={ECONOMICS_COLUMN_COUNT} className="bg-zinc-950/40">
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+              <label className="flex flex-col gap-1 text-xs text-zinc-500">
+                Effective from
+                <Input
+                  aria-label={`${countryName} economics effective from`}
+                  type="date"
+                  max={new Date().toISOString().slice(0, 10)}
+                  value={effectiveFrom}
+                  onChange={(e) => setEffectiveFrom(e.target.value)}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-zinc-500">
+                Notes (optional)
+                <Input
+                  aria-label={`${countryName} notes`}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
+              </label>
+            </div>
+            <p className="mt-2 max-w-xl text-xs text-zinc-600">
+              Use the first date these economics were valid. Historical profit
+              is available only for data on or after that date.
+            </p>
+          </Td>
+        </tr>
+      ) : null}
+    </>
   );
 }
 
-function BookEconomicsForms({
+function BookSettingsCard({
   book,
   profiles,
 }: {
@@ -405,96 +460,300 @@ function BookEconomicsForms({
   const asinByProfile = new Map(
     (book.marketplaceAsins ?? []).map((entry) => [entry.profileId, entry.asin]),
   );
+  const complete =
+    linkedProfiles.length > 0 && configuredCount === linkedProfiles.length;
+  // Books that still need setup open on their own; finished ones collapse.
+  const [open, setOpen] = useState(!complete);
 
   return (
-    <article className="px-4 py-4">
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h3 className="text-sm font-semibold text-zinc-100">{book.title}</h3>
-          <p className="mt-1 text-xs text-zinc-500">
+    <article>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        className="flex w-full flex-wrap items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-zinc-800/40"
+      >
+        <BookCoverThumb
+          title={book.title}
+          coverImageUrl={book.coverImageUrl}
+          decorative
+        />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold text-zinc-100">
+            {book.title}
+          </span>
+          <span className="mt-0.5 block text-xs text-zinc-500">
             <span className="font-mono">{book.asin}</span> ·{" "}
             {labelize(book.format)}
-          </p>
-        </div>
-        <Badge
-          tone={
-            configuredCount === linkedProfiles.length &&
-            linkedProfiles.length > 0
-              ? "success"
-              : "warning"
-          }
-        >
+          </span>
+        </span>
+        <Badge tone={complete ? "success" : "warning"}>
           {configuredCount} of {linkedProfiles.length} countries configured
         </Badge>
-      </div>
-      <BookCoverForm book={book} />
-      {linkedProfiles.length > 0 ? (
-        <ul className="mb-3 flex flex-col gap-1.5 text-xs text-zinc-400">
-          {linkedProfiles.map((profile) => (
-            <li
-              key={profile.profileId}
-              className="inline-flex items-center gap-2"
-            >
-              <Flag countryCode={profile.countryCode} />
-              {countryNameForCode(profile.countryCode)}
-              <span className="font-mono text-zinc-500">
-                {asinByProfile.get(profile.profileId) ?? book.asin}
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="mb-3 text-xs text-zinc-500">
-          No profile is linked to this book.
-        </p>
-      )}
-      {unlinkedEnabledProfiles.length > 0 ? (
-        <div className="mb-3 flex flex-col gap-2">
-          <p className="text-xs leading-5 text-zinc-500">
-            Link a market where this paperback is already for sale. amazon-king
-            does not publish the listing — it only records the ASIN for a
-            product ad. Amazon rejects apply if the ASIN is not yours there.
-          </p>
-          {unlinkedEnabledProfiles.map((profile) => (
-            <LinkBookToMarketsForm
-              key={profile.profileId}
-              book={book}
-              targets={[
-                {
-                  profileId: profile.profileId,
-                  countryCode: profile.countryCode,
-                },
-              ]}
-              submitLabel={`Add to ${countryNameForCode(profile.countryCode)}`}
-            />
-          ))}
+        <Chevron open={open} />
+      </button>
+
+      {open ? (
+        <div className="flex flex-col gap-4 border-t border-zinc-800/60 px-4 py-4">
+          <BookCoverForm book={book} />
+          {linkedProfiles.length > 0 ? (
+            <ul className="flex flex-col gap-1.5 text-xs text-zinc-400">
+              {linkedProfiles.map((profile) => (
+                <li
+                  key={profile.profileId}
+                  className="inline-flex items-center gap-2"
+                >
+                  <Flag countryCode={profile.countryCode} />
+                  {countryNameForCode(profile.countryCode)}
+                  <span className="font-mono text-zinc-500">
+                    {asinByProfile.get(profile.profileId) ?? book.asin}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-zinc-500">
+              No profile is linked to this book.
+            </p>
+          )}
+          {unlinkedEnabledProfiles.length > 0 ? (
+            <details className="rounded-md border border-zinc-800 bg-zinc-950/40">
+              <summary className="cursor-pointer px-3 py-2.5 text-xs font-medium text-zinc-400 hover:text-zinc-200">
+                Link another market ({unlinkedEnabledProfiles.length})
+              </summary>
+              <div className="flex flex-col gap-2 border-t border-zinc-800/60 px-3 py-3">
+                <p className="text-xs leading-5 text-zinc-500">
+                  Link a market where this paperback is already for sale.
+                  amazon-king does not publish the listing — it only records the
+                  ASIN for a product ad. Amazon rejects apply if the ASIN is not
+                  yours there.
+                </p>
+                {unlinkedEnabledProfiles.map((profile) => (
+                  <LinkBookToMarketsForm
+                    key={profile.profileId}
+                    book={book}
+                    targets={[
+                      {
+                        profileId: profile.profileId,
+                        countryCode: profile.countryCode,
+                      },
+                    ]}
+                    submitLabel={`Add to ${countryNameForCode(profile.countryCode)}`}
+                  />
+                ))}
+              </div>
+            </details>
+          ) : null}
+          {linkedProfiles.length === 0 ? null : (
+            <Table>
+              <thead>
+                <tr>
+                  <Th>Country</Th>
+                  <Th>List price</Th>
+                  <Th>Net royalty</Th>
+                  <Th>Target ACoS %</Th>
+                  <Th>Goal</Th>
+                  <Th>
+                    <span className="sr-only">Actions</span>
+                  </Th>
+                </tr>
+              </thead>
+              <tbody>
+                {linkedProfiles.map((profile) => (
+                  <BookEconomicsRow
+                    key={profile.profileId}
+                    book={book}
+                    profile={profile}
+                    economics={economicsByProfile.get(profile.profileId)}
+                  />
+                ))}
+              </tbody>
+            </Table>
+          )}
         </div>
       ) : null}
-      {linkedProfiles.length === 0 ? null : (
-        <div className="flex flex-col gap-3">
-          {linkedProfiles.map((profile) => (
-            <BookEconomicsProfileForm
-              key={profile.profileId}
-              book={book}
-              profile={profile}
-              economics={economicsByProfile.get(profile.profileId)}
-            />
-          ))}
-        </div>
-      )}
     </article>
   );
 }
 
-export function SettingsPage() {
-  const books = useBooks();
-  const unmappedProducts = useUnmappedAdvertisedProducts();
+function ProfilesCard() {
   const profiles = useProfiles();
-  const audit = useAuditEvents();
-  const toast = useToast();
+  return (
+    <Card>
+      <CardHeader title="Profiles: sync & write access" />
+      {profiles.isPending ? (
+        <Loading />
+      ) : profiles.error ? (
+        <ErrorState error={profiles.error} />
+      ) : profiles.data.length === 0 ? (
+        <EmptyState>No profiles connected.</EmptyState>
+      ) : (
+        <Table>
+          <thead>
+            <tr>
+              <Th>Profile</Th>
+              <Th>Region</Th>
+              <Th>Currency</Th>
+              <Th>Read (sync)</Th>
+              <Th>Writes</Th>
+              <Th>
+                <span className="sr-only">Actions</span>
+              </Th>
+            </tr>
+          </thead>
+          <tbody>
+            {profiles.data.map((p) => (
+              <ProfileSettingsRow key={p.profileId} profile={p} />
+            ))}
+          </tbody>
+        </Table>
+      )}
+    </Card>
+  );
+}
+
+function BooksCard() {
+  const books = useBooks();
+  const profiles = useProfiles();
+  return (
+    <Card>
+      <CardHeader title="Books & economics" />
+      {books.isPending ? (
+        <Loading label="Loading book economics…" />
+      ) : books.error ? (
+        <ErrorState error={books.error} />
+      ) : books.data.length === 0 ? (
+        <EmptyState>
+          No advertised books found yet. Run Sync now for a profile that has
+          Sponsored Products ads.
+        </EmptyState>
+      ) : (
+        <>
+          <div className="border-b border-zinc-800 bg-emerald-950/15 px-4 py-3">
+            <p className="text-sm font-medium text-emerald-200">Your books</p>
+            <p className="mt-1 text-xs leading-5 text-zinc-400">
+              Enter the list price and net KDP royalty separately for every
+              country where the book is advertised.
+            </p>
+          </div>
+          <div className="divide-y divide-zinc-800">
+            {books.data.map((book) => (
+              <BookSettingsCard
+                key={book.id}
+                book={book}
+                profiles={profiles.data ?? []}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
+function NewAsinsCard() {
+  const unmappedProducts = useUnmappedAdvertisedProducts();
   const advertisedBookGroups = groupAdvertisedBooks(
     unmappedProducts.data ?? [],
   );
+  return (
+    <Card>
+      <CardHeader title="New advertised ASINs to identify" />
+      {unmappedProducts.isPending ? (
+        <Loading label="Looking for new advertised ASINs…" />
+      ) : unmappedProducts.error ? (
+        <ErrorState error={unmappedProducts.error} />
+      ) : advertisedBookGroups.length === 0 ? (
+        <EmptyState>All advertised ASINs have been identified.</EmptyState>
+      ) : (
+        <>
+          <div className="border-b border-zinc-800 bg-sky-950/20 px-4 py-3">
+            <p className="text-xs leading-5 text-zinc-400">
+              Amazon Ads supplied these ASINs without a KDP title or format.
+              Identify each one to add it to Your books.
+            </p>
+          </div>
+          <div className="divide-y divide-zinc-800">
+            {advertisedBookGroups.map((group) => (
+              <AdvertisedBookMappingForm key={group.asin} {...group} />
+            ))}
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
+function AuditCard() {
+  const audit = useAuditEvents();
+  return (
+    <Card>
+      <CardHeader title="Audit events" />
+      {audit.isPending ? (
+        <Loading />
+      ) : audit.error ? (
+        <ErrorState error={audit.error} />
+      ) : audit.data.length === 0 ? (
+        <EmptyState>No audit events recorded yet.</EmptyState>
+      ) : (
+        <Table>
+          <thead>
+            <tr>
+              <Th>Time</Th>
+              <Th>Actor</Th>
+              <Th>Event</Th>
+              <Th>Entity</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {audit.data.map((e) => (
+              <tr key={e.id}>
+                <Td className="whitespace-nowrap text-xs text-zinc-500">
+                  {formatDateTime(e.createdAt)}
+                </Td>
+                <Td className="text-xs">{e.actor}</Td>
+                <Td className="text-xs">{e.event}</Td>
+                <Td className="font-mono text-xs text-zinc-500">
+                  {e.entityType}
+                  {e.entityId ? `:${e.entityId}` : ""}
+                </Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
+    </Card>
+  );
+}
+
+export function SettingsPage() {
+  const search = useSearch({ strict: false }) as { tab?: SettingsTab };
+  const navigate = useNavigate();
+  const books = useBooks();
+  const unmappedProducts = useUnmappedAdvertisedProducts();
+  const tab = search.tab ?? "profiles";
+
+  // Tab badges surface setup work without opening the section.
+  const economicsTotals = (books.data ?? []).reduce(
+    (totals, book) => ({
+      configured:
+        totals.configured +
+        book.economics.filter((economics) =>
+          book.profileIds.includes(economics.profileId),
+        ).length,
+      linked: totals.linked + book.profileIds.length,
+    }),
+    { configured: 0, linked: 0 },
+  );
+  const newAsinCount = groupAdvertisedBooks(unmappedProducts.data ?? []).length;
+
+  function selectTab(next: SettingsTab) {
+    void navigate({
+      to: "/settings",
+      search: { ...search, tab: next },
+      replace: true,
+    });
+  }
 
   return (
     <div className="flex w-full min-w-0 max-w-5xl flex-col gap-4">
@@ -502,133 +761,46 @@ export function SettingsPage() {
         Settings & health
       </h1>
 
-      <Card>
-        <CardHeader title="Profiles: sync & write access" />
-        {profiles.isPending ? (
-          <Loading />
-        ) : profiles.error ? (
-          <ErrorState error={profiles.error} />
-        ) : profiles.data.length === 0 ? (
-          <EmptyState>No profiles connected.</EmptyState>
-        ) : (
-          <Table>
-            <thead>
-              <tr>
-                <Th>Profile</Th>
-                <Th>Region</Th>
-                <Th>Currency</Th>
-                <Th>Read (sync)</Th>
-                <Th>Writes</Th>
-                <Th>
-                  <span className="sr-only">Actions</span>
-                </Th>
-              </tr>
-            </thead>
-            <tbody>
-              {profiles.data.map((p) => (
-                <ProfileSettingsRow key={p.profileId} profile={p} />
-              ))}
-            </tbody>
-          </Table>
-        )}
-      </Card>
+      <div className="border-b border-zinc-800">
+        <nav className="-mb-px flex gap-6" aria-label="Settings sections">
+          {SETTINGS_TABS.map((settingsTab) => (
+            <button
+              key={settingsTab}
+              type="button"
+              aria-current={settingsTab === tab ? "page" : undefined}
+              onClick={() => selectTab(settingsTab)}
+              className={`border-b-2 px-1 pb-3 text-sm font-medium transition-colors ${
+                settingsTab === tab
+                  ? "border-sky-500 text-sky-400"
+                  : "border-transparent text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              {TAB_LABELS[settingsTab]}
+              {settingsTab === "books" && economicsTotals.linked > 0 ? (
+                <span
+                  className={`ml-2 rounded-full px-2 py-0.5 text-xs font-medium ${
+                    economicsTotals.configured === economicsTotals.linked
+                      ? "bg-emerald-500/15 text-emerald-300"
+                      : "bg-amber-500/15 text-amber-300"
+                  }`}
+                >
+                  {economicsTotals.configured} of {economicsTotals.linked}
+                </span>
+              ) : null}
+              {settingsTab === "asins" && newAsinCount > 0 ? (
+                <span className="ml-2 rounded-full bg-sky-500/15 px-2 py-0.5 text-xs font-medium text-sky-300">
+                  {newAsinCount}
+                </span>
+              ) : null}
+            </button>
+          ))}
+        </nav>
+      </div>
 
-      <Card>
-        <CardHeader title="Book economics" />
-        {books.isPending ? (
-          <Loading label="Loading book economics…" />
-        ) : books.error ? (
-          <ErrorState error={books.error} />
-        ) : books.data.length > 0 ? (
-          <div className="border-b border-zinc-800">
-            <div className="bg-emerald-950/15 px-4 py-3">
-              <p className="text-sm font-medium text-emerald-200">Your books</p>
-              <p className="mt-1 text-xs leading-5 text-zinc-400">
-                Enter the list price and net KDP royalty separately for every
-                country where the book is advertised.
-              </p>
-            </div>
-            <div className="divide-y divide-zinc-800">
-              {books.data.map((book) => (
-                <BookEconomicsForms
-                  key={book.id}
-                  book={book}
-                  profiles={profiles.data ?? []}
-                />
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {unmappedProducts.isPending ? (
-          <Loading label="Looking for new advertised ASINs…" />
-        ) : unmappedProducts.error ? (
-          <ErrorState error={unmappedProducts.error} />
-        ) : advertisedBookGroups.length > 0 ? (
-          <div>
-            <div className="bg-sky-950/20 px-4 py-3">
-              <p className="text-sm font-medium text-sky-200">
-                New advertised ASINs to identify
-              </p>
-              <p className="mt-1 text-xs leading-5 text-zinc-400">
-                Amazon Ads supplied these ASINs without a KDP title or format.
-                Identify each one to add it to Your books.
-              </p>
-            </div>
-            <div className="divide-y divide-zinc-800">
-              {advertisedBookGroups.map((group) => (
-                <AdvertisedBookMappingForm key={group.asin} {...group} />
-              ))}
-            </div>
-          </div>
-        ) : (books.data ?? []).length === 0 ? (
-          <EmptyState>
-            No advertised books found yet. Run Sync now for a profile that has
-            Sponsored Products ads.
-          </EmptyState>
-        ) : (
-          <p className="px-4 py-3 text-xs text-zinc-500">
-            All advertised ASINs have been identified.
-          </p>
-        )}
-      </Card>
-
-      <Card>
-        <CardHeader title="Audit events" />
-        {audit.isPending ? (
-          <Loading />
-        ) : audit.error ? (
-          <ErrorState error={audit.error} />
-        ) : audit.data.length === 0 ? (
-          <EmptyState>No audit events recorded yet.</EmptyState>
-        ) : (
-          <Table>
-            <thead>
-              <tr>
-                <Th>Time</Th>
-                <Th>Actor</Th>
-                <Th>Event</Th>
-                <Th>Entity</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {audit.data.map((e) => (
-                <tr key={e.id}>
-                  <Td className="whitespace-nowrap text-xs text-zinc-500">
-                    {formatDateTime(e.createdAt)}
-                  </Td>
-                  <Td className="text-xs">{e.actor}</Td>
-                  <Td className="text-xs">{e.event}</Td>
-                  <Td className="font-mono text-xs text-zinc-500">
-                    {e.entityType}
-                    {e.entityId ? `:${e.entityId}` : ""}
-                  </Td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-        )}
-      </Card>
+      {tab === "profiles" ? <ProfilesCard /> : null}
+      {tab === "books" ? <BooksCard /> : null}
+      {tab === "asins" ? <NewAsinsCard /> : null}
+      {tab === "audit" ? <AuditCard /> : null}
     </div>
   );
 }

@@ -25,7 +25,8 @@ stale setup steps break installs.
   invisible until it is added there.
 - Screenshots live in `website/public/screenshots/` and are referenced as
   `/screenshots/<name>.png`. Do not include the base path; VitePress prepends
-  it. Hardcoding `/amazon-king/` breaks local preview.
+  it. Hardcoding `/amazon-king/` breaks local preview. To refresh them with
+  the current UI and mock data, use the `update-website-screenshots` skill.
 - Mermaid diagrams are available via `vitepress-plugin-mermaid`.
 
 ## Before pushing

@@ -5,11 +5,18 @@ import { SettingsPage } from "./settings";
 const mocks = vi.hoisted(() => ({
   books: [] as unknown[],
   candidates: [] as unknown[],
+  search: {} as { tab?: string },
+  navigate: vi.fn(),
   mapBook: vi.fn(),
   linkMarkets: vi.fn(),
   saveEconomics: vi.fn(),
   saveCover: vi.fn(),
   mutation: vi.fn(),
+}));
+
+vi.mock("@tanstack/react-router", () => ({
+  useSearch: () => mocks.search,
+  useNavigate: () => mocks.navigate,
 }));
 
 vi.mock("../api/endpoints", () => ({
@@ -83,11 +90,14 @@ describe("SettingsPage book mapping", () => {
     mocks.saveEconomics.mockReset();
     mocks.saveCover.mockReset();
     mocks.mutation.mockReset();
+    mocks.navigate.mockReset();
     mocks.books = [];
     mocks.candidates = [];
+    mocks.search = { tab: "books" };
   });
 
   it("groups an ASIN across profiles and submits confirmed book metadata", () => {
+    mocks.search = { tab: "asins" };
     mocks.candidates = [
       {
         profileId: "profile-us",
@@ -187,6 +197,9 @@ describe("SettingsPage book mapping", () => {
       screen.getByLabelText("United States net royalty per sale"),
       { target: { value: "4.25" } },
     );
+    fireEvent.click(
+      screen.getByRole("button", { name: "United States economics details" }),
+    );
     fireEvent.change(
       screen.getByLabelText("United States economics effective from"),
       { target: { value: "2026-08-07" } },
@@ -272,6 +285,7 @@ describe("SettingsPage book mapping", () => {
     ];
     render(<SettingsPage />);
 
+    fireEvent.click(screen.getByText("Link another market (3)"));
     expect(screen.getByText(/already for sale/i)).toBeInTheDocument();
     const ukAsin = screen.getByLabelText(
       "Monster Truck Coloring Book United Kingdom marketplace ASIN",
@@ -291,5 +305,55 @@ describe("SettingsPage book mapping", () => {
         onError: expect.any(Function),
       }),
     );
+  });
+
+  it("switches sections through the tab bar and the URL", () => {
+    mocks.search = {};
+    render(<SettingsPage />);
+
+    // Default tab is the profiles table.
+    expect(
+      screen.getByText("Profiles: sync & write access"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Your books")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Audit log" }));
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: "/settings",
+      search: { tab: "audit" },
+      replace: true,
+    });
+  });
+
+  it("badges the tabs with outstanding setup work", () => {
+    mocks.search = {};
+    mocks.books = [
+      {
+        id: "book-1",
+        asin: "B012345678",
+        title: "My Coloring Book",
+        format: "paperback",
+        status: "active",
+        profileIds: ["profile-us", "profile-ca"],
+        economics: [],
+      },
+    ];
+    mocks.candidates = [
+      {
+        profileId: "profile-us",
+        asin: "B0NEWASIN1",
+        countryCode: "US",
+        currencyCode: "USD",
+        adCount: 1,
+      },
+    ];
+    render(<SettingsPage />);
+
+    expect(
+      screen.getByRole("button", { name: "Books & economics 0 of 2" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "New ASINs 1" }),
+    ).toBeInTheDocument();
   });
 });

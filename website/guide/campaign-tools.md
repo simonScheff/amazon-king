@@ -10,7 +10,7 @@ tools. All of them produce ordinary change sets that go through the same
 [guarded apply pipeline](/guide/applying-changes) — preview, fresh re-read,
 guardrails, verification.
 
-![Campaign detail page with the Max CPC tab](/screenshots/campaign-detail.png)
+![Campaign detail page with KPI cards, profit chart, and the ad groups tab](/screenshots/campaign-detail.png)
 
 The same page lists ad groups, targets, search terms, **negative keywords**,
 and **negative products** (ASIN exclusions) from the last structure sync.

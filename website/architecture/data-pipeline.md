@@ -132,7 +132,7 @@ sequenceDiagram
         A-->>G: reportId
         W->>DB: status=polling, persist amazon_report_id
     end
-    loop poll: 5s, doubling to 60s cap, 20min total
+    loop poll: 5s, doubling to 60s cap, 45min total
         W->>G: getReport(amazon_report_id)
         G->>A: GET /reporting/reports/{id}
         A-->>G: PROCESSING … COMPLETED + download URL
@@ -248,7 +248,7 @@ the stored 7d/14d columns through the same idempotent upsert.
 
 | Failure                                  | Result                                                              |
 | ---------------------------------------- | ------------------------------------------------------------------- |
-| Amazon report polling times out          | `retryable`, fresh report requested next attempt                    |
+| Amazon report polling times out          | Stays `polling` with its `amazon_report_id`; the retry resumes the same report |
 | Amazon report fails at source            | `retryable`, old report id superseded                               |
 | Artifact checksum mismatch on read-back  | `failed`, retried                                                   |
 | Zod validation / reconciliation failure  | Terminal — dead-letters after the attempt budget                    |

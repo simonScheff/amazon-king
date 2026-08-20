@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 600" role="img" aria-label="Quiet Harbor book cover">
+  <defs>
+    <linearGradient id="seasky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#dcebf2"/>
+      <stop offset="0.62" stop-color="#8fb8c9"/>
+      <stop offset="0.63" stop-color="#3f7186"/>
+      <stop offset="1" stop-color="#16384a"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="600" fill="url(#seasky)"/>
+  <circle cx="120" cy="170" r="34" fill="#f6f0dd" opacity="0.85"/>
+  <g stroke="#0f2c3c" stroke-width="4" fill="none" stroke-linecap="round">
+    <path d="M200 380 L200 250"/>
+    <path d="M200 258 L262 372 L202 372 Z" fill="#e8e2d0" stroke="none"/>
+    <path d="M196 268 L138 366 L194 366 Z" fill="#cdd8cf" stroke="none"/>
+    <path d="M150 384 Q 200 402 250 384 L240 402 Q 200 416 160 402 Z" fill="#7a4632" stroke="none"/>
+  </g>
+  <g stroke="#9fc3d0" stroke-width="2" opacity="0.7">
+    <line x1="40" y1="440" x2="160" y2="440"/>
+    <line x1="220" y1="470" x2="360" y2="470"/>
+    <line x1="70" y1="510" x2="230" y2="510"/>
+  </g>
+  <text x="200" y="110" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="42" letter-spacing="5" fill="#1d3a4a">QUIET</text>
+  <text x="200" y="156" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="42" letter-spacing="5" fill="#1d3a4a">HARBOR</text>
+  <text x="200" y="186" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="14" letter-spacing="3" fill="#40606e">A NOVEL</text>
+  <text x="200" y="556" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="20" letter-spacing="3" fill="#dcebf2">ELLIS MARLOWE</text>
+</svg>

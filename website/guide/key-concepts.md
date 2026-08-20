@@ -86,7 +86,9 @@ can't fire on thin data, and nothing lingers past its shelf life. See
 A **change set** is an immutable, human-approved bundle of writes to Amazon.
 Kinds: `recommendation` (created by approving recommendations), `max_cpc`
 (bulk bid ceilings), `rollback` (a compensating action for a previous set),
-and `campaign_creation` (creating a new campaign and its contents). A change
+`campaign_creation` (creating a new campaign and its contents), and
+`campaign_update` (one-click pause/enable or rename from the campaign page).
+A change
 set moves through statuses: `draft` → `previewed` → `applying` →
 `applied`, `partially_applied`, `failed`, or `blocked`. Applying re-reads
 Amazon state, compares it against the stored before-snapshot, re-checks
@@ -103,8 +105,9 @@ blocks the apply instead of blindly overwriting. See
 **Guardrails** are hard limits re-checked at apply time, independent of the
 rules: bid changes are clamped to ±15% per cooldown period, per-book ceilings
 you set (max bid, max daily budget, max spend without a sale) are enforced,
-and protected entities (young campaigns, recently changed targets) are left
-alone. Violations block the affected items, not silently adjust them.
+and entities on your protected lists (`protectedCampaignIds`,
+`protectedSearchTerms` — empty by default) are left alone. Recently changed
+targets are also skipped while their bid cooldown runs. Violations block the affected items, not silently adjust them.
 
 *Why it matters:* even if a rule misfires or your data is misleading, the
 guardrails bound how much damage one approved change set can do. See the
@@ -132,7 +135,11 @@ spend/bid/budget ceilings, and a **goal mode**:
 - `profit` — optimize for estimated ad profit within target ACoS.
 - `balanced` — weigh profit against volume.
 - `launch` — tolerate higher spend to gather data and velocity on a new title.
-- `visibility` — maximize impressions; profit rules are effectively suspended.
+- `visibility` — maximize impressions.
+
+Currently only `launch` changes optimizer behavior — it suppresses the
+spend-cutting rules while the title gathers data. `profit`, `balanced`, and
+`visibility` are recorded but treated identically by the rules for now.
 
 *Why it matters:* profit recommendations are *disabled, not guessed*, when
 economics are missing — the dashboard shows an amber banner instead of
@@ -142,7 +149,8 @@ inventing a royalty. See the [book economics guide](/guide/book-economics).
 
 **ACoS** is ad spend divided by attributed retail revenue — Amazon's metric,
 computed over what shoppers paid. **Estimated ad profit** is what you actually
-care about: `orders × royalty per sale − ad cost`. Because KDP royalty rates
+care about: `max(orders, units) × royalty per sale − ad cost` — royalty is
+earned per copy sold, so a three-copy order earns three royalties. Because KDP royalty rates
 (35%/70% ebook, fixed minus printing cost for print) mean you keep only part
 of each retail dollar, a "good" ACoS can still be unprofitable and a "high"
 ACoS can be fine.

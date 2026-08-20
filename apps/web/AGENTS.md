@@ -14,6 +14,10 @@ Run from this directory or with `pnpm --filter @amazon-king/web <script>`.
 | `typecheck` | `tsc -p tsconfig.json`                                              |
 | `test`      | `vitest run --passWithNoTests` (jsdom + Testing Library)            |
 
+The dev server's `/api` proxy target honors `VITE_API_PROXY_TARGET` (default
+`http://localhost:3000`) — set it to point a second dev server at a
+demo/scratch API.
+
 Stack: Vite + React 19 + TypeScript, TanStack Router (code-based routes) and
 Query, Tailwind CSS v4 via `@tailwindcss/vite`, Recharts.
 
@@ -94,6 +98,17 @@ Overview, campaign detail, and search-term detail share
 (`?days=mtd`, UTC 1st of the current month through today). Campaign and
 search-term **list** pages deliberately hardcode a 30-day profitability window
 and have no selector.
+
+## Settings page
+
+`src/routes/settings.tsx` is split into four URL-backed tabs
+(`?tab=profiles|books|asins|audit`, validated in `src/router.tsx`):
+profiles & sync, books & economics, new-ASIN identification, and the audit
+log. Tab badges surface outstanding setup work (unconfigured economics, new
+ASINs). Books that still need setup auto-expand; each market's economics edit
+in a single table row, with the effective-from date and notes behind the
+row's **Details** toggle, and market linking behind the collapsed **Link
+another market** section.
 
 ## New-campaign wizard
 

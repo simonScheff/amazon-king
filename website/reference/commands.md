@@ -38,8 +38,8 @@ are available to each target.
 
 | Script           | Runs | Notes |
 | ---------------- | ---- | ----- |
-| `pnpm dev`       | `pnpm -r --parallel --if-present dev` | Starts every package's dev server/watch process (api, worker, web). |
-| `pnpm build`     | `pnpm -r --if-present build` | Only packages with a `build` script (web). |
+| `pnpm dev`       | `pnpm -r --parallel --if-present dev` | Starts every workspace dev server/watch process: api, worker, web, and the VitePress docs site (`website/`). |
+| `pnpm build`     | `pnpm -r --if-present build` | Every package with a `build` script: web and the docs site (`website/`). |
 | `pnpm test`      | `pnpm -r test` | |
 | `pnpm typecheck` | `pnpm -r typecheck` | |
 | `pnpm lint`      | `prettier --check .` | |

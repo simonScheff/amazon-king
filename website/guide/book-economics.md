@@ -24,7 +24,7 @@ amazon-king therefore keeps two layers strictly separate:
 ## Identifying your books
 
 The ad account knows ASINs, not titles. After the first sync, open
-**Settings → New advertised ASINs to identify**. Each advertised ASIN that is
+**Settings → New ASINs**. Each advertised ASIN that is
 not yet linked to your catalog appears there; identify it by confirming:
 
 - the **title**,
@@ -42,7 +42,8 @@ Catalog links are also how the new-campaign wizard knows which ASIN to put
 on a product ad. Those links are usually created from ads that already exist
 in a market. To advertise a book in a store where it has **no ads yet** —
 for example a US-only paperback you now want to run in the UK — open the
-book on **Settings** and use **Add to …**. Confirm the marketplace ASIN
+book on **Settings → Books & economics**, expand **Link another market**,
+and use **Add to …**. Confirm the marketplace ASIN
 (KDP often reuses the same ASIN). The new-campaign wizard Book step offers
 the same control for books that do not yet cover every selected market.
 
@@ -58,8 +59,10 @@ sign-in.
 
 ## Entering economics
 
-Economics are entered per **book per market** (profile) on the Settings page.
-Each entry carries:
+Economics are entered per **book per market** (profile) on
+**Settings → Books & economics**: expand the book, edit the market's row, and
+save. The `effectiveFrom` date and `notes` live behind the row's **Details**
+toggle. Each entry carries:
 
 | Field | Meaning |
 | --- | --- |

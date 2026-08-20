@@ -23,7 +23,11 @@ import { CampaignDetailPage } from "./routes/campaign-detail";
 import { SearchTermsPage } from "./routes/search-terms";
 import { SearchTermDetailPage } from "./routes/search-term-detail";
 import { ChangesPage } from "./routes/changes";
-import { SettingsPage } from "./routes/settings";
+import {
+  SETTINGS_TABS,
+  SettingsPage,
+  type SettingsTab,
+} from "./routes/settings";
 
 const rootRoute = createRootRoute();
 
@@ -218,6 +222,16 @@ const connectRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings",
+  // `?tab=books` keeps the active settings section in the URL so it survives
+  // reloads and is shareable.
+  validateSearch: (search: Record<string, unknown>): { tab?: SettingsTab } => {
+    const tab =
+      typeof search.tab === "string" &&
+      (SETTINGS_TABS as readonly string[]).includes(search.tab)
+        ? (search.tab as SettingsTab)
+        : undefined;
+    return tab ? { tab } : {};
+  },
   component: SettingsPage,
 });
 

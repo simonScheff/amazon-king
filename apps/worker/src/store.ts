@@ -768,78 +768,78 @@ export function createDbStore(pool: Pool): WorkerStore {
         negativeKeywords,
         negativeTargets,
       ] = await Promise.all([
-          db.query<{
-            id: string;
-            amazon_campaign_id: string;
-            name: string;
-            state: string;
-            targeting_type: string | null;
-            daily_budget: string | null;
-          }>(
-            `select id::text, amazon_campaign_id, name, state, targeting_type, daily_budget::text
+        db.query<{
+          id: string;
+          amazon_campaign_id: string;
+          name: string;
+          state: string;
+          targeting_type: string | null;
+          daily_budget: string | null;
+        }>(
+          `select id::text, amazon_campaign_id, name, state, targeting_type, daily_budget::text
            from campaigns where profile_id = $1`,
-            [profilePk],
-          ),
-          db.query<{
-            id: string;
-            campaign_id: string;
-            amazon_ad_group_id: string;
-            state: string;
-            default_bid: string | null;
-          }>(
-            `select id::text, campaign_id::text, amazon_ad_group_id, state, default_bid::text
+          [profilePk],
+        ),
+        db.query<{
+          id: string;
+          campaign_id: string;
+          amazon_ad_group_id: string;
+          state: string;
+          default_bid: string | null;
+        }>(
+          `select id::text, campaign_id::text, amazon_ad_group_id, state, default_bid::text
            from ad_groups where profile_id = $1`,
-            [profilePk],
-          ),
-          db.query<{
-            id: string;
-            ad_group_id: string;
-            amazon_ad_id: string;
-            asin: string;
-            state: string;
-          }>(
-            `select id::text, ad_group_id::text, amazon_ad_id, asin, state
+          [profilePk],
+        ),
+        db.query<{
+          id: string;
+          ad_group_id: string;
+          amazon_ad_id: string;
+          asin: string;
+          state: string;
+        }>(
+          `select id::text, ad_group_id::text, amazon_ad_id, asin, state
            from ads where profile_id = $1`,
-            [profilePk],
-          ),
-          db.query<{
-            id: string;
-            campaign_id: string;
-            ad_group_id: string;
-            amazon_target_id: string;
-            target_kind: string;
-            expression: unknown;
-            match_type: string | null;
-            bid: string | null;
-            state: string;
-          }>(
-            `select id::text, campaign_id::text, ad_group_id::text, amazon_target_id, target_kind,
+          [profilePk],
+        ),
+        db.query<{
+          id: string;
+          campaign_id: string;
+          ad_group_id: string;
+          amazon_target_id: string;
+          target_kind: string;
+          expression: unknown;
+          match_type: string | null;
+          bid: string | null;
+          state: string;
+        }>(
+          `select id::text, campaign_id::text, ad_group_id::text, amazon_target_id, target_kind,
                   expression, match_type, bid::text, state
            from targets where profile_id = $1`,
-            [profilePk],
-          ),
-          db.query<{
-            campaign_id: string;
-            ad_group_id: string | null;
-            keyword_text: string;
-            match_type: string;
-            state: string;
-          }>(
-            `select campaign_id::text, ad_group_id::text, keyword_text, match_type, state
+          [profilePk],
+        ),
+        db.query<{
+          campaign_id: string;
+          ad_group_id: string | null;
+          keyword_text: string;
+          match_type: string;
+          state: string;
+        }>(
+          `select campaign_id::text, ad_group_id::text, keyword_text, match_type, state
            from negative_keywords where profile_id = $1`,
-            [profilePk],
-          ),
-          db.query<{
-            campaign_id: string;
-            ad_group_id: string | null;
-            expression_asin: string;
-            state: string;
-          }>(
-            `select campaign_id::text, ad_group_id::text, expression_asin, state
+          [profilePk],
+        ),
+        db.query<{
+          campaign_id: string;
+          ad_group_id: string | null;
+          expression_asin: string;
+          state: string;
+        }>(
+          `select campaign_id::text, ad_group_id::text, expression_asin, state
            from negative_targets where profile_id = $1`,
-            [profilePk],
-          ),
-        ]);
+          [profilePk],
+        ),
+      ]);
       return {
         campaigns: campaigns.rows.map((row) => ({
           id: row.id,

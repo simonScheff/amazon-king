@@ -321,17 +321,20 @@ erDiagram
     }
 ```
 
-- `change_sets.kind` is `recommendation`, `max_cpc`, `rollback`, or
-  `campaign_creation`; `status` walks
+- `change_sets.kind` is `recommendation`, `max_cpc`, `rollback`,
+  `campaign_creation`, or `campaign_update`; `status` walks
   `draft → previewed → applying → applied | partially_applied | failed |
   blocked`. `fingerprint` is unique, making creation idempotent.
   `metadata.dependsOnChangeSetId` orders dependent sets — apply rejects a set
   with `DEPENDENCY_NOT_APPLIED` until the referenced set is `applied`.
-- `change_actions.action_type` allows twelve values: `update_bid`,
+- `change_actions.action_type` allows fourteen values (twelve since launch,
+  plus `update_campaign_state` and `update_campaign_name` from migration
+  0009): `update_bid`,
   `update_ad_group_default_bid`, `update_campaign_bidding`,
   `update_optimization_rule`, `add_negative_exact`, `remove_negative_exact`,
   `create_campaign`, `create_ad_group`, `create_product_ad`,
-  `create_keyword`, `create_target`, `add_negative_target`. Each action has
+  `create_keyword`, `create_target`, `add_negative_target`,
+  `update_campaign_state`, `update_campaign_name`. Each action has
   its own unique `fingerprint`, immutable `before_state`/`after_state`
   snapshots, the raw `amazon_request`/`amazon_response`, and `verified_at`
   set only after a post-write re-read confirms the change. `rollback_of_id`

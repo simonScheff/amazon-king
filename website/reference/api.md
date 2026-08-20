@@ -74,7 +74,7 @@ Limits are per client, per minute. Exceeding any tier returns
 | ------- | -------- | --------------------------------------------------------------------------------- |
 | Global  | 200/min  | Every route without an explicit tier                                              |
 | STRICT  | 10/min   | Login start/verify, Amazon OAuth start/callback                                   |
-| WRITE   | 20/min   | Sync requests, mappings, cover, cannibalization/max-CPC/creation sets, apply, rollback |
+| WRITE   | 20/min   | Sync requests, mappings, cover, book profile-links, cannibalization/max-CPC/creation sets, campaign negatives, campaign state/name, apply, rollback |
 | PREVIEW | 120/min  | `GET /api/change-sets/:id/preview`                                                |
 
 ### Request IDs
@@ -290,6 +290,19 @@ Response `200` (DashboardSummary):
 
 Errors: `409 MIXED_CURRENCY` when the selected window spans currencies.
 
+### `GET /api/dashboard/country-spend?days&books`
+
+Ad spend per marketplace country over the requested window, sorted by spend
+descending. Countries without metrics in the window are omitted. Powers
+spend-ordered country selectors.
+
+Response `200` (CountrySpend):
+
+| Field      | Type             | Notes                                                  |
+| ---------- | ---------------- | ------------------------------------------------------ |
+| dateRange  | `{start, end}`   | ISO dates                                              |
+| countries  | array            | `{countryCode, currency, spend (money)}`, spend desc   |
+
 ### `GET /api/campaigns?days&books`
 
 Response `200`: array of campaign rows.
@@ -329,12 +342,13 @@ Response `200` (CampaignDetail); `404 NOT_FOUND` when unknown.
 Cross-campaign views over shopper search terms. Royalty and profit fields are
 null — never guessed — when book economics are missing.
 
-### `GET /api/search-terms?days&books`
+### `GET /api/search-terms?days&books&country`
 
-| Param | Type   | Notes                                  |
-| ----- | ------ | -------------------------------------- |
-| days  | int \| `"mtd"` | 1–90 (default 30), or `mtd` for UTC month-to-date |
-| books | string | Optional comma-separated book ids; restricts the aggregate to ad groups advertising any of them (union semantics) |
+| Param   | Type   | Notes                                  |
+| ------- | ------ | -------------------------------------- |
+| days    | int \| `"mtd"` | 1–90 (default 30), or `mtd` for UTC month-to-date |
+| books   | string | Optional comma-separated book ids; restricts the aggregate to ad groups advertising any of them (union semantics) |
+| country | string | Optional two-letter code (`/^[A-Za-z]{2}$/`, upper-cased); restricts the aggregate to one marketplace |
 
 Response `200`: array of rows — `{searchTerm, campaignCount, countryCodes[],
 currency, totals (with acos), estimatedRoyalty, estimatedAdProfit,
@@ -684,7 +698,7 @@ not linked to a requested profile), `403 WRITES_DISABLED`,
 Response `200`: array of ChangeSet `{id, profileId, status, createdAt, kind?,
 dependsOnChangeSetId?}`. `status` is one of `draft`, `previewed`, `applying`,
 `applied`, `partially_applied`, `failed`, `blocked`; `kind` is one of
-`recommendation`, `max_cpc`, `rollback`, `campaign_creation`.
+`recommendation`, `max_cpc`, `rollback`, `campaign_creation`, `campaign_update`.
 
 ### `GET /api/change-sets/:id/preview`
 
@@ -732,7 +746,7 @@ ChangeAction shape (preview/apply/rollback responses):
 | Field                                             | Type             | Notes                                   |
 | ------------------------------------------------- | ---------------- | --------------------------------------- |
 | id, changeSetId                                   | string           |                                         |
-| actionType                                        | enum             | `update_bid`, `update_ad_group_default_bid`, `update_campaign_bidding`, `update_optimization_rule`, `add_negative_exact`, `remove_negative_exact`, `create_campaign`, `create_ad_group`, `create_product_ad`, `create_keyword`, `create_target`, `add_negative_target` |
+| actionType                                        | enum             | `update_bid`, `update_ad_group_default_bid`, `update_campaign_bidding`, `update_optimization_rule`, `add_negative_exact`, `remove_negative_exact`, `create_campaign`, `create_ad_group`, `create_product_ad`, `create_keyword`, `create_target`, `add_negative_target`, `update_campaign_state`, `update_campaign_name` |
 | beforeValue, afterValue                           | money \| null    |                                         |
 | entityName, searchTerm, campaignName, amazonCampaignId, beforeDetail, afterDetail | string \| null | Optional context         |
 | rollbackAvailable                                 | boolean          | Optional                                |

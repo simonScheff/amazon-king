@@ -98,7 +98,7 @@ or account type). Profiles are mirrored into the database twice:
 
 ## Enabling a profile: sync vs. write access
 
-Open **Settings → Profiles: sync & write access**. Each discovered profile has
+Open **Settings → Profiles & sync**. Each discovered profile has
 two independent toggles:
 
 - **Read (sync)** — the `enabled` flag. When on, the worker syncs structure

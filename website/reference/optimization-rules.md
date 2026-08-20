@@ -207,7 +207,9 @@ Violation codes: `KILL_SWITCH_ENABLED`, `PROFILE_READ_ONLY`,
 `BID_CHANGE_TOO_LARGE`, `BID_COOLDOWN_ACTIVE`, `BUDGET_EXCEEDS_MAX`,
 `BUDGET_INCREASE_TOO_LARGE`, `TOO_MANY_ACTIONS`, `EXPOSURE_TOO_LARGE`,
 `PROTECTED_ENTITY`, `STALE_EVIDENCE`. Any violation blocks the write; at
-preview they surface as `409 GUARDRAIL_VIOLATION` / preview warnings.
+preview the violations come back in the response's `guardrails` warnings
+array (HTTP 200 — preview never writes), while apply rejects the set with
+`409 GUARDRAIL_VIOLATION`.
 
 ## Cooldowns, launch mode, staleness
 

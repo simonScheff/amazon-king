@@ -26,7 +26,8 @@ directly.
 
 Procedural workflows are skills in `.agents/skills/`: `local-stack`,
 `add-migration`, `add-optimizer-rule`, `update-docs-site`,
-`live-amazon-validation`, and `expose-localhost`.
+`update-website-screenshots`, `live-amazon-validation`, and
+`expose-localhost`.
 
 ## Project overview
 

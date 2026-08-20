@@ -164,7 +164,7 @@ Two independent switches must both be open for any write:
 
 1. `KILL_SWITCH=false` globally — fail-closed; only the exact string
    `"false"` opens it (see [Configuration](/guide/configuration#kill-switch-semantics)).
-2. `writeEnabled` on the profile (Settings → Profiles).
+2. `writeEnabled` on the profile (Settings → Profiles & sync).
 
 ::: warning
 Amazon write operations have not completed end-to-end validation against a
