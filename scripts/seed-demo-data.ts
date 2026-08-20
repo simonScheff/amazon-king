@@ -283,6 +283,8 @@ interface TargetDef {
   matchType: string | null;
   bid: number;
   share: number;
+  /** Multiplies the campaign cvr for this target (efficient-target stories). */
+  cvrMult?: number;
   terms: TermDef[];
 }
 interface CampaignDef {
@@ -362,10 +364,10 @@ const campaignDefs: CampaignDef[] = [
     state: "enabled",
     dailyBudget: 15,
     activeDays: DAYS,
-    imp: 2400,
-    ctr: 0.0045,
+    imp: 3600,
+    ctr: 0.005,
     cpc: 0.36,
-    cvr: 0.16,
+    cvr: 0.24,
     aov: 4.99,
     targets: [
       autoTarget("closeMatch", "CLOSE_MATCH", 0.42, 0.45, [
@@ -392,15 +394,20 @@ const campaignDefs: CampaignDef[] = [
     state: "enabled",
     dailyBudget: 25,
     activeDays: DAYS,
-    imp: 1800,
+    imp: 2600,
     ctr: 0.006,
     cpc: 0.52,
-    cvr: 0.22,
+    cvr: 0.28,
     aov: 4.99,
     targets: [
-      kw("dragonRiderBooks", "dragon rider books", "EXACT", 0.52, 0.35, [
-        { term: "dragon rider books", share: 1 },
-      ]),
+      // Efficient winner behind the profitable_target finding: its observed
+      // ACoS must land well under Emberfall's 0.35 target.
+      {
+        ...kw("dragonRiderBooks", "dragon rider books", "EXACT", 0.52, 0.35, [
+          { term: "dragon rider books", share: 1 },
+        ]),
+        cvrMult: 1.6,
+      },
       kw("dragonRiderFantasy", "dragon rider fantasy", "EXACT", 0.55, 0.3, [
         { term: "dragon rider fantasy", share: 1 },
       ]),
@@ -421,10 +428,10 @@ const campaignDefs: CampaignDef[] = [
     state: "enabled",
     dailyBudget: 12,
     activeDays: DAYS,
-    imp: 3200,
+    imp: 2400,
     ctr: 0.005,
     cpc: 0.61,
-    cvr: 0.02,
+    cvr: 0.13,
     aov: 5.99,
     targets: [
       kw("romanceBestsellers", "romance bestsellers", "BROAD", 0.85, 0.5, [
@@ -450,7 +457,7 @@ const campaignDefs: CampaignDef[] = [
     state: "enabled",
     dailyBudget: 10,
     activeDays: DAYS,
-    imp: 5000,
+    imp: 900,
     ctr: 0.008,
     cpc: 0.44,
     cvr: 0,
@@ -970,13 +977,18 @@ try {
       for (const t of c.targets) {
         const tKey = `${c.key}:${t.key}`;
         targetAcc30[tKey] ??= newAcc();
-        const tImp = Math.round(c.imp * t.share * (0.8 + 0.4 * rand()));
+        // Gentle upward drift over the window so the overview's
+        // period-over-period deltas read positive.
+        const growth = 0.85 + 0.3 * (day / c.activeDays);
+        const tImp = Math.round(
+          c.imp * t.share * growth * (0.8 + 0.4 * rand()),
+        );
         const tClicks = Math.min(
           tImp,
           Math.round(tImp * c.ctr * (0.85 + 0.3 * rand())),
         );
         const tCost = round4(tClicks * c.cpc * (0.9 + 0.2 * rand()));
-        const expected = tClicks * c.cvr;
+        const expected = tClicks * c.cvr * (t.cvrMult ?? 1);
         const tOrders = Math.floor(expected) + (rand() < expected % 1 ? 1 : 0);
         const tUnits = tOrders + (tOrders > 0 && rand() < 0.25 ? 1 : 0);
         const tSales = round4(tOrders * c.aov);
