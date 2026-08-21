@@ -296,6 +296,8 @@ export interface NegativeKeywordRowData {
   adGroupId: string | null;
   adGroupName: string | null;
   state: string;
+  /** First-seen timestamp: apply date for app-created negatives, first sync otherwise. */
+  firstSeenAt: string;
 }
 
 export interface NegativeTargetRowData {
@@ -306,6 +308,8 @@ export interface NegativeTargetRowData {
   adGroupId: string | null;
   adGroupName: string | null;
   state: string;
+  /** First-seen timestamp: apply date for app-created negatives, first sync otherwise. */
+  firstSeenAt: string;
 }
 
 /**
@@ -556,9 +560,11 @@ export async function listNegativeKeywordRows(
     amazon_ad_group_id: string | null;
     ad_group_name: string | null;
     state: string;
+    created_at: string;
   }>(
     `select n.amazon_negative_keyword_id, n.keyword_text, n.match_type,
-            g.amazon_ad_group_id, g.name as ad_group_name, n.state
+            g.amazon_ad_group_id, g.name as ad_group_name, n.state,
+            n.created_at
      from negative_keywords n
      left join ad_groups g on g.id = n.ad_group_id
      where n.campaign_id = $1
@@ -588,6 +594,7 @@ export async function listNegativeKeywordRows(
     adGroupId: row.amazon_ad_group_id,
     adGroupName: row.ad_group_name,
     state: row.state,
+    firstSeenAt: row.created_at,
   }));
 }
 
@@ -607,9 +614,11 @@ export async function listNegativeTargetRows(
     amazon_ad_group_id: string | null;
     ad_group_name: string | null;
     state: string;
+    created_at: string;
   }>(
     `select n.amazon_negative_target_id, n.expression_asin,
-            g.amazon_ad_group_id, g.name as ad_group_name, n.state
+            g.amazon_ad_group_id, g.name as ad_group_name, n.state,
+            n.created_at
      from negative_targets n
      left join ad_groups g on g.id = n.ad_group_id
      where n.campaign_id = $1
@@ -639,6 +648,7 @@ export async function listNegativeTargetRows(
     adGroupId: row.amazon_ad_group_id,
     adGroupName: row.ad_group_name,
     state: row.state,
+    firstSeenAt: row.created_at,
   }));
 }
 
@@ -1650,9 +1660,12 @@ export async function convertedCountrySpend(
 export interface DataFreshnessRow {
   profilePk: string;
   amazonProfileId: string;
+  countryCode: string;
   dataset: string;
   lastSuccessAt: string | null;
   completeThrough: string | null;
+  /** False when structure sync has never imported a campaign for the profile. */
+  hasCampaigns: boolean;
 }
 
 /**
@@ -1666,14 +1679,18 @@ export async function dataFreshnessByWorkspace(
   const result = await db.query<{
     profile_pk: string;
     amazon_profile_id: string;
+    country_code: string;
     dataset: string;
     last_success_at: string | null;
     complete_through: string | null;
+    has_campaigns: boolean;
   }>(
     `select p.id as profile_pk, p.profile_id as amazon_profile_id,
+            p.country_code,
             d.dataset,
             s.last_success_at,
-            case when d.dataset = 'metrics' then m.complete_through end as complete_through
+            case when d.dataset = 'metrics' then m.complete_through end as complete_through,
+            exists(select 1 from campaigns c where c.profile_id = p.id) as has_campaigns
      from amazon_profiles p
      join amazon_connections conn on conn.id = p.connection_id
      cross join (values ('structure'), ('metrics')) as d(dataset)
@@ -1696,8 +1713,10 @@ export async function dataFreshnessByWorkspace(
   return result.rows.map((row) => ({
     profilePk: row.profile_pk,
     amazonProfileId: row.amazon_profile_id,
+    countryCode: row.country_code,
     dataset: row.dataset,
     lastSuccessAt: row.last_success_at,
     completeThrough: row.complete_through,
+    hasCampaigns: row.has_campaigns,
   }));
 }

@@ -278,9 +278,11 @@ describe("dashboard query hooks", () => {
       profiles: [
         {
           profileId: "profile-us",
+          countryCode: "US",
           dataset: "metrics",
           lastSuccessAt: "2026-08-20T05:00:00.000Z",
           completeThrough: "2026-08-19",
+          hasCampaigns: true,
         },
       ],
       fxRates: {

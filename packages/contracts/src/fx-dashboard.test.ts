@@ -150,9 +150,11 @@ describe("data freshness response schema", () => {
       profiles: [
         {
           profileId: "amz-1",
+          countryCode: "US",
           dataset: "metrics",
           lastSuccessAt: "2026-08-14T05:00:00.000Z",
           completeThrough: "2026-08-13",
+          hasCampaigns: true,
         },
       ],
       fxRates,

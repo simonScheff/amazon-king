@@ -859,6 +859,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         adGroupId: null,
         adGroupName: null,
         state: "PAUSED",
+        firstSeenAt: expect.any(Date),
       },
       {
         id: "amzn-negative-ad-group",
@@ -868,6 +869,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         adGroupId: "amzn-ad-group-negatives",
         adGroupName: "Exact ad group",
         state: "ENABLED",
+        firstSeenAt: expect.any(Date),
       },
     ]);
 
@@ -930,6 +932,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         adGroupId: null,
         adGroupName: null,
         state: "PAUSED",
+        firstSeenAt: expect.any(Date),
       },
       {
         id: "amzn-negative-target-ad-group",
@@ -939,6 +942,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         adGroupId: "amzn-ad-group-negative-targets",
         adGroupName: "Product ad group",
         state: "ENABLED",
+        firstSeenAt: expect.any(Date),
       },
     ]);
 

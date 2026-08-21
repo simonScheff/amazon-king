@@ -335,6 +335,7 @@ describe("contracts smoke test", () => {
           adGroupId: null,
           adGroupName: null,
           state: "ENABLED",
+          firstSeenAt: "2026-08-05T12:00:00Z",
         },
       ],
     });
@@ -354,6 +355,7 @@ describe("contracts smoke test", () => {
           adGroupId: null,
           adGroupName: null,
           state: "ENABLED",
+          firstSeenAt: "2026-08-05T12:00:00Z",
         },
       ],
     });

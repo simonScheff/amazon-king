@@ -2125,11 +2125,13 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       return {
         profiles: rows.map((row) => ({
           profileId: row.amazonProfileId,
+          countryCode: row.countryCode,
           dataset: row.dataset,
           lastSuccessAt: row.lastSuccessAt
             ? isoDateTime(row.lastSuccessAt)
             : null,
           completeThrough: row.completeThrough,
+          hasCampaigns: row.hasCampaigns,
         })),
         fxRates: toContractFxRatesStatus(fxStatus, now()),
       };

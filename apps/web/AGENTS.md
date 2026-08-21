@@ -236,6 +236,15 @@ products** (`negativeTargets`): campaign- and ad-group-level `ASIN_SAME_AS`
 exclusions from structure sync, with an Amazon retail link per ASIN. Do not
 route that tab through `MetricsTable`.
 
+The **Search terms** tab adds a per-row **Exclude** action
+(`src/components/exclude-search-term.tsx`, a `MetricsTable` `renderAction`
+cell shown only while the campaign is not archived): one click drafts a
+campaign-level negative exact for the term — a negative ASIN target when the
+term is an ASIN — via `useCreateCampaignNegatives`, then links to Change
+center for review and apply. Terms an enabled synced negative already blocks
+(keyword text case-insensitively, ASINs uppercased, from the detail payload's
+`negativeKeywords`/`negativeTargets`) render as "Excluded" with no action.
+
 ## Re-authentication
 
 Spend-changing mutations can fail with `REAUTH_REQUIRED`. Route that failure to

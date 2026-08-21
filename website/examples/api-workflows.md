@@ -176,14 +176,25 @@ curl -s -b ak.cookies http://localhost:3000/api/system/data-freshness
 ```
 
 ```json
-[
-  {
-    "profileId": "345678901234567",
-    "dataset": "metrics",
-    "lastSuccessAt": "2026-08-16T06:12:44.000Z",
-    "completeThrough": "2026-08-15"
+{
+  "profiles": [
+    {
+      "profileId": "345678901234567",
+      "countryCode": "US",
+      "dataset": "metrics",
+      "lastSuccessAt": "2026-08-16T06:12:44.000Z",
+      "completeThrough": "2026-08-15",
+      "hasCampaigns": true
+    }
+  ],
+  "fxRates": {
+    "latestRateDate": "2026-08-15",
+    "lastRunState": "succeeded",
+    "lastRunAt": "2026-08-16T06:01:00.000Z",
+    "lastError": null,
+    "stale": false
   }
-]
+}
 ```
 
 ## 3. A guarded write, end to end

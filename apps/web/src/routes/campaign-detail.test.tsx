@@ -34,6 +34,11 @@ vi.mock("../api/endpoints", () => ({
     isPending: false,
     error: null,
   }),
+  useCreateCampaignNegatives: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+    error: null,
+  }),
   useProfiles: () => ({
     isPending: false,
     error: null,
@@ -154,6 +159,7 @@ const detail: CampaignDetail = {
       adGroupId: null,
       adGroupName: null,
       state: "ENABLED",
+      firstSeenAt: "2026-08-01T10:00:00Z",
     },
     {
       id: "negative-ad-group",
@@ -163,6 +169,7 @@ const detail: CampaignDetail = {
       adGroupId: "ad-group-1",
       adGroupName: "Exact ad group",
       state: "PAUSED",
+      firstSeenAt: "2026-08-02T10:00:00Z",
     },
   ],
   negativeTargets: [
@@ -174,6 +181,7 @@ const detail: CampaignDetail = {
       adGroupId: null,
       adGroupName: null,
       state: "ENABLED",
+      firstSeenAt: "2026-08-03T10:00:00Z",
     },
   ],
 };
@@ -447,6 +455,88 @@ describe("CampaignDetailPage profitability", () => {
 
     expect(
       screen.queryByRole("columnheader", { name: "Profit" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers excluding a search term straight from its row", () => {
+    render(<CampaignDetailPage />);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Search terms" }));
+
+    for (const term of ["tractor gifts", "farm tractors"]) {
+      const row = screen.getByRole("cell", { name: term }).closest("tr");
+      expect(
+        within(row!).getByRole("button", { name: "Exclude" }),
+      ).toBeInTheDocument();
+    }
+  });
+
+  it("marks terms an enabled synced negative already blocks as excluded", () => {
+    const term = (name: string) => ({
+      id: name,
+      name,
+      state: "n/a",
+      totals: {
+        impressions: 5,
+        clicks: 1,
+        cost: "1.0000",
+        sales: "0.0000",
+        orders: 0,
+        units: 0,
+      },
+      estimatedRoyalty: null,
+      estimatedAdProfit: null,
+      economicsMissing: true,
+    });
+    mocks.useCampaign.mockReturnValue({
+      isPending: false,
+      error: null,
+      data: {
+        ...detail,
+        searchTerms: [
+          term("Free Books"),
+          term("B0CRHVCT1T"),
+          term("used books"),
+        ],
+      },
+    });
+    render(<CampaignDetailPage />);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Search terms" }));
+
+    // "Free Books" matches the enabled negative keyword case-insensitively,
+    // B0CRHVCT1T the enabled negative product target; "used books" is only a
+    // paused negative, so it stays excludable.
+    for (const name of ["Free Books", "B0CRHVCT1T"]) {
+      const row = screen.getByRole("cell", { name }).closest("tr");
+      expect(within(row!).getByText("Excluded")).toBeInTheDocument();
+      expect(
+        within(row!).queryByRole("button", { name: "Exclude" }),
+      ).not.toBeInTheDocument();
+    }
+    const pausedRow = screen
+      .getByRole("cell", { name: "used books" })
+      .closest("tr");
+    expect(
+      within(pausedRow!).getByRole("button", { name: "Exclude" }),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the exclude action for an archived campaign", () => {
+    mocks.useCampaign.mockReturnValue({
+      isPending: false,
+      error: null,
+      data: {
+        ...detail,
+        campaign: { ...detail.campaign, state: "archived" },
+      },
+    });
+    render(<CampaignDetailPage />);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Search terms" }));
+
+    expect(
+      screen.queryByRole("button", { name: "Exclude" }),
     ).not.toBeInTheDocument();
   });
 });

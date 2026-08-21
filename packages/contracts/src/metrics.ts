@@ -207,6 +207,11 @@ export const negativeKeywordRowSchema = z.object({
   adGroupId: z.string().nullable(),
   adGroupName: z.string().nullable(),
   state: z.string(),
+  /**
+   * When the app first saw this negative (Amazon exposes no creation date):
+   * the apply date for negatives created through the app, first sync otherwise.
+   */
+  firstSeenAt: isoDateTimeSchema,
 });
 export type NegativeKeywordRow = z.infer<typeof negativeKeywordRowSchema>;
 
@@ -219,6 +224,11 @@ export const negativeTargetRowSchema = z.object({
   adGroupId: z.string().nullable(),
   adGroupName: z.string().nullable(),
   state: z.string(),
+  /**
+   * When the app first saw this negative (Amazon exposes no creation date):
+   * the apply date for negatives created through the app, first sync otherwise.
+   */
+  firstSeenAt: isoDateTimeSchema,
 });
 export type NegativeTargetRow = z.infer<typeof negativeTargetRowSchema>;
 

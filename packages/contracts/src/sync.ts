@@ -31,9 +31,16 @@ export type SyncRunSummary = z.infer<typeof syncRunSummarySchema>;
 
 export const dataFreshnessSchema = z.object({
   profileId: z.string(),
+  countryCode: z.string(),
   dataset: z.string(),
   lastSuccessAt: isoDateTimeSchema.nullable(),
   completeThrough: isoDateSchema.nullable(),
+  /**
+   * False when the profile has no imported campaigns at all (e.g. a
+   * marketplace where the account never advertised). Such profiles can never
+   * have metrics, so "behind" does not apply to them.
+   */
+  hasCampaigns: z.boolean(),
 });
 export type DataFreshness = z.infer<typeof dataFreshnessSchema>;
 

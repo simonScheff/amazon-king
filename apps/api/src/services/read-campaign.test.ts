@@ -144,6 +144,7 @@ describe("campaign profitability", () => {
         adGroupId: "amazon-ad-group",
         adGroupName: "Exact ad group",
         state: "ENABLED",
+        firstSeenAt: "2026-08-01T10:00:00Z",
       },
     ]);
     vi.mocked(dashboard.listNegativeTargetRows).mockResolvedValue([
@@ -155,6 +156,7 @@ describe("campaign profitability", () => {
         adGroupId: null,
         adGroupName: null,
         state: "ENABLED",
+        firstSeenAt: "2026-08-01T10:00:00Z",
       },
     ]);
     vi.mocked(dashboard.campaignDailySeries).mockResolvedValue([

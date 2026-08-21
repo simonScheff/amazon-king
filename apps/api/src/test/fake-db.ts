@@ -1947,10 +1947,14 @@ export class FakeDb {
               rows.push({
                 profile_pk: profile.id,
                 amazon_profile_id: profile.profile_id,
+                country_code: profile.country_code,
                 dataset,
                 last_success_at: lastRun ? lastRun.finished_at : null,
                 complete_through:
                   dataset === "metrics" ? (metricDates.at(-1) ?? null) : null,
+                has_campaigns: t.campaigns.some(
+                  (c) => c.profile_id === profile.id,
+                ),
               });
             }
           }

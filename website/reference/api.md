@@ -841,9 +841,11 @@ workspace-level FX rate health:
   "profiles": [
     {
       "profileId": "...",
+      "countryCode": "US",
       "dataset": "metrics",
       "lastSuccessAt": "2026-08-20T05:12:00.000Z",
-      "completeThrough": "2026-08-19"
+      "completeThrough": "2026-08-19",
+      "hasCampaigns": true
     }
   ],
   "fxRates": {
@@ -855,6 +857,11 @@ workspace-level FX rate health:
   }
 }
 ```
+
+`hasCampaigns` is false when structure sync has never imported a campaign for
+the profile (a marketplace where the account never advertised); such profiles
+can never have metrics, so the dashboard shows them as "no campaigns" rather
+than "behind".
 
 `fxRates.lastRunState` is `succeeded`, `failed`, `running`, or `never_run`
 (no `fx_sync` job yet); `stale` is true when the stored rates lag the last

@@ -1,5 +1,6 @@
 import type {
   CountrySpend,
+  DataFreshness,
   FxRatesStatus,
   Recommendation,
 } from "@amazon-king/contracts";
@@ -58,6 +59,7 @@ const mocks = vi.hoisted(() => ({
   currency: "USD",
   ratesAvailable: true,
   fxRates: undefined as FxRatesStatus | undefined,
+  freshnessProfiles: [] as DataFreshness[],
   countrySpend: undefined as CountrySpend | undefined,
   saveSettings: vi.fn(),
 }));
@@ -90,7 +92,7 @@ vi.mock("../api/endpoints", () => ({
   useDataFreshness: () => ({
     isPending: false,
     error: null,
-    data: { profiles: [], fxRates: mocks.fxRates },
+    data: { profiles: mocks.freshnessProfiles, fxRates: mocks.fxRates },
   }),
   useSyncRuns: () => ({ data: [] }),
   useProfiles: () => ({
@@ -146,6 +148,7 @@ beforeEach(() => {
   mocks.currency = "USD";
   mocks.ratesAvailable = true;
   mocks.fxRates = fxUpToDate;
+  mocks.freshnessProfiles = [];
   mocks.countrySpend = undefined;
   mocks.saveSettings.mockReset();
 });
@@ -219,6 +222,64 @@ describe("OverviewPage FX rates row", () => {
     render(<OverviewPage />);
 
     expect(screen.getByText("not synced yet")).toBeInTheDocument();
+  });
+});
+
+describe("OverviewPage sync status", () => {
+  const structureRow: DataFreshness = {
+    profileId: "profile-us",
+    countryCode: "US",
+    dataset: "structure",
+    lastSuccessAt: "2026-08-21T06:54:00.000Z",
+    completeThrough: null,
+    hasCampaigns: true,
+  };
+  const metricsRow: DataFreshness = { ...structureRow, dataset: "metrics" };
+  // Mirrors the overview's expectation: metrics syncs target yesterday.
+  const yesterday = new Date(Date.now() - 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+
+  it("labels rows with the market name, keeping the profile id in a tooltip", () => {
+    mocks.freshnessProfiles = [
+      structureRow,
+      { ...metricsRow, completeThrough: yesterday },
+    ];
+    render(<OverviewPage />);
+
+    const labels = screen.getAllByTitle("Amazon profile profile-us");
+    expect(labels).toHaveLength(2);
+    for (const label of labels) {
+      expect(label).toHaveTextContent("United States");
+    }
+    // The bare Amazon profile id is no longer rendered as row text.
+    expect(screen.queryByText("profile-us")).toBeNull();
+  });
+
+  it("shows up to date when metrics are complete through yesterday", () => {
+    mocks.freshnessProfiles = [{ ...metricsRow, completeThrough: yesterday }];
+    render(<OverviewPage />);
+
+    expect(screen.getByText("up to date")).toBeInTheDocument();
+    expect(screen.getByText(/complete through/)).toBeInTheDocument();
+  });
+
+  it("warns when a profile with campaigns lags behind", () => {
+    mocks.freshnessProfiles = [
+      { ...metricsRow, completeThrough: "2026-08-01" },
+    ];
+    render(<OverviewPage />);
+
+    expect(screen.getByText(/behind · expecting/)).toBeInTheDocument();
+    expect(screen.queryByText("no campaigns")).toBeNull();
+  });
+
+  it("shows no campaigns instead of behind for profiles that never advertised", () => {
+    mocks.freshnessProfiles = [{ ...metricsRow, hasCampaigns: false }];
+    render(<OverviewPage />);
+
+    expect(screen.getByText("no campaigns")).toBeInTheDocument();
+    expect(screen.queryByText(/behind/)).toBeNull();
   });
 });
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   Link,
   useNavigate,
@@ -14,6 +14,7 @@ import type {
 import { useCampaign, useProfiles } from "../api/endpoints";
 import { AmazonProductLink } from "../components/amazon-product-link";
 import { CampaignControls } from "../components/campaign-controls";
+import { ExcludeSearchTerm } from "../components/exclude-search-term";
 import { KpiCard } from "../components/kpi-card";
 import { CampaignHeader } from "../components/campaign-header";
 import { CampaignMaxCpc } from "../components/campaign-max-cpc";
@@ -38,6 +39,7 @@ import {
 } from "../lib/campaign-profit";
 import { compareNullable, nextSort, type Sort } from "../lib/sorting";
 import { resolveTimeframe } from "../lib/timeframe";
+import { isAsin } from "../lib/asin";
 
 type Tab =
   | "adGroups"
@@ -135,6 +137,7 @@ function NegativeKeywordsTable({ rows }: { rows: NegativeKeywordRow[] }) {
           <Th>Negative keyword</Th>
           <Th>Match type</Th>
           <Th>Applied to</Th>
+          <Th>Added</Th>
           <Th>State</Th>
         </tr>
       </thead>
@@ -150,6 +153,7 @@ function NegativeKeywordsTable({ rows }: { rows: NegativeKeywordRow[] }) {
                   ? "Campaign"
                   : `Ad group · ${row.adGroupName ?? row.adGroupId ?? "Unknown"}`}
               </Td>
+              <Td>{formatDate(row.firstSeenAt)}</Td>
               <Td>
                 <Badge tone={state === "enabled" ? "success" : "neutral"}>
                   {formatAmazonLabel(state)}
@@ -184,6 +188,7 @@ function NegativeProductsTable({
           <Th>ASIN</Th>
           <Th>Type</Th>
           <Th>Applied to</Th>
+          <Th>Added</Th>
           <Th>State</Th>
         </tr>
       </thead>
@@ -206,6 +211,7 @@ function NegativeProductsTable({
                   ? "Campaign"
                   : `Ad group · ${row.adGroupName ?? row.adGroupId ?? "Unknown"}`}
               </Td>
+              <Td>{formatDate(row.firstSeenAt)}</Td>
               <Td>
                 <Badge tone={state === "enabled" ? "success" : "neutral"}>
                   {formatAmazonLabel(state)}
@@ -224,11 +230,14 @@ function MetricsTable({
   currency,
   termLink,
   showProfit = false,
+  renderAction,
 }: {
   rows: Row[];
   currency: string;
   termLink?: { days: MetricWindow; country?: string };
   showProfit?: boolean;
+  /** Optional trailing per-row action cell (used by the search terms tab). */
+  renderAction?: (row: Row) => ReactNode;
 }) {
   const [sort, setSort] = useState<Sort<SortKey>>({
     key: "cost",
@@ -320,6 +329,7 @@ function MetricsTable({
               onSort={onSort}
             />
           ) : null}
+          {renderAction ? <Th /> : null}
         </tr>
       </thead>
       <tbody>
@@ -382,6 +392,9 @@ function MetricsTable({
                   />
                 </Td>
               ) : null}
+              {renderAction ? (
+                <Td className="text-right">{renderAction(r)}</Td>
+              ) : null}
             </tr>
           );
         })}
@@ -418,6 +431,26 @@ export function CampaignDetailPage() {
     campaign.data.economicsMissing,
     c.totals.estimatedAdProfit,
   );
+
+  // Terms an enabled synced negative already blocks, matched the way the
+  // exclude action would create them: keyword text case-insensitively
+  // (Amazon matches negatives that way), ASINs uppercased.
+  const excludedTerms = new Set<string>();
+  for (const negative of campaign.data.negativeKeywords) {
+    if (negative.state.toLowerCase() === "enabled") {
+      excludedTerms.add(negative.keywordText.trim().toLowerCase());
+    }
+  }
+  for (const negative of campaign.data.negativeTargets) {
+    if (negative.state.toLowerCase() === "enabled") {
+      excludedTerms.add(negative.asin.trim().toUpperCase());
+    }
+  }
+  function isTermExcluded(term: string) {
+    return isAsin(term)
+      ? excludedTerms.has(term.trim().toUpperCase())
+      : excludedTerms.has(term.trim().toLowerCase());
+  }
 
   return (
     <div className="flex max-w-6xl flex-col gap-4">
@@ -536,6 +569,17 @@ export function CampaignDetailPage() {
                 currency={currency}
                 termLink={tab === "searchTerms" ? { days, country } : undefined}
                 showProfit={tab === "searchTerms"}
+                renderAction={
+                  tab === "searchTerms" && editable
+                    ? (row) => (
+                        <ExcludeSearchTerm
+                          campaignId={id}
+                          term={row.name}
+                          alreadyExcluded={isTermExcluded(row.name)}
+                        />
+                      )
+                    : undefined
+                }
               />
             )}
           </div>

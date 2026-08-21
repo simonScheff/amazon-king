@@ -79,9 +79,14 @@ export function OverviewPage() {
       recommendation.profileId !== null &&
       selectedProfileIds.has(recommendation.profileId),
   );
-  const visibleFreshness = (freshness.data?.profiles ?? []).filter((item) =>
-    selectedProfileIds.has(item.profileId),
-  );
+  const visibleFreshness = (freshness.data?.profiles ?? [])
+    .filter((item) => selectedProfileIds.has(item.profileId))
+    .sort(
+      (a, b) =>
+        countryNameForCode(a.countryCode).localeCompare(
+          countryNameForCode(b.countryCode),
+        ) || a.dataset.localeCompare(b.dataset),
+    );
 
   // Latest sync run per profile+dataset (the API returns runs newest-first).
   const syncRuns = useSyncRuns();
@@ -488,8 +493,13 @@ export function OverviewPage() {
                     const run = latestRunByKey.get(
                       `${f.profileId}:${f.dataset}`,
                     );
+                    // A profile with no campaigns can never have metrics —
+                    // "behind" would be misleading there.
+                    const noCampaigns =
+                      f.dataset === "metrics" && !f.hasCampaigns;
                     const behind =
                       f.dataset === "metrics" &&
+                      !noCampaigns &&
                       (f.completeThrough === null ||
                         f.completeThrough < expectedThrough);
                     const upToDate =
@@ -502,10 +512,14 @@ export function OverviewPage() {
                         className="flex flex-col gap-1"
                       >
                         <div className="flex flex-wrap items-baseline gap-x-2">
-                          <span className="font-mono text-xs text-zinc-400">
-                            {f.profileId}
+                          <span
+                            className="flex items-center gap-1.5 text-zinc-300"
+                            title={`Amazon profile ${f.profileId}`}
+                          >
+                            <Flag countryCode={f.countryCode} />
+                            {countryNameForCode(f.countryCode)}
                           </span>
-                          <span className="text-zinc-300">{f.dataset}</span>
+                          <span className="text-zinc-400">{f.dataset}</span>
                           {run?.status === "running" ? (
                             <Badge tone="info">syncing…</Badge>
                           ) : run?.status === "failed" ? (
@@ -514,6 +528,8 @@ export function OverviewPage() {
                             </Badge>
                           ) : upToDate ? (
                             <Badge tone="success">up to date</Badge>
+                          ) : noCampaigns ? (
+                            <Badge tone="neutral">no campaigns</Badge>
                           ) : behind ? (
                             <Badge tone="warning">
                               behind · expecting {formatDate(expectedThrough)}
