@@ -136,6 +136,14 @@ case-insensitively because Amazon matches negatives that way. Drafting writes
 nothing to Amazon, so it is not recent-auth gated; the apply in Change center
 keeps the gate.
 
+`POST /api/search-terms/:term/negatives` is the bulk variant: it takes
+`{ campaignIds }` (Amazon ids), resolves the term's per-campaign rows exactly
+like `GET /api/search-terms/:term` (same `days`/`books`/`country` query
+params), and drafts one negatives change set per requested campaign that runs
+the term and is enabled, via `createCampaignNegativesChangeSet`. Unknown or
+non-enabled ids come back in `skippedCampaignIds` — never an error. Same
+guard posture: CSRF + WRITE rate limit, no recent-auth gate.
+
 `POST /api/recommendations/:id/reject` accepts an optional
 `{ snoozeDays: 1–365 }`, which shortens the default 60-day dismissal
 suppression so a finding the owner intends to fix returns to confirm the fix

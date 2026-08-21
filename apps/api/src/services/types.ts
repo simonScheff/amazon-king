@@ -30,6 +30,7 @@ import type {
   RecommendationType,
   SearchTermDetail,
   SearchTermListRow,
+  SearchTermNegativesResult,
   SyncRun,
   SyncRunSummary,
   WorkspaceSettings,
@@ -334,6 +335,19 @@ export interface ChangeService {
     searchTerms: string[],
     meta: RequestMeta,
   ): Promise<ChangeSetWithActions>;
+  /**
+   * Block one shopper term in many campaigns at once ("Exclude everywhere"
+   * on the search-term detail): one draft negatives change set per requested
+   * Amazon campaign id that appears in the already-resolved detail rows with
+   * state "enabled". Unknown or non-enabled ids are reported as skipped,
+   * never an error. Fingerprinted per campaign, so a repeat replays the sets.
+   */
+  createSearchTermNegativesChangeSets(
+    auth: AuthContext,
+    detail: SearchTermDetail,
+    campaignIds: string[],
+    meta: RequestMeta,
+  ): Promise<SearchTermNegativesResult>;
   /** Route one conflicted shopper term with campaign-level negative exacts. */
   createCannibalizationChangeSet(
     auth: AuthContext,

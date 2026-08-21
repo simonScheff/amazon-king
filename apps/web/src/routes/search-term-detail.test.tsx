@@ -13,6 +13,7 @@ import { SearchTermDetailPage } from "./search-term-detail";
 const mocks = vi.hoisted(() => ({
   useSearchTerm: vi.fn(),
   useProfiles: vi.fn(),
+  useCreateSearchTermNegatives: vi.fn(),
   useSearch: vi.fn(),
   navigate: vi.fn(),
 }));
@@ -27,6 +28,7 @@ vi.mock("@tanstack/react-router", () => ({
 vi.mock("../api/endpoints", () => ({
   useSearchTerm: mocks.useSearchTerm,
   useProfiles: mocks.useProfiles,
+  useCreateSearchTermNegatives: mocks.useCreateSearchTermNegatives,
   useCountrySpend: () => ({ data: undefined }),
 }));
 
@@ -107,6 +109,11 @@ describe("SearchTermDetailPage", () => {
     mocks.useProfiles.mockReturnValue({ isPending: false, data: [] });
     mocks.useSearch.mockReset();
     mocks.useSearch.mockReturnValue({ days: 7 });
+    mocks.useCreateSearchTermNegatives.mockReset();
+    mocks.useCreateSearchTermNegatives.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+    });
     mocks.navigate.mockReset();
     mocks.useSearchTerm.mockReturnValue({
       isPending: false,

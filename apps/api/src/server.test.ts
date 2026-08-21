@@ -508,3 +508,110 @@ describe("GET /api/session/verify", () => {
     expect(response.headers.location).toBe("http://localhost:5173");
   });
 });
+
+describe("POST /api/search-terms/:term/negatives", () => {
+  let app: FastifyInstance | null = null;
+  afterEach(async () => {
+    await app?.close();
+    app = null;
+  });
+
+  const DETAIL = { searchTerm: "tractor colouring book", campaigns: [] };
+
+  async function start(options: { recentAuth?: boolean } = {}) {
+    const session = {
+      authenticate: vi.fn(async () => AUTH),
+      verifyCsrf: vi.fn(() => true),
+      isRecentAuth: vi.fn(() => options.recentAuth ?? true),
+    } as unknown as SessionService;
+    const read = {
+      getSearchTermDetail: vi.fn(
+        async (): Promise<typeof DETAIL | null> => DETAIL,
+      ),
+    };
+    const changes = {
+      createSearchTermNegativesChangeSets: vi.fn(async () => ({
+        changeSetIds: ["set-1"],
+        skippedCampaignIds: [],
+      })),
+    } as unknown as ChangeService;
+    const services = {
+      session,
+      changes,
+      amazon: {},
+      read,
+    } as unknown as ApiServices;
+    app = await buildServer({
+      config: testConfig(),
+      logger: createLogger("test", { level: "silent" }),
+      services,
+    });
+    return { read, changes };
+  }
+
+  function post(payload: unknown, query = "") {
+    return app!.inject({
+      method: "POST",
+      url: `/api/search-terms/tractor%20colouring%20book/negatives${query}`,
+      headers: { "x-csrf-token": "csrf" },
+      payload: payload as Record<string, unknown>,
+    });
+  }
+
+  it("resolves the term like the detail route and drafts per campaign", async () => {
+    const { read, changes } = await start();
+
+    const response = await post(
+      { campaignIds: ["camp-1"] },
+      "?days=14&country=de&books=7,9",
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      changeSetIds: ["set-1"],
+      skippedCampaignIds: [],
+    });
+    expect(read.getSearchTermDetail).toHaveBeenCalledWith(
+      "1",
+      "tractor colouring book",
+      14,
+      ["7", "9"],
+      "DE",
+    );
+    expect(changes.createSearchTermNegativesChangeSets).toHaveBeenCalledWith(
+      AUTH,
+      DETAIL,
+      ["camp-1"],
+      expect.anything(),
+    );
+  });
+
+  it("drafts without a recent sign-in (nothing reaches Amazon until apply)", async () => {
+    const { changes } = await start({ recentAuth: false });
+
+    const response = await post({ campaignIds: ["camp-1"] });
+
+    expect(response.statusCode).toBe(200);
+    expect(changes.createSearchTermNegativesChangeSets).toHaveBeenCalled();
+  });
+
+  it("404s on an unknown search term", async () => {
+    const { read, changes } = await start();
+    read.getSearchTermDetail.mockResolvedValue(null);
+
+    const response = await post({ campaignIds: ["camp-1"] });
+
+    expect(response.statusCode).toBe(404);
+    expect(changes.createSearchTermNegativesChangeSets).not.toHaveBeenCalled();
+  });
+
+  it("rejects an empty campaign list with 400", async () => {
+    const { changes } = await start();
+
+    const response = await post({ campaignIds: [] });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe("VALIDATION_ERROR");
+    expect(changes.createSearchTermNegativesChangeSets).not.toHaveBeenCalled();
+  });
+});

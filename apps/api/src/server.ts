@@ -23,6 +23,7 @@ import {
   recommendationTypeSchema,
   rejectRecommendationSchema,
   renameCampaignSchema,
+  searchTermNegativesCreateSchema,
   setCampaignMaxCpcSchema,
   updateCampaignStateSchema,
   workspaceSettingsUpdateSchema,
@@ -695,6 +696,37 @@ export async function buildServer(
         meta(request),
       );
       return result.changeSet;
+    },
+  );
+
+  // Bulk variant of the route above: one draft negatives set per enabled
+  // campaign the term runs on in the selected market. Same guard posture —
+  // drafting writes nothing to Amazon, so no recent-auth gate.
+  app.post(
+    "/api/search-terms/:term/negatives",
+    { config: { rateLimit: WRITE_RATE } },
+    async (request) => {
+      const auth = await authenticate(request);
+      const { term } = request.params as { term: string };
+      const { days, books, country } = parse(
+        searchTermsQuerySchema,
+        request.query,
+      );
+      const body = parse(searchTermNegativesCreateSchema, request.body);
+      const detail = await services.read.getSearchTermDetail(
+        auth.workspaceId,
+        term,
+        days,
+        books ?? null,
+        country ?? null,
+      );
+      if (!detail) throw notFound("Unknown search term");
+      return services.changes.createSearchTermNegativesChangeSets(
+        auth,
+        detail,
+        body.campaignIds,
+        meta(request),
+      );
     },
   );
 

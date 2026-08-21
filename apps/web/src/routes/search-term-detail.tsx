@@ -24,6 +24,7 @@ import {
 } from "../components/ui/sortable-th";
 import { Table, Td, Th } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
+import { ExcludeSearchTermEverywhere } from "../components/exclude-search-term-everywhere";
 import {
   getCampaignProfitStatus,
   hasCampaignActivity,
@@ -209,6 +210,14 @@ export function SearchTermDetailPage() {
               </Select>
             </label>
           ) : null}
+          <ExcludeSearchTermEverywhere
+            term={data.searchTerm}
+            campaigns={data.campaigns}
+            currency={currency}
+            countryCode={data.countryCode}
+            days={days}
+            bookIds={search.books}
+          />
           <div className="flex items-center gap-3">
             <span className="text-sm text-zinc-400">Date range</span>
             <TimeframeSelect

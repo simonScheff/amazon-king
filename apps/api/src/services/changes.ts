@@ -2496,6 +2496,38 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
       return toResult(loaded.set, loaded.actions);
     },
 
+    async createSearchTermNegativesChangeSets(auth, detail, campaignIds, meta) {
+      // Only campaigns the detail resolved for this market, still enabled.
+      // Amazon states arrive uppercase ("ENABLED"); normalize like the other
+      // state checks in this service.
+      const enabled = new Set(
+        detail.campaigns
+          .filter(
+            (campaign) => campaign.state.trim().toLowerCase() === "enabled",
+          )
+          .map((campaign) => campaign.campaignId),
+      );
+      const changeSetIds: string[] = [];
+      const skippedCampaignIds: string[] = [];
+      const seen = new Set<string>();
+      for (const campaignId of campaignIds) {
+        if (seen.has(campaignId)) continue;
+        seen.add(campaignId);
+        if (!enabled.has(campaignId)) {
+          skippedCampaignIds.push(campaignId);
+          continue;
+        }
+        const result = await service.createCampaignNegativesChangeSet(
+          auth,
+          campaignId,
+          [detail.searchTerm],
+          meta,
+        );
+        changeSetIds.push(result.changeSet.id);
+      }
+      return { changeSetIds, skippedCampaignIds };
+    },
+
     async createCampaignCreationChangeSets(auth, input, meta) {
       if (config.killSwitch) {
         throw forbidden(

@@ -29,6 +29,7 @@ import {
   recommendationSchema,
   searchTermDetailSchema,
   searchTermListRowSchema,
+  searchTermNegativesResultSchema,
   sessionInfoSchema,
   syncRunSchema,
   syncRunSummarySchema,
@@ -47,6 +48,7 @@ import {
   type RecommendationState,
   type RecommendationType,
   type RejectRecommendation,
+  type SearchTermNegativesCreate,
   type WorkspaceSettings,
   type WorkspaceSettingsUpdate,
 } from "@amazon-king/contracts";
@@ -650,6 +652,33 @@ export function useCreateCampaignNegatives(campaignId: string) {
         method: "POST",
         body,
         schema: changeSetSchema,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["change-sets"] }),
+  });
+}
+
+/**
+ * Draft a campaign-level negative for one shopper term in every given
+ * campaign at once (search-term detail "Exclude everywhere"; no apply). The
+ * current view window/market go along as query params so the API resolves
+ * the same per-campaign rows the page shows.
+ */
+export function useCreateSearchTermNegatives(
+  term: string,
+  days: MetricWindow,
+  bookIds?: string[],
+  countryCode?: string,
+) {
+  const qc = useQueryClient();
+  const books = booksParam(bookIds);
+  const country = countryCode === "all" ? undefined : countryCode;
+  return useMutation({
+    mutationFn: (body: SearchTermNegativesCreate) =>
+      apiFetch(`/api/search-terms/${encodeURIComponent(term)}/negatives`, {
+        method: "POST",
+        query: { days, books, country },
+        body,
+        schema: searchTermNegativesResultSchema,
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["change-sets"] }),
   });

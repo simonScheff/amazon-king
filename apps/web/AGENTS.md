@@ -245,6 +245,14 @@ center for review and apply. Terms an enabled synced negative already blocks
 (keyword text case-insensitively, ASINs uppercased, from the detail payload's
 `negativeKeywords`/`negativeTargets`) render as "Excluded" with no action.
 
+The search-term detail page has the bulk entry point: **Exclude everywhere**
+(`src/components/exclude-search-term-everywhere.tsx`, in the header control
+cluster) confirms the enabled campaigns running the term in the viewed market,
+then drafts one negatives change set per campaign via
+`useCreateSearchTermNegatives` (`POST /api/search-terms/:term/negatives`),
+linking to Change center like the per-row action. It is disabled when no
+enabled campaign runs the term.
+
 ## Re-authentication
 
 Spend-changing mutations can fail with `REAUTH_REQUIRED`. Route that failure to

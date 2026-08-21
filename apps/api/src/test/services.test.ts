@@ -9,6 +9,7 @@ import type {
   TokenManager,
 } from "@amazon-king/amazon-ads";
 import type { ApiConfig } from "../config.js";
+import type { SearchTermDetail } from "@amazon-king/contracts";
 import { ApiError } from "../errors.js";
 import { createSessionService } from "../services/session.js";
 import { createAmazonService } from "../services/amazon.js";
@@ -1483,5 +1484,139 @@ describe("conversion finding resolution", () => {
     expect(second.changeSet.id).toBe(first.changeSet.id);
     expect(db.tables.changeSets).toHaveLength(1);
     expect(db.tables.changeActions).toHaveLength(1);
+  });
+
+  // Only the fields the bulk-exclude service reads; the rest of the detail
+  // payload is irrelevant to drafting.
+  function searchTermDetail(
+    searchTerm: string,
+    campaigns: Array<{ campaignId: string; state: string }>,
+  ): SearchTermDetail {
+    return { searchTerm, campaigns } as SearchTermDetail;
+  }
+
+  function setupBulkExclude() {
+    const { db, profile } = setupConversion();
+    db.seedCampaign({
+      id: "11",
+      profile_id: profile.id,
+      amazon_campaign_id: "camp-2",
+      name: "Colouring book – auto",
+      targeting_type: "auto",
+    });
+    const service = createChangeService({
+      db: db as never,
+      pool: db.asPool() as never,
+      config: testConfig(),
+      logger: fakeLogger(),
+      gateway: {
+        applyActions: vi.fn(async () => []),
+      } as unknown as Pick<
+        AmazonAdsGateway,
+        "syncCampaignStructure" | "getCampaignBidControls" | "applyActions"
+      >,
+    });
+    return { db, service };
+  }
+
+  it("drafts one negatives set per enabled campaign the term runs on", async () => {
+    const { db, service } = setupBulkExclude();
+
+    const result = await service.createSearchTermNegativesChangeSets(
+      authFixture(),
+      searchTermDetail("tractor colouring book", [
+        // Amazon states arrive uppercase; the filter must normalize case.
+        { campaignId: "camp-1", state: "ENABLED" },
+        { campaignId: "camp-2", state: "enabled" },
+        { campaignId: "camp-3", state: "PAUSED" },
+      ]),
+      ["camp-1", "camp-2"],
+      META,
+    );
+
+    expect(result.skippedCampaignIds).toEqual([]);
+    expect(result.changeSetIds).toHaveLength(2);
+    expect(db.tables.changeSets).toHaveLength(2);
+    for (const set of db.tables.changeSets) {
+      expect(set.kind).toBe("recommendation");
+      expect(set.status).toBe("draft");
+      expect(set.metadata).toMatchObject({ strategy: "campaign_negatives" });
+    }
+    expect(db.tables.changeActions).toMatchObject([
+      {
+        action_type: "add_negative_exact",
+        campaign_id: "10",
+        search_term: "tractor colouring book",
+      },
+      {
+        action_type: "add_negative_exact",
+        campaign_id: "11",
+        search_term: "tractor colouring book",
+      },
+    ]);
+  });
+
+  it("skips disabled and unknown campaign ids instead of failing", async () => {
+    const { db, service } = setupBulkExclude();
+
+    const result = await service.createSearchTermNegativesChangeSets(
+      authFixture(),
+      searchTermDetail("tractor colouring book", [
+        { campaignId: "camp-1", state: "enabled" },
+        { campaignId: "camp-3", state: "paused" },
+      ]),
+      ["camp-1", "camp-3", "camp-gone"],
+      META,
+    );
+
+    expect(result.changeSetIds).toHaveLength(1);
+    expect(result.skippedCampaignIds).toEqual(["camp-3", "camp-gone"]);
+    expect(db.tables.changeSets).toHaveLength(1);
+    expect(db.tables.changeActions).toHaveLength(1);
+  });
+
+  it("drafts a negative ASIN target per campaign when the term is an ASIN", async () => {
+    const { db, service } = setupBulkExclude();
+
+    const result = await service.createSearchTermNegativesChangeSets(
+      authFixture(),
+      searchTermDetail("B0RIVAL123", [
+        { campaignId: "camp-1", state: "enabled" },
+        { campaignId: "camp-2", state: "enabled" },
+      ]),
+      ["camp-1", "camp-2"],
+      META,
+    );
+
+    expect(result.changeSetIds).toHaveLength(2);
+    expect(db.tables.changeActions).toMatchObject([
+      { action_type: "add_negative_target", search_term: "B0RIVAL123" },
+      { action_type: "add_negative_target", search_term: "B0RIVAL123" },
+    ]);
+  });
+
+  it("replays the same sets when the bulk exclude is submitted twice", async () => {
+    const { db, service } = setupBulkExclude();
+    const detail = searchTermDetail("tractor colouring book", [
+      { campaignId: "camp-1", state: "enabled" },
+      { campaignId: "camp-2", state: "enabled" },
+    ]);
+
+    const first = await service.createSearchTermNegativesChangeSets(
+      authFixture(),
+      detail,
+      ["camp-1", "camp-2"],
+      META,
+    );
+    const second = await service.createSearchTermNegativesChangeSets(
+      authFixture(),
+      detail,
+      ["camp-1", "camp-2"],
+      META,
+    );
+
+    expect(second.changeSetIds).toEqual(first.changeSetIds);
+    expect(db.tables.changeSets).toHaveLength(2);
+    expect(db.tables.changeActions).toHaveLength(2);
   });
 });

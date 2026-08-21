@@ -111,6 +111,32 @@ export type CampaignNegativesCreate = z.infer<
   typeof campaignNegativesCreateSchema
 >;
 
+/**
+ * Block one shopper term across many campaigns at once (the search-term
+ * detail "Exclude everywhere" action). `campaignIds` are Amazon campaign ids;
+ * each one that currently runs the term and is enabled gets its own draft
+ * change set via the same per-campaign logic as `campaignNegativesCreateSchema`.
+ */
+export const searchTermNegativesCreateSchema = z.object({
+  campaignIds: z.array(z.string().trim().min(1)).min(1).max(50),
+});
+export type SearchTermNegativesCreate = z.infer<
+  typeof searchTermNegativesCreateSchema
+>;
+
+/**
+ * The drafts created by one bulk exclude. Requested campaign ids that are
+ * unknown, do not run the term, or are not enabled are reported as skipped —
+ * never an error.
+ */
+export const searchTermNegativesResultSchema = z.object({
+  changeSetIds: z.array(z.string()),
+  skippedCampaignIds: z.array(z.string()),
+});
+export type SearchTermNegativesResult = z.infer<
+  typeof searchTermNegativesResultSchema
+>;
+
 /** The applied one-click campaign update (pause/enable or rename). */
 export const campaignUpdateResultSchema = z.object({
   changeSet: changeSetSchema,
