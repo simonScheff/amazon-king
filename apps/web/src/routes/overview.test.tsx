@@ -93,6 +93,9 @@ vi.mock("../api/endpoints", () => ({
     error: null,
     data: [recommendation],
   }),
+  useSearchTerms: () => ({ isPending: false, error: null, data: [] }),
+  useCampaigns: () => ({ isPending: false, error: null, data: [] }),
+  useBooks: () => ({ data: [] }),
   useCountrySpend: () => ({ data: undefined }),
 }));
 

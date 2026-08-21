@@ -6,7 +6,7 @@ import { ssrRenderTeleport, ssrRenderAttr, ssrRenderClass, ssrIncludeBooleanAttr
 import { t as toArray, u as unrefElement, n as notNullish, a as tryOnScopeDispose, b as useData, c as computedAsync, d as useSessionStorage, e as useLocalStorage, w as watchDebounced, o as onKeyStroke, f as useRouter, g as createSearchTranslate, h as useEventListener, i as useScrollLock, j as dataSymbol, p as pathToFile, k as inBrowser, l as escapeRegExp } from "./app.js";
 import { _ as _export_sfc } from "./plugin-vue_export-helper.1tPrXgE0.js";
 import "mermaid";
-const localSearchIndex = { "root": () => import("./@localSearchIndexroot.1WqBRSlY.js") };
+const localSearchIndex = { "root": () => import("./@localSearchIndexroot.CuSlcHIH.js") };
 /*!
 * tabbable 6.5.0
 * @license MIT, https://github.com/focus-trap/tabbable/blob/master/LICENSE

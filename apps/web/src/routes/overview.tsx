@@ -19,6 +19,7 @@ import {
   type TrendSeries,
 } from "../components/performance-trend-chart";
 import { DailyProfitChart } from "../components/daily-profit-chart";
+import { TopPerformers } from "../components/top-performers";
 import { Badge } from "../components/ui/badge";
 import { Card, CardBody, CardHeader } from "../components/ui/card";
 import { EmptyState, ErrorState, Loading } from "../components/states";
@@ -275,6 +276,13 @@ export function OverviewPage() {
                   </CardBody>
                 </Card>
               )}
+
+              <TopPerformers
+                days={days}
+                country={country}
+                bookIds={bookIds}
+                profileIds={selectedProfileIds}
+              />
             </div>
 
             <Card className="flex flex-col border-zinc-700 bg-zinc-850 shadow-[0_8px_24px_rgba(0,0,0,0.5)]">
@@ -307,7 +315,7 @@ export function OverviewPage() {
                 <ul className="flex flex-col gap-3 px-5 py-4">
                   {[...visibleRecommendations]
                     .sort((a, b) => a.priority - b.priority)
-                    .slice(0, 5)
+                    .slice(0, 9)
                     .map((r) => (
                       <li
                         key={r.id}
