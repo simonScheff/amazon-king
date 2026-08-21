@@ -6,7 +6,9 @@ import {
   useDataFreshness,
   useProfiles,
   useRecommendations,
+  useSyncRuns,
 } from "../api/endpoints";
+import type { SyncRunSummary } from "@amazon-king/contracts";
 import { CountrySelect } from "../components/country-select";
 import { Flag } from "../components/flag";
 import { KpiCard } from "../components/kpi-card";
@@ -66,6 +68,19 @@ export function OverviewPage() {
   const visibleFreshness = (freshness.data ?? []).filter((item) =>
     selectedProfileIds.has(item.profileId),
   );
+
+  // Latest sync run per profile+dataset (the API returns runs newest-first).
+  const syncRuns = useSyncRuns();
+  const latestRunByKey = new Map<string, SyncRunSummary>();
+  for (const run of syncRuns.data ?? []) {
+    if (!selectedProfileIds.has(run.profileId)) continue;
+    const key = `${run.profileId}:${run.kind}`;
+    if (!latestRunByKey.has(key)) latestRunByKey.set(key, run);
+  }
+  // Metrics syncs target yesterday — Amazon's current day is incomplete.
+  const expectedThrough = new Date(Date.now() - 86_400_000)
+    .toISOString()
+    .slice(0, 10);
 
   const currency = summary.data?.currency ?? "USD";
   const totals = summary.data?.totals;
@@ -342,7 +357,7 @@ export function OverviewPage() {
           </div>
 
           <Card>
-            <CardHeader title="Sync & connection health" />
+            <CardHeader title="Sync status" />
             <CardBody className="flex flex-col gap-2 text-sm">
               <div className="flex items-center gap-2">
                 <span className="text-zinc-500">Amazon connection:</span>
@@ -372,23 +387,61 @@ export function OverviewPage() {
                   {selectedMarketplace?.countryName ?? country}.
                 </p>
               ) : (
-                <ul className="flex flex-col gap-1.5">
-                  {visibleFreshness.map((f) => (
-                    <li
-                      key={`${f.profileId}-${f.dataset}`}
-                      className="flex flex-wrap items-baseline gap-x-2"
-                    >
-                      <span className="font-mono text-xs text-zinc-400">
-                        {f.profileId}
-                      </span>
-                      <span className="text-zinc-300">{f.dataset}</span>
-                      <span className="ml-auto text-xs text-zinc-500">
-                        {f.completeThrough
-                          ? `complete through ${formatDate(f.completeThrough)}`
-                          : "never completed"}
-                      </span>
-                    </li>
-                  ))}
+                <ul className="flex flex-col gap-2.5">
+                  {visibleFreshness.map((f) => {
+                    const run = latestRunByKey.get(
+                      `${f.profileId}:${f.dataset}`,
+                    );
+                    const behind =
+                      f.dataset === "metrics" &&
+                      (f.completeThrough === null ||
+                        f.completeThrough < expectedThrough);
+                    const upToDate =
+                      f.dataset === "metrics" &&
+                      f.completeThrough !== null &&
+                      !behind;
+                    return (
+                      <li
+                        key={`${f.profileId}-${f.dataset}`}
+                        className="flex flex-col gap-1"
+                      >
+                        <div className="flex flex-wrap items-baseline gap-x-2">
+                          <span className="font-mono text-xs text-zinc-400">
+                            {f.profileId}
+                          </span>
+                          <span className="text-zinc-300">{f.dataset}</span>
+                          {run?.status === "running" ? (
+                            <Badge tone="info">syncing…</Badge>
+                          ) : run?.status === "failed" ? (
+                            <Badge tone="danger" title={run.error ?? undefined}>
+                              failed
+                            </Badge>
+                          ) : upToDate ? (
+                            <Badge tone="success">up to date</Badge>
+                          ) : behind ? (
+                            <Badge tone="warning">
+                              behind · expecting {formatDate(expectedThrough)}
+                            </Badge>
+                          ) : null}
+                          <span className="ml-auto text-xs text-zinc-500">
+                            {f.completeThrough
+                              ? `complete through ${formatDate(f.completeThrough)}`
+                              : f.lastSuccessAt
+                                ? `last completed ${formatDateTime(f.lastSuccessAt)}`
+                                : "never completed"}
+                          </span>
+                        </div>
+                        {run?.status === "running" && run.reports.length > 0 ? (
+                          <p className="text-xs text-zinc-500">
+                            {runProgressText(run)}
+                          </p>
+                        ) : null}
+                        {run?.status === "failed" && run.error ? (
+                          <p className="text-xs text-red-400">{run.error}</p>
+                        ) : null}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </CardBody>
@@ -397,4 +450,14 @@ export function OverviewPage() {
       ) : null}
     </div>
   );
+}
+
+/** Progress line for a running sync: "3 of 8 reports complete · Importing Search Terms (…)". */
+function runProgressText(run: SyncRunSummary): string {
+  const done = run.reports.filter((r) => r.status === "complete").length;
+  const current = run.reports.find((r) => r.status !== "complete");
+  const base = `${done} of ${run.reports.length} reports complete`;
+  return current
+    ? `${base} · ${labelize(current.status)} ${labelize(current.reportType)} (${formatDate(current.dateStart)} – ${formatDate(current.dateEnd)})`
+    : base;
 }

@@ -30,6 +30,7 @@ import type {
   SearchTermDetail,
   SearchTermListRow,
   SyncRun,
+  SyncRunSummary,
 } from "@amazon-king/contracts";
 
 /**
@@ -153,6 +154,8 @@ export interface ReadService {
     meta: RequestMeta,
   ): Promise<SyncRun>;
   getSyncRun(workspaceId: string, syncRunId: string): Promise<SyncRun | null>;
+  /** Recent sync runs of the workspace with per-report progress, newest first. */
+  listSyncRuns(workspaceId: string): Promise<SyncRunSummary[]>;
   dashboardSummary(
     workspaceId: string,
     days: MetricWindow,

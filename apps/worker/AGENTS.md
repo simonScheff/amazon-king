@@ -32,6 +32,9 @@ invisible for that long. Do not fold reaping back into the loop.
 
 - `profile_discovery`, `structure_sync`, `connection_health`,
   `recent_window_resync`
+  - `structure_sync` adopts the payload's optional `syncRunId` (set by
+    `POST /api/profiles/:profileId/syncs`) and finishes that row; only
+    scheduled syncs create their own `sync_runs` row.
 - `schedule_tick` — self-rescheduling every 15 minutes, cadence per plan §8,
   deduped via `enqueueIfNotQueued`
 - `metrics_sync` and `recommendation_run` — see below

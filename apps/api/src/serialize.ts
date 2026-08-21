@@ -5,6 +5,7 @@ import type {
   ChangeSet,
   Recommendation,
   SyncRun,
+  SyncRunSummary,
 } from "@amazon-king/contracts";
 import type {
   audit,
@@ -232,6 +233,23 @@ export function toContractSyncRun(
     startedAt: isoDateTime(row.startedAt),
     finishedAt: row.finishedAt ? isoDateTime(row.finishedAt) : null,
     error: row.error,
+  };
+}
+
+export function toContractSyncRunSummary(
+  row: reports.SyncRun,
+  amazonProfileId: string,
+  jobs: reports.ReportJob[],
+): SyncRunSummary {
+  return {
+    ...toContractSyncRun(row, amazonProfileId),
+    reports: jobs.map((job) => ({
+      reportType: job.reportType,
+      status: job.status,
+      dateStart: isoDate(job.dateStart),
+      dateEnd: isoDate(job.dateEnd),
+      error: job.error,
+    })),
   };
 }
 

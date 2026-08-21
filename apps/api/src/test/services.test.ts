@@ -599,6 +599,135 @@ describe("read service", () => {
       endDate: "2026-08-11",
     });
   });
+
+  function setupSyncRuns() {
+    const db = new FakeDb();
+    db.seedWorkspace();
+    db.seedUser("owner@example.com");
+    const connection = db.seedConnection();
+    const profile = db.seedProfile({
+      id: "profile-pk-1",
+      connection_id: connection.id,
+      profile_id: "amazon-profile-1",
+    });
+    const service = createReadService({
+      db: db as never,
+      config: testConfig(),
+      logger: fakeLogger(),
+      now: () => new Date("2026-08-12T12:00:00.000Z"),
+    });
+    return { db, profile, service };
+  }
+
+  it("lists sync runs newest-first with per-report progress", async () => {
+    const { db, profile, service } = setupSyncRuns();
+    db.tables.syncRuns.push(
+      {
+        id: "11",
+        profile_id: profile.id,
+        kind: "metrics",
+        status: "complete",
+        started_at: new Date("2026-08-10T05:00:00.000Z"),
+        finished_at: new Date("2026-08-10T05:04:00.000Z"),
+        error: null,
+      },
+      {
+        id: "12",
+        profile_id: profile.id,
+        kind: "metrics",
+        status: "running",
+        started_at: new Date("2026-08-11T05:00:00.000Z"),
+        finished_at: null,
+        error: null,
+      },
+    );
+    db.tables.reportJobs.push(
+      {
+        id: "102",
+        sync_run_id: "12",
+        profile_id: profile.id,
+        report_type: "search_terms",
+        status: "importing",
+        date_start: "2026-08-10",
+        date_end: "2026-08-10",
+        error: null,
+      },
+      {
+        id: "101",
+        sync_run_id: "12",
+        profile_id: profile.id,
+        report_type: "campaigns",
+        status: "complete",
+        date_start: "2026-08-10",
+        date_end: "2026-08-10",
+        error: null,
+      },
+      {
+        id: "103",
+        sync_run_id: "11",
+        profile_id: profile.id,
+        report_type: "campaigns",
+        status: "complete",
+        date_start: "2026-08-09",
+        date_end: "2026-08-09",
+        error: null,
+      },
+    );
+
+    const runs = await service.listSyncRuns("1");
+
+    expect(runs.map((run) => run.id)).toEqual(["12", "11"]);
+    expect(runs[0]!.profileId).toBe("amazon-profile-1");
+    // Report jobs are ordered by id, not by insertion order.
+    expect(runs[0]!.reports.map((r) => r.reportType)).toEqual([
+      "campaigns",
+      "search_terms",
+    ]);
+    expect(runs[0]!.reports[1]).toMatchObject({
+      status: "importing",
+      dateStart: "2026-08-10",
+      dateEnd: "2026-08-10",
+    });
+    expect(runs[1]!.reports).toHaveLength(1);
+  });
+
+  it("scopes listed sync runs to the caller's workspace", async () => {
+    const { db, profile, service } = setupSyncRuns();
+    db.tables.syncRuns.push({
+      id: "11",
+      profile_id: profile.id,
+      kind: "metrics",
+      status: "complete",
+      started_at: new Date("2026-08-10T05:00:00.000Z"),
+      finished_at: new Date("2026-08-10T05:04:00.000Z"),
+      error: null,
+    });
+    const foreignConnection = db.seedConnection({ workspace_id: "2" });
+    const foreignProfile = db.seedProfile({
+      id: "profile-pk-2",
+      connection_id: foreignConnection.id,
+      profile_id: "amazon-profile-2",
+    });
+    db.tables.syncRuns.push({
+      id: "99",
+      profile_id: foreignProfile.id,
+      kind: "metrics",
+      status: "running",
+      started_at: new Date("2026-08-11T06:00:00.000Z"),
+      finished_at: null,
+      error: null,
+    });
+
+    const runs = await service.listSyncRuns("1");
+
+    expect(runs.map((run) => run.id)).toEqual(["11"]);
+  });
+
+  it("returns an empty list when the workspace has no sync runs", async () => {
+    const { service } = setupSyncRuns();
+
+    await expect(service.listSyncRuns("1")).resolves.toEqual([]);
+  });
 });
 
 // -- change service (guarded writes, plan §10) --------------------------------

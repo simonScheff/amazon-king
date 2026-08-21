@@ -70,6 +70,7 @@ vi.mock("../api/endpoints", () => ({
     error: null,
     data: [],
   }),
+  useSyncRuns: () => ({ data: [] }),
   useProfiles: () => ({
     isPending: false,
     error: null,

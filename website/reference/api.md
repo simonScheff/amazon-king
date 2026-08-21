@@ -257,6 +257,26 @@ Response `200`: SyncRun; `404 NOT_FOUND` when unknown.
 | finishedAt | timestamp \| null                      |
 | error      | string \| null                         |
 
+### `GET /api/syncs`
+
+The workspace's 10 most recent sync runs, newest first, each extended with a
+`reports` array: the run's per-report pipeline progress. This is what the
+overview's **Sync status** card polls (every 10 seconds while any run is
+`running`, otherwise not at all) to show live digestion progress without a
+page refresh.
+
+Response `200`: array of SyncRun plus:
+
+| Field    | Type                                                                       |
+| -------- | -------------------------------------------------------------------------- |
+| reports  | array of `{reportType, status, dateStart, dateEnd, error}`                 |
+
+`reports[].status` walks the report state machine (`queued`, `requested`,
+`polling`, `downloading`, `validating`, `importing`, `complete`,
+`retryable`/`failed`/`dead_letter`). Structure syncs have no report jobs, so
+their `reports` is empty. A metrics run is only marked `complete` once every
+report in it is `complete`.
+
 ---
 
 ## Dashboard & metrics

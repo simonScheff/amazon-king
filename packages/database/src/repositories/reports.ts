@@ -49,6 +49,33 @@ export async function getSyncRun(
   return result.rows[0] ? toSyncRun(result.rows[0]) : null;
 }
 
+export interface SyncRunWithProfile {
+  run: SyncRun;
+  amazonProfileId: string;
+}
+
+/** Recent sync runs across a workspace's profiles, newest first. */
+export async function listRecentSyncRunsByWorkspace(
+  db: Db,
+  workspaceId: string,
+  limit = 10,
+): Promise<SyncRunWithProfile[]> {
+  const result = await db.query<SyncRunRow & { amazon_profile_id: string }>(
+    `select r.*, p.profile_id as amazon_profile_id
+     from sync_runs r
+     join amazon_profiles p on p.id = r.profile_id
+     join amazon_connections conn on conn.id = p.connection_id
+     where conn.workspace_id = $1
+     order by r.started_at desc, r.id desc
+     limit $2`,
+    [workspaceId, limit],
+  );
+  return result.rows.map(({ amazon_profile_id, ...row }) => ({
+    run: toSyncRun(row),
+    amazonProfileId: amazon_profile_id,
+  }));
+}
+
 export async function createSyncRun(
   db: Db,
   profileId: string,
@@ -235,6 +262,21 @@ export async function listIncompleteReportJobs(
      where sync_run_id = $1 and status <> 'complete'
      order by id`,
     [syncRunId],
+  );
+  return result.rows.map(toReportJob);
+}
+
+/** All report jobs belonging to any of the given sync runs, in stable order. */
+export async function listReportJobsForSyncRuns(
+  db: Db,
+  syncRunIds: string[],
+): Promise<ReportJob[]> {
+  if (syncRunIds.length === 0) return [];
+  const result = await db.query<ReportJobRow>(
+    `select * from report_jobs
+     where sync_run_id = any($1)
+     order by id`,
+    [syncRunIds],
   );
   return result.rows.map(toReportJob);
 }

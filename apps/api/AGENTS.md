@@ -23,9 +23,11 @@ negative-exact and negative-target draft creation, `csrfToken` on the session
 response, `amazonConsoleUrl` on campaign list/detail payloads (built from the
 profile's `account_id` entity id, null when absent), `negativeTargets` on
 `GET /api/campaigns/:id` (synced `ASIN_SAME_AS` exclusions, same book-filter
-semantics as `negativeKeywords`), and the cross-campaign search-term screens
+semantics as `negativeKeywords`), the cross-campaign search-term screens
 `GET /api/search-terms` and `GET /api/search-terms/:term` (detail includes a
-per-day `daily` series for the trend chart).
+per-day `daily` series for the trend chart), and `GET /api/syncs` — the
+workspace's recent sync runs, each with per-report-job progress, which the
+overview's Sync status card polls while a run is active.
 
 `GET /api/dashboard/summary` returns a `daily` series, `writesDisabled`, and
 `previous` — totals for the comparison window, which is the immediately

@@ -4,6 +4,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 import { z } from "zod";
 import {
   amazonConnectionStatusSchema,
@@ -29,6 +30,7 @@ import {
   searchTermListRowSchema,
   sessionInfoSchema,
   syncRunSchema,
+  syncRunSummarySchema,
   type Book,
   type BookMappingInput,
   type BookEconomicsInput,
@@ -219,13 +221,46 @@ export function useUpdateProfile(profileId: string) {
 }
 
 export function useEnqueueSync(profileId: string) {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: () =>
       apiFetch(`/api/profiles/${profileId}/syncs`, {
         method: "POST",
         schema: syncRunSchema,
       }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["sync-runs"] });
+      qc.invalidateQueries({ queryKey: ["data-freshness"] });
+    },
   });
+}
+
+/**
+ * Recent sync runs with per-report progress. Polls only while a run is
+ * active, so an in-flight sync flips to done without a manual refresh. When
+ * the last active run finishes, freshness and summary are invalidated so the
+ * just-imported data shows up everywhere on the page.
+ */
+export function useSyncRuns() {
+  const qc = useQueryClient();
+  const query = useQuery({
+    queryKey: ["sync-runs"],
+    queryFn: () =>
+      apiFetch("/api/syncs", { schema: z.array(syncRunSummarySchema) }),
+    refetchInterval: (q) =>
+      q.state.data?.some((run) => run.status === "running") ? 10_000 : false,
+  });
+  const anyRunning =
+    query.data?.some((run) => run.status === "running") ?? false;
+  const wasRunning = useRef(false);
+  useEffect(() => {
+    if (wasRunning.current && !anyRunning) {
+      qc.invalidateQueries({ queryKey: ["data-freshness"] });
+      qc.invalidateQueries({ queryKey: ["dashboard-summary"] });
+    }
+    wasRunning.current = anyRunning;
+  }, [anyRunning, qc]);
+  return query;
 }
 
 // ---------------------------------------------------------------------------

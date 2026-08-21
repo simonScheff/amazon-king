@@ -15,6 +15,20 @@ export const syncRunSchema = z.object({
 });
 export type SyncRun = z.infer<typeof syncRunSchema>;
 
+export const reportJobProgressSchema = z.object({
+  reportType: z.string(),
+  status: z.string(),
+  dateStart: isoDateSchema,
+  dateEnd: isoDateSchema,
+  error: z.string().nullable(),
+});
+export type ReportJobProgress = z.infer<typeof reportJobProgressSchema>;
+
+export const syncRunSummarySchema = syncRunSchema.extend({
+  reports: z.array(reportJobProgressSchema),
+});
+export type SyncRunSummary = z.infer<typeof syncRunSummarySchema>;
+
 export const dataFreshnessSchema = z.object({
   profileId: z.string(),
   dataset: z.string(),

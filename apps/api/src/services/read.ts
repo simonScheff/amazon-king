@@ -42,6 +42,7 @@ import {
   toContractProfile,
   toContractRecommendation,
   toContractSyncRun,
+  toContractSyncRunSummary,
 } from "../serialize.js";
 import type { AuthContext, ReadService, RequestMeta } from "./types.js";
 
@@ -393,6 +394,30 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       );
       if (!connection || connection.workspaceId !== workspaceId) return null;
       return toContractSyncRun(run, profile.profileId);
+    },
+
+    async listSyncRuns(workspaceId) {
+      const runs = await reports.listRecentSyncRunsByWorkspace(db, workspaceId);
+      const jobs = await reports.listReportJobsForSyncRuns(
+        db,
+        runs.map(({ run }) => run.id),
+      );
+      const jobsByRun = new Map<string, reports.ReportJob[]>();
+      for (const job of jobs) {
+        const list = jobsByRun.get(job.syncRunId);
+        if (list) {
+          list.push(job);
+        } else {
+          jobsByRun.set(job.syncRunId, [job]);
+        }
+      }
+      return runs.map(({ run, amazonProfileId }) =>
+        toContractSyncRunSummary(
+          run,
+          amazonProfileId,
+          jobsByRun.get(run.id) ?? [],
+        ),
+      );
     },
 
     async dashboardSummary(

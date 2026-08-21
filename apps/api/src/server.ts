@@ -338,6 +338,11 @@ export async function buildServer(
     },
   );
 
+  app.get("/api/syncs", async (request) => {
+    const auth = await authenticate(request);
+    return services.read.listSyncRuns(auth.workspaceId);
+  });
+
   app.get("/api/syncs/:syncId", async (request) => {
     const auth = await authenticate(request);
     const { syncId } = request.params as { syncId: string };

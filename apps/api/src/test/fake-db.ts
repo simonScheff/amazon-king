@@ -28,6 +28,7 @@ export interface FakeTables {
   changeActions: FakeRow[];
   campaignBidPolicies: FakeRow[];
   syncRuns: FakeRow[];
+  reportJobs: FakeRow[];
   jobQueue: FakeRow[];
   auditEvents: FakeRow[];
   ads: FakeRow[];
@@ -58,6 +59,7 @@ function emptyTables(): FakeTables {
     changeActions: [],
     campaignBidPolicies: [],
     syncRuns: [],
+    reportJobs: [],
     jobQueue: [],
     auditEvents: [],
     ads: [],
@@ -786,6 +788,57 @@ export class FakeDb {
       {
         match: "select * from sync_runs where id = $1",
         handle: (p) => this.ok(t.syncRuns.filter((r) => r.id === p[0])),
+      },
+      {
+        match: "from sync_runs r join amazon_profiles",
+        handle: (p) => {
+          const rows = t.syncRuns
+            .map((r) => {
+              const profile = t.amazonProfiles.find(
+                (ap) => ap.id === r.profile_id,
+              );
+              const connection = profile
+                ? t.amazonConnections.find(
+                    (c) => c.id === profile.connection_id,
+                  )
+                : undefined;
+              return { r, profile, connection };
+            })
+            .filter(
+              ({ profile, connection }) =>
+                profile && connection && connection.workspace_id === p[0],
+            )
+            .sort((a, b) => {
+              const byStarted =
+                new Date(b.r.started_at as string | Date).getTime() -
+                new Date(a.r.started_at as string | Date).getTime();
+              if (byStarted !== 0) return byStarted;
+              return String(b.r.id).localeCompare(String(a.r.id), undefined, {
+                numeric: true,
+              });
+            })
+            .slice(0, p[1] as number)
+            .map(({ r, profile }) => ({
+              ...r,
+              amazon_profile_id: profile!.profile_id,
+            }));
+          return this.ok(rows);
+        },
+      },
+      {
+        match: "from report_jobs where sync_run_id = any($1)",
+        handle: (p) =>
+          this.ok(
+            t.reportJobs
+              .filter((j) =>
+                (p[0] as string[]).includes(j.sync_run_id as string),
+              )
+              .sort((a, b) =>
+                String(a.id).localeCompare(String(b.id), undefined, {
+                  numeric: true,
+                }),
+              ),
+          ),
       },
 
       // -- audit -----------------------------------------------------------------
