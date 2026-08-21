@@ -95,7 +95,7 @@ export function LinkBookToMarketsForm({
       </div>
       {!asinValid && trimmed.length > 0 ? (
         <p role="alert" className="text-xs text-red-400">
-          Expected a 10-character ASIN starting with B0
+          Expected a 10-character ASIN (B0… or ISBN-10)
         </p>
       ) : null}
     </form>

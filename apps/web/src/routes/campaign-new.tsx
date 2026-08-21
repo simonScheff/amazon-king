@@ -700,7 +700,7 @@ export function CampaignNewPage() {
                       </Button>
                       {asinInvalid ? (
                         <p role="alert" className="w-full text-xs text-red-400">
-                          Expected a 10-character ASIN starting with B0
+                          Expected a 10-character ASIN (B0… or ISBN-10)
                         </p>
                       ) : null}
                     </div>

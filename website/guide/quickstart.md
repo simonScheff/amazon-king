@@ -31,15 +31,17 @@ minutes; the session itself lasts 7 days, rolling.
 The overview (`/`) is the control room. Before any data exists it will be
 mostly empty — here's what each part is for.
 
-![Dashboard overview with KPI cards, daily performance charts, and top problems](/screenshots/overview.png)
+![Dashboard overview in the All markets view with KPI cards in one display currency, daily performance charts, and top problems](/screenshots/overview.png)
 
 - **Product filter** — the checkbox dropdown at the bottom of the left sidebar
   scopes the whole app to one or more of your books ("All products" by
   default). The overview, campaigns, search terms, and recommendations screens
   all respect it, and the selection persists as you navigate.
 - **Country and date-range selectors** — every number on the page respects
-  these. Currency is never mixed across marketplaces; pick one country at a
-  time.
+  these. Pick one country at a time, or **All markets**: once daily FX rates
+  have synced, that option aggregates every enabled marketplace in a single
+  display currency, each day's figures converted at that day's rate. A
+  **Currency** picker appears next to it while All markets is active.
 - **Six KPI cards** — Spend, Sales, Orders, ACoS, Est. royalty, and Est. ad
   profit. Clicking a card toggles its series on the trend charts.
 - **Daily performance chart** — spend, sales, and orders over the selected
@@ -48,8 +50,9 @@ mostly empty — here's what each part is for.
   Profit-based numbers are withheld, not guessed, until you fill them in.
 - **Top problems & opportunities** — the five highest-priority pending
   recommendations, one click away from the full list.
-- **Sync & connection health** — whether the Amazon connection is live and
-  when each profile last synced.
+- **Sync & connection health** — whether the Amazon connection is live, when
+  each profile last synced, and an **FX rates** row showing whether the
+  exchange rates behind the All markets view are current.
 
 The left navigation covers the rest: `/recommendations` (filterable table of
 every finding), `/campaigns`, `/search-terms` (cross-campaign search-term
@@ -88,7 +91,8 @@ From here, the worker takes over automatically:
 
 A `schedule_tick` job fires every 15 minutes to enqueue whatever is due —
 structure syncs, the daily metrics jobs, connection-health checks (every 4
-hours) — so a
+hours), and the daily `fx_sync` exchange-rate top-up (after 17:00 UTC) that
+powers the All markets view — so a
 fresh profile gets its first structure sync within minutes even if you never
 press anything.
 

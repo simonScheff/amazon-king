@@ -23,7 +23,8 @@ import {
   conversionResolutionContextSchema,
   countrySpendSchema,
   dashboardSummarySchema,
-  dataFreshnessSchema,
+  dataFreshnessResponseSchema,
+  fxSyncResultSchema,
   maxCpcChangeSetResultSchema,
   recommendationSchema,
   searchTermDetailSchema,
@@ -31,6 +32,7 @@ import {
   sessionInfoSchema,
   syncRunSchema,
   syncRunSummarySchema,
+  workspaceSettingsSchema,
   type Book,
   type BookMappingInput,
   type BookEconomicsInput,
@@ -45,6 +47,8 @@ import {
   type RecommendationState,
   type RecommendationType,
   type RejectRecommendation,
+  type WorkspaceSettings,
+  type WorkspaceSettingsUpdate,
 } from "@amazon-king/contracts";
 import { ApiError, apiFetch, redeemLoginToken, setCsrfToken } from "./client";
 import { parseLoginToken } from "../lib/login-link";
@@ -278,41 +282,130 @@ function booksParam(bookIds?: string[]): string | undefined {
     : undefined;
 }
 
+/**
+ * Dashboard summary. `country` is a two-letter code or `"all"` (the
+ * FX-converted all-market view). `currency` overrides the workspace display
+ * currency for converted views; when omitted the API applies the workspace
+ * setting, so the display-currency pickers PATCH the setting and invalidate
+ * instead of threading the value through every request. The query key
+ * carries every filter dimension (days, country incl. "all", books,
+ * currency) or the cache would serve another view's numbers.
+ */
 export function useDashboardSummary(
   days: MetricWindow,
   country = "US",
   bookIds?: string[],
+  currency?: string,
 ) {
   const books = booksParam(bookIds);
   return useQuery({
-    queryKey: ["dashboard-summary", days, country, books ?? null],
+    queryKey: [
+      "dashboard-summary",
+      days,
+      country,
+      books ?? null,
+      currency ?? null,
+    ],
     queryFn: () =>
       apiFetch("/api/dashboard/summary", {
-        query: { days, country, books },
+        query: { days, country, books, currency },
         schema: dashboardSummaryResponseSchema,
       }),
   });
 }
 
-export function useCountrySpend(days: MetricWindow, bookIds?: string[]) {
+export function useCountrySpend(
+  days: MetricWindow,
+  bookIds?: string[],
+  currency?: string,
+) {
   const books = booksParam(bookIds);
   return useQuery({
-    queryKey: ["dashboard-country-spend", days, books ?? null],
+    queryKey: [
+      "dashboard-country-spend",
+      days,
+      books ?? null,
+      currency ?? null,
+    ],
     queryFn: () =>
       apiFetch("/api/dashboard/country-spend", {
-        query: { days, books },
+        query: { days, books, currency },
         schema: countrySpendSchema,
       }),
   });
 }
 
-export function useDataFreshness() {
+export function useDataFreshness(options?: { poll?: boolean }) {
+  const forcePoll = options?.poll ?? false;
   return useQuery({
     queryKey: ["data-freshness"],
     queryFn: () =>
       apiFetch("/api/system/data-freshness", {
-        schema: z.array(dataFreshnessSchema),
+        schema: dataFreshnessResponseSchema,
       }),
+    // Poll while an fx_sync run is active (mirroring how the overview polls
+    // sync runs) — or while forced by a just-triggered manual FX sync the
+    // worker has not claimed yet — so the badge flips without a refresh.
+    refetchInterval: (query) =>
+      forcePoll || query.state.data?.fxRates.lastRunState === "running"
+        ? 10_000
+        : false,
+  });
+}
+
+/**
+ * Trigger a manual FX-rates sync. Deduped server-side: a pending/running
+ * fx_sync job means no duplicate (`queued: false` in the result). Freshness
+ * is invalidated so the polling above picks up the run.
+ */
+export function useEnqueueFxSync() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch("/api/fx-rates/sync", {
+        method: "POST",
+        schema: fxSyncResultSchema,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["data-freshness"] });
+    },
+  });
+}
+
+/**
+ * Workspace display currency. There is no GET endpoint: the value is known
+ * from summary responses (their `currency` field under `country=all`) and
+ * from the PATCH result, which seeds this cache entry. This hook subscribes
+ * to that cache without fetching.
+ */
+export function useWorkspaceSettings() {
+  return useQuery({
+    queryKey: ["workspace-settings"],
+    queryFn: (): Promise<WorkspaceSettings> =>
+      Promise.reject(new Error("workspace settings are write-only")),
+    enabled: false,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+}
+
+/** Set the workspace display currency (local write, CSRF, no recent-auth). */
+export function useUpdateWorkspaceSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: WorkspaceSettingsUpdate) =>
+      apiFetch("/api/workspace/settings", {
+        method: "PATCH",
+        body,
+        schema: workspaceSettingsSchema,
+      }),
+    onSuccess: async (settings) => {
+      qc.setQueryData(["workspace-settings"], settings);
+      // Converted dashboard numbers now come back in the new currency.
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["dashboard-summary"] }),
+        qc.invalidateQueries({ queryKey: ["dashboard-country-spend"] }),
+      ]);
+    },
   });
 }
 
@@ -445,11 +538,14 @@ export function useSearchTerms(
   countryCode?: string,
 ) {
   const books = booksParam(bookIds);
+  // The search-terms API takes a two-letter market or nothing; the
+  // all-market dashboard value means "unfiltered" here.
+  const country = countryCode === "all" ? undefined : countryCode;
   return useQuery({
-    queryKey: ["search-terms", days, books ?? null, countryCode ?? null],
+    queryKey: ["search-terms", days, books ?? null, country ?? null],
     queryFn: () =>
       apiFetch("/api/search-terms", {
-        query: { days, books, country: countryCode },
+        query: { days, books, country },
         schema: z.array(searchTermListRowSchema),
       }),
   });
@@ -462,12 +558,13 @@ export function useSearchTerm(
   countryCode?: string,
 ) {
   const books = booksParam(bookIds);
+  const country = countryCode === "all" ? undefined : countryCode;
   return useQuery({
-    queryKey: ["search-term", term, days, books ?? null, countryCode ?? null],
+    queryKey: ["search-term", term, days, books ?? null, country ?? null],
     placeholderData: keepPreviousData,
     queryFn: () =>
       apiFetch(`/api/search-terms/${encodeURIComponent(term)}`, {
-        query: { days, books, country: countryCode },
+        query: { days, books, country },
         schema: searchTermDetailSchema,
       }),
   });

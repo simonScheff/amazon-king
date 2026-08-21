@@ -43,3 +43,20 @@ export const metricWindowSchema = z.union([
   z.coerce.number().int().min(1).max(90),
 ]);
 export type MetricWindow = z.infer<typeof metricWindowSchema>;
+
+/**
+ * Global product filter query param: comma-separated external book ids
+ * ("3,7") → string[], undefined when the param is absent. Shared by every
+ * metric screen endpoint; the service resolves each id against the workspace.
+ */
+export const bookIdListParamSchema = z
+  .string()
+  .optional()
+  .transform((value) =>
+    value === undefined
+      ? undefined
+      : value
+          .split(",")
+          .map((id) => id.trim())
+          .filter((id) => id.length > 0),
+  );

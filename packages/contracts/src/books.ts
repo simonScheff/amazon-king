@@ -93,7 +93,7 @@ export const bookProfileLinkInputSchema = z.object({
   asin: z
     .string()
     .trim()
-    .regex(ASIN_PATTERN, "Expected a 10-character ASIN starting with B0")
+    .regex(ASIN_PATTERN, "Expected a 10-character ASIN (B0… or ISBN-10)")
     .transform((value) => value.toUpperCase()),
 });
 export type BookProfileLinkInput = z.infer<typeof bookProfileLinkInputSchema>;

@@ -5,9 +5,12 @@ import type {
   ConversionResolutionContext,
   CountrySpend,
   DashboardSummary,
+  FxRatesStatus,
+  FxSyncResult,
   MetricWindow,
   SearchTermDetail,
   SearchTermListRow,
+  WorkspaceSettings,
 } from "@amazon-king/contracts";
 import {
   keywordSpecsFromNegativeTargets,
@@ -22,6 +25,9 @@ import {
   connections,
   dashboard,
   enqueue,
+  enqueueIfNotQueued,
+  fx,
+  identity,
   metrics,
   profiles,
   recommendations,
@@ -201,6 +207,49 @@ function previousDateRange(
   );
 }
 
+/** Map a raw job_queue status to the contract's fx_sync run state. */
+function fxRunState(status: string | null): FxRatesStatus["lastRunState"] {
+  if (status === null) return "never_run";
+  if (status === "done") return "succeeded";
+  if (status === "running") return "running";
+  // 'failed', 'dead', or 'pending' after a failed attempt (retry backoff).
+  return "failed";
+}
+
+/** Most recent business day (Mon–Fri, UTC) strictly before today. */
+function previousBusinessDay(now: Date): string {
+  const day = new Date(utcToday(now).getTime() - DAY_MS);
+  while (day.getUTCDay() === 0 || day.getUTCDay() === 6) {
+    day.setTime(day.getTime() - DAY_MS);
+  }
+  return isoDay(day);
+}
+
+/**
+ * Rates are stale when the newest stored fixing predates the last business
+ * day. Weekend fixings do not exist, so a Friday fixing is still fresh on
+ * Sunday (docs/fx-rates-all-market-plan.md, decision 7). An empty rate table
+ * counts as stale.
+ */
+function fxRatesStale(latestRateDate: string | null, now: Date): boolean {
+  if (latestRateDate === null) return true;
+  return latestRateDate < previousBusinessDay(now);
+}
+
+/** Map the raw fx_rates/job_queue health to the contract FX status. */
+function toContractFxRatesStatus(
+  status: fx.FxSyncStatus,
+  now: Date,
+): FxRatesStatus {
+  return {
+    latestRateDate: status.latestRateDate,
+    lastRunState: fxRunState(status.lastStatus),
+    lastRunAt: status.lastRunAt ? isoDateTime(status.lastRunAt) : null,
+    lastError: status.lastError,
+    stale: fxRatesStale(status.latestRateDate, now),
+  };
+}
+
 export function createReadService(deps: ReadServiceDeps): ReadService {
   const { db, config } = deps;
   const now = () => deps.now?.() ?? new Date();
@@ -279,6 +328,255 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       pks.push(BigInt((await requireBook(workspaceId, bookId))!));
     }
     return pks;
+  }
+
+  /**
+   * All-market overview (docs/fx-rates-all-market-plan.md §4): every enabled
+   * profile, each fact converted at its own metric date's fixing into one
+   * display currency (the request's `currency` or the workspace's display
+   * currency). With an empty fx_rates table the response carries zeroed
+   * totals and `ratesAvailable: false` — never silently unconverted numbers
+   * (decision 8); partial coverage is a conflict, not a guess. Royalty keeps
+   * the single-country rules: per-book per-marketplace economics, per-copy
+   * valuation, and missing economics hide profit rather than guessing.
+   */
+  async function dashboardSummaryAllMarkets(
+    workspaceId: string,
+    days: MetricWindow,
+    bookIds: string[] | undefined,
+    currencyParam: string | undefined,
+  ): Promise<DashboardSummary> {
+    const { start, end } = dateRange(now(), days);
+    const previous = previousDateRange(now(), days);
+    const bookPks = await requireBookPks(workspaceId, bookIds);
+    const all = await profiles.listProfilesByWorkspace(db, workspaceId);
+    const enabled = all.filter((p) => p.enabled);
+    const [storedDisplay, latestRateDate] = await Promise.all([
+      currencyParam === undefined
+        ? identity.getWorkspaceDisplayCurrency(db, workspaceId)
+        : Promise.resolve(null),
+      fx.getLatestRateDate(db),
+    ]);
+    const displayCurrency = (currencyParam ??
+      storedDisplay ??
+      "USD") as DashboardSummary["currency"];
+    const ratesAvailable = latestRateDate !== null;
+    const writesDisabled =
+      config.killSwitch || enabled.every((p) => !p.writeEnabled);
+
+    const zeroTotals = () => ({
+      impressions: 0,
+      clicks: 0,
+      cost: microsToDecimalString(0),
+      sales: microsToDecimalString(0),
+      orders: 0,
+      units: 0,
+      acos: null,
+      estimatedRoyalty: null,
+      estimatedAdProfit: null,
+    });
+
+    if (!ratesAvailable) {
+      return {
+        dateRange: { start, end },
+        currency: displayCurrency,
+        ratesAvailable: false,
+        totals: zeroTotals(),
+        previous: {
+          dateRange: { start: previous.start, end: previous.end },
+          totals: zeroTotals(),
+        },
+        economicsMissing: true,
+        dataCurrentThrough: `${start}T00:00:00.000Z`,
+        writesDisabled,
+        daily: [],
+      };
+    }
+
+    const profilePks = enabled.map((p) => p.id);
+    const [
+      current,
+      previousWindow,
+      royaltyRows,
+      previousRoyaltyRows,
+      dailyRows,
+    ] = await Promise.all([
+      dashboard.convertedDailyTotals(
+        db,
+        profilePks,
+        start,
+        end,
+        displayCurrency,
+        bookPks,
+      ),
+      dashboard.convertedDailyTotals(
+        db,
+        profilePks,
+        previous.start,
+        previous.end,
+        displayCurrency,
+        bookPks,
+      ),
+      dashboard.convertedRoyaltySeries(
+        db,
+        profilePks,
+        start,
+        end,
+        displayCurrency,
+        bookPks,
+      ),
+      dashboard.convertedRoyaltySeries(
+        db,
+        profilePks,
+        previous.start,
+        previous.end,
+        displayCurrency,
+        bookPks,
+      ),
+      dashboard.convertedDailySeries(
+        db,
+        profilePks,
+        start,
+        end,
+        displayCurrency,
+        bookPks,
+      ),
+    ]);
+    if (
+      current.ratesMissing ||
+      previousWindow.ratesMissing ||
+      royaltyRows.some((row) => row.ratesMissing) ||
+      previousRoyaltyRows.some((row) => row.ratesMissing) ||
+      dailyRows.some((row) => row.ratesMissing)
+    ) {
+      throw conflict(
+        "FX_RATES_INCOMPLETE",
+        "Stored exchange rates do not cover every fact in this window yet; the next fx_sync run closes the gap",
+      );
+    }
+
+    function royaltyFromSeries(
+      points: readonly {
+        estimatedRoyalty: string | null;
+        economicsMissing: boolean;
+      }[],
+      orders: number,
+    ): { micros: number | null; missing: boolean } {
+      if (enabled.length === 0) {
+        return { micros: null, missing: true };
+      }
+      if (
+        points.some((p) => p.economicsMissing || p.estimatedRoyalty === null)
+      ) {
+        return { micros: null, missing: true };
+      }
+      if (orders > 0 && points.length === 0) {
+        return { micros: null, missing: true };
+      }
+      let total = 0;
+      for (const point of points) {
+        total += microsFromDecimalString(point.estimatedRoyalty ?? "0");
+      }
+      return { micros: total, missing: false };
+    }
+
+    const currentRoyalty = royaltyFromSeries(royaltyRows, current.orders);
+    const previousRoyalty = royaltyFromSeries(
+      previousRoyaltyRows,
+      previousWindow.orders,
+    );
+    const economicsMissing = currentRoyalty.missing;
+    const estimatedRoyaltyMicros = currentRoyalty.micros;
+    const previousEstimatedRoyaltyMicros = previousRoyalty.missing
+      ? null
+      : previousRoyalty.micros;
+
+    const royaltyByDate = new Map<string, number | null>();
+    for (const row of royaltyRows) {
+      royaltyByDate.set(
+        row.date,
+        economicsMissing ||
+          row.economicsMissing ||
+          row.estimatedRoyalty === null
+          ? null
+          : microsFromDecimalString(row.estimatedRoyalty),
+      );
+    }
+
+    const currentCostMicros = microsFromDecimalString(current.cost);
+    const currentSalesMicros = microsFromDecimalString(current.sales);
+    const previousCostMicros = microsFromDecimalString(previousWindow.cost);
+    const previousSalesMicros = microsFromDecimalString(previousWindow.sales);
+
+    const daily = dailyRows.map((row) => {
+      const royaltyMicros = economicsMissing
+        ? null
+        : (royaltyByDate.get(row.date) ?? 0);
+      return {
+        date: row.date,
+        cost: microsToDecimalString(microsFromDecimalString(row.cost)),
+        sales: microsToDecimalString(microsFromDecimalString(row.sales)),
+        orders: row.orders,
+        estimatedRoyalty:
+          royaltyMicros === null ? null : microsToDecimalString(royaltyMicros),
+      };
+    });
+    const lastDataDate = daily.at(-1)?.date ?? null;
+
+    return {
+      dateRange: { start, end },
+      currency: displayCurrency,
+      ratesAvailable: true,
+      totals: {
+        impressions: current.impressions,
+        clicks: current.clicks,
+        cost: microsToDecimalString(currentCostMicros),
+        sales: microsToDecimalString(currentSalesMicros),
+        orders: current.orders,
+        units: current.units,
+        acos:
+          currentSalesMicros > 0
+            ? currentCostMicros / currentSalesMicros
+            : null,
+        estimatedRoyalty:
+          estimatedRoyaltyMicros === null
+            ? null
+            : microsToDecimalString(estimatedRoyaltyMicros),
+        estimatedAdProfit:
+          estimatedRoyaltyMicros === null
+            ? null
+            : microsToDecimalString(estimatedRoyaltyMicros - currentCostMicros),
+      },
+      previous: {
+        dateRange: { start: previous.start, end: previous.end },
+        totals: {
+          impressions: previousWindow.impressions,
+          clicks: previousWindow.clicks,
+          cost: microsToDecimalString(previousCostMicros),
+          sales: microsToDecimalString(previousSalesMicros),
+          orders: previousWindow.orders,
+          units: previousWindow.units,
+          acos:
+            previousSalesMicros > 0
+              ? previousCostMicros / previousSalesMicros
+              : null,
+          estimatedRoyalty:
+            previousEstimatedRoyaltyMicros === null
+              ? null
+              : microsToDecimalString(previousEstimatedRoyaltyMicros),
+          estimatedAdProfit:
+            previousEstimatedRoyaltyMicros === null
+              ? null
+              : microsToDecimalString(
+                  previousEstimatedRoyaltyMicros - previousCostMicros,
+                ),
+        },
+      },
+      economicsMissing,
+      dataCurrentThrough: `${lastDataDate ?? start}T00:00:00.000Z`,
+      writesDisabled,
+      daily,
+    };
   }
 
   return {
@@ -383,6 +681,30 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       return toContractSyncRun(run, amazonProfileId);
     },
 
+    async requestFxSync(auth, meta): Promise<FxSyncResult> {
+      // A read-only upstream fetch of daily fixings: no spend, no Amazon
+      // state, so like requestSync there is no recent-auth gate. There is no
+      // sync_runs row either — that table is per-profile; the job queue and
+      // fx_rates coverage are the status source, same as the freshness
+      // endpoint reads them. Dedupe keeps a double-click from stacking
+      // duplicate fx_sync jobs.
+      const jobId = await enqueueIfNotQueued(db, "fx_sync", {});
+      await audit.insertAuditEvent(db, {
+        workspaceId: auth.workspaceId,
+        actorUserId: auth.userId,
+        event: "fx_sync.request",
+        entityType: "job_queue",
+        entityId: jobId,
+        ip: meta.ip ?? null,
+        sessionId: auth.sessionId,
+      });
+      const status = await fx.getFxSyncStatus(db);
+      return {
+        ...toContractFxRatesStatus(status, now()),
+        queued: jobId !== null,
+      };
+    },
+
     async getSyncRun(workspaceId, syncRunId) {
       const run = await reports.getSyncRun(db, syncRunId);
       if (!run) return null;
@@ -425,7 +747,18 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       days,
       countryCode,
       bookIds,
+      // Display currency of the all-market view; ignored for a specific
+      // country, whose totals stay in the native currency.
+      displayCurrency,
     ): Promise<DashboardSummary> {
+      if (countryCode === "all") {
+        return dashboardSummaryAllMarkets(
+          workspaceId,
+          days,
+          bookIds,
+          displayCurrency,
+        );
+      }
       const { start, end } = dateRange(now(), days);
       const previous = previousDateRange(now(), days);
       const bookPks = await requireBookPks(workspaceId, bookIds);
@@ -510,17 +843,21 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       // Royalty is per advertised book per marketplace (profile) per day —
       // never one rate for the whole country. Missing economics on any
       // attributed order hides profit rather than guessing (plan §9).
-      const [royaltyRows, previousRoyaltyRows, dailyRows] = await Promise.all([
-        dashboard.overviewRoyaltySeries(db, profilePks, start, end, bookPks),
-        dashboard.overviewRoyaltySeries(
-          db,
-          profilePks,
-          previous.start,
-          previous.end,
-          bookPks,
-        ),
-        dashboard.dailySeries(db, profilePks, start, end, bookPks),
-      ]);
+      const [royaltyRows, previousRoyaltyRows, dailyRows, latestRateDate] =
+        await Promise.all([
+          dashboard.overviewRoyaltySeries(db, profilePks, start, end, bookPks),
+          dashboard.overviewRoyaltySeries(
+            db,
+            profilePks,
+            previous.start,
+            previous.end,
+            bookPks,
+          ),
+          dashboard.dailySeries(db, profilePks, start, end, bookPks),
+          // Gates the client's "all markets" option (plan decision 8);
+          // returned for every country selection.
+          fx.getLatestRateDate(db),
+        ]);
       const royaltyCurrencies = new Set(royaltyRows.map((row) => row.currency));
       const dailyCurrencies = new Set(dailyRows.map((row) => row.currency));
       if (royaltyCurrencies.size > 1 || dailyCurrencies.size > 1) {
@@ -619,6 +956,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         currency: (currency ??
           enabled[0]?.currencyCode ??
           "USD") as DashboardSummary["currency"],
+        ratesAvailable: latestRateDate !== null,
         totals: {
           impressions: current.impressions,
           clicks: current.clicks,
@@ -687,6 +1025,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
       workspaceId,
       days,
       bookIds,
+      currency,
     ): Promise<CountrySpend> {
       const { start, end } = dateRange(now(), days);
       const bookPks = await requireBookPks(workspaceId, bookIds);
@@ -731,15 +1070,52 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         byCountry.set(profile.countryCode, entry);
       }
 
+      // Optional conversion into one display currency (per fact date, SQL on
+      // numeric). A market the stored rates do not cover reports null — never
+      // a silently unconverted number (plan decision 8).
+      const convertedByCountry = new Map<
+        string,
+        { convertedSpend: string; ratesMissing: boolean }
+      >();
+      if (currency !== undefined) {
+        const converted = await dashboard.convertedCountrySpend(
+          db,
+          enabled.map((p) => p.id),
+          start,
+          end,
+          currency,
+          bookPks,
+        );
+        for (const row of converted) {
+          convertedByCountry.set(row.countryCode, row);
+        }
+      }
+
       return {
         dateRange: { start, end },
+        ...(currency !== undefined
+          ? { currency: currency as NonNullable<CountrySpend["currency"]> }
+          : {}),
         countries: [...byCountry.entries()]
-          .map(([countryCode, entry]) => ({
-            countryCode,
-            currency:
-              entry.currency as CountrySpend["countries"][number]["currency"],
-            spend: microsToDecimalString(entry.spendMicros),
-          }))
+          .map(([countryCode, entry]) => {
+            const converted = convertedByCountry.get(countryCode);
+            return {
+              countryCode,
+              currency:
+                entry.currency as CountrySpend["countries"][number]["currency"],
+              spend: microsToDecimalString(entry.spendMicros),
+              ...(currency !== undefined
+                ? {
+                    convertedSpend:
+                      converted === undefined || converted.ratesMissing
+                        ? null
+                        : microsToDecimalString(
+                            microsFromDecimalString(converted.convertedSpend),
+                          ),
+                  }
+                : {}),
+            };
+          })
           .sort((a, b) => Number(b.spend) - Number(a.spend)),
       };
     },
@@ -1740,15 +2116,49 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
     },
 
     async dataFreshness(workspaceId) {
-      const rows = await dashboard.dataFreshnessByWorkspace(db, workspaceId);
-      return rows.map((row) => ({
-        profileId: row.amazonProfileId,
-        dataset: row.dataset,
-        lastSuccessAt: row.lastSuccessAt
-          ? isoDateTime(row.lastSuccessAt)
-          : null,
-        completeThrough: row.completeThrough,
-      }));
+      // FX health is workspace-level (plan decision 7): it is included
+      // whether or not any market is selected, in every run state.
+      const [rows, fxStatus] = await Promise.all([
+        dashboard.dataFreshnessByWorkspace(db, workspaceId),
+        fx.getFxSyncStatus(db),
+      ]);
+      return {
+        profiles: rows.map((row) => ({
+          profileId: row.amazonProfileId,
+          dataset: row.dataset,
+          lastSuccessAt: row.lastSuccessAt
+            ? isoDateTime(row.lastSuccessAt)
+            : null,
+          completeThrough: row.completeThrough,
+        })),
+        fxRates: toContractFxRatesStatus(fxStatus, now()),
+      };
+    },
+
+    async updateWorkspaceSettings(
+      auth,
+      patch,
+      meta,
+    ): Promise<WorkspaceSettings> {
+      // Display setting only — stored facts keep their native currency, so
+      // this needs no recent-auth gate (it changes no spend).
+      const ok = await identity.setWorkspaceDisplayCurrency(
+        db,
+        auth.workspaceId,
+        patch.displayCurrency,
+      );
+      if (!ok) throw notFound("Unknown workspace");
+      await audit.insertAuditEvent(db, {
+        workspaceId: auth.workspaceId,
+        actorUserId: auth.userId,
+        event: "workspace.settings_update",
+        entityType: "workspace",
+        entityId: auth.workspaceId,
+        ip: meta.ip ?? null,
+        sessionId: auth.sessionId,
+        details: { displayCurrency: patch.displayCurrency },
+      });
+      return { displayCurrency: patch.displayCurrency };
     },
   };
 }

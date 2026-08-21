@@ -8,11 +8,18 @@ describe("isAsin", () => {
     expect(isAsin("  b0crhvct1t ")).toBe(true);
   });
 
+  it("matches print-book ASINs in ISBN-10 shape", () => {
+    expect(isAsin("1526367769")).toBe(true);
+    expect(isAsin("009951689X")).toBe(true);
+  });
+
   it("rejects plain text queries and near-miss shapes", () => {
     expect(isAsin("red roses")).toBe(false);
+    expect(isAsin("bestseller")).toBe(false); // 10-letter word, not an ASIN
     expect(isAsin("b0crhvct1")).toBe(false); // too short
     expect(isAsin("b0crhvct1tx")).toBe(false); // too long
     expect(isAsin("A0CRHVCT1T")).toBe(false); // wrong prefix
+    expect(isAsin("152636776")).toBe(false); // too short for ISBN-10
   });
 });
 

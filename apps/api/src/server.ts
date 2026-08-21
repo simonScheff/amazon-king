@@ -5,6 +5,7 @@ import fastifyRateLimit from "@fastify/rate-limit";
 import {
   bookEconomicsInputSchema,
   bookCoverInputSchema,
+  bookIdListParamSchema,
   bookMappingInputSchema,
   bookProfileLinkInputSchema,
   campaignCreationCreateSchema,
@@ -13,6 +14,8 @@ import {
   campaignUpdateResultSchema,
   cannibalizationResolutionCreateSchema,
   changeSetCreateSchema,
+  countrySpendQuerySchema,
+  dashboardSummaryQuerySchema,
   loginRequestSchema,
   metricWindowSchema,
   profileUpdateSchema,
@@ -22,6 +25,7 @@ import {
   renameCampaignSchema,
   setCampaignMaxCpcSchema,
   updateCampaignStateSchema,
+  workspaceSettingsUpdateSchema,
 } from "@amazon-king/contracts";
 import { withRequestId } from "@amazon-king/observability";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
@@ -328,6 +332,21 @@ export async function buildServer(
     return services.read.updateProfile(auth, profileId, patch, meta(request));
   });
 
+  /**
+   * Workspace settings (display currency of the all-market view). A local
+   * display write: CSRF (global hook) + WRITE rate limit, but no recent-auth
+   * gate — it changes no spend and rewrites no stored facts.
+   */
+  app.patch(
+    "/api/workspace/settings",
+    { config: { rateLimit: WRITE_RATE } },
+    async (request) => {
+      const auth = await authenticate(request);
+      const patch = parse(workspaceSettingsUpdateSchema, request.body);
+      return services.read.updateWorkspaceSettings(auth, patch, meta(request));
+    },
+  );
+
   app.post(
     "/api/profiles/:profileId/syncs",
     { config: { rateLimit: WRITE_RATE } },
@@ -335,6 +354,21 @@ export async function buildServer(
       const auth = await authenticate(request);
       const { profileId } = request.params as { profileId: string };
       return services.read.requestSync(auth, profileId, meta(request));
+    },
+  );
+
+  /**
+   * Manual FX-rates sync: enqueues one fx_sync job (deduped against a
+   * pending/running one) and returns the current FX status. A read-only
+   * upstream fetch — no spend, no Amazon state — so CSRF (global hook) +
+   * WRITE rate limit, but no recent-auth gate.
+   */
+  app.post(
+    "/api/fx-rates/sync",
+    { config: { rateLimit: WRITE_RATE } },
+    async (request) => {
+      const auth = await authenticate(request);
+      return services.read.requestFxSync(auth, meta(request));
     },
   );
 
@@ -359,32 +393,8 @@ export async function buildServer(
     days: metricWindowSchema.default(30),
   });
 
-  /**
-   * Global product filter: comma-separated external book ids ("3,7") →
-   * string[], undefined when the param is absent. Shared by every metric
-   * screen endpoint; the service resolves each id against the workspace.
-   */
-  const booksQueryParam = z
-    .string()
-    .optional()
-    .transform((value) =>
-      value === undefined
-        ? undefined
-        : value
-            .split(",")
-            .map((id) => id.trim())
-            .filter((id) => id.length > 0),
-    );
-
-  const dashboardQuerySchema = daysQuerySchema.extend({
-    books: booksQueryParam,
-    country: z
-      .string()
-      .trim()
-      .regex(/^[A-Za-z]{2}$/)
-      .transform((value) => value.toUpperCase())
-      .default("US"),
-  });
+  // Shared product filter param (contract: comma-separated book ids).
+  const booksQueryParam = bookIdListParamSchema;
 
   const booksQuerySchema = daysQuerySchema.extend({
     books: booksQueryParam,
@@ -392,19 +402,37 @@ export async function buildServer(
 
   app.get("/api/dashboard/summary", async (request) => {
     const auth = await authenticate(request);
-    const { days, country, books } = parse(dashboardQuerySchema, request.query);
-    return services.read.dashboardSummary(
-      auth.workspaceId,
-      days,
-      country,
-      books,
+    const { days, country, books, currency } = parse(
+      dashboardSummaryQuerySchema,
+      request.query,
     );
+    // Pass the display currency only when the caller sent one, so the
+    // service falls back to the workspace setting.
+    return currency === undefined
+      ? services.read.dashboardSummary(auth.workspaceId, days, country, books)
+      : services.read.dashboardSummary(
+          auth.workspaceId,
+          days,
+          country,
+          books,
+          currency,
+        );
   });
 
   app.get("/api/dashboard/country-spend", async (request) => {
     const auth = await authenticate(request);
-    const { days, books } = parse(booksQuerySchema, request.query);
-    return services.read.dashboardCountrySpend(auth.workspaceId, days, books);
+    const { days, books, currency } = parse(
+      countrySpendQuerySchema,
+      request.query,
+    );
+    return currency === undefined
+      ? services.read.dashboardCountrySpend(auth.workspaceId, days, books)
+      : services.read.dashboardCountrySpend(
+          auth.workspaceId,
+          days,
+          books,
+          currency,
+        );
   });
 
   app.get("/api/campaigns", async (request) => {

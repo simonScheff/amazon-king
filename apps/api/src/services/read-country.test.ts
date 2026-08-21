@@ -22,9 +22,14 @@ vi.mock("@amazon-king/database", () => ({
     overviewRoyaltySeries: vi.fn(),
     dailySeries: vi.fn(),
   },
+  fx: {
+    // Rates are "synced" by default so single-country behavior keeps its
+    // ratesAvailable gate; the FX view itself is covered by read-fx.test.ts.
+    getLatestRateDate: vi.fn(async () => "2026-08-12"),
+  },
 }));
 
-import { books, dashboard, metrics, profiles } from "@amazon-king/database";
+import { books, dashboard, fx, metrics, profiles } from "@amazon-king/database";
 import type { ApiConfig } from "../config.js";
 import { createReadService } from "./read.js";
 
@@ -312,6 +317,24 @@ describe("dashboard country filtering", () => {
       start: "2026-02-01",
       end: "2026-02-28",
     });
+  });
+
+  it("reports ratesAvailable from fx coverage on a single-country view", async () => {
+    const service = createReadService({
+      db: {} as never,
+      config: { killSwitch: false } as ApiConfig,
+      logger: {} as never,
+      now: () => new Date("2026-08-13T12:00:00.000Z"),
+    });
+
+    await expect(
+      service.dashboardSummary("workspace-1", 30, "US"),
+    ).resolves.toMatchObject({ currency: "USD", ratesAvailable: true });
+
+    vi.mocked(fx.getLatestRateDate).mockResolvedValue(null);
+    await expect(
+      service.dashboardSummary("workspace-1", 30, "US"),
+    ).resolves.toMatchObject({ currency: "USD", ratesAvailable: false });
   });
 });
 

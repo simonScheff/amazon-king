@@ -1,16 +1,28 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { FxRatesStatus } from "@amazon-king/contracts";
 import { SettingsPage } from "./settings";
 
 const mocks = vi.hoisted(() => ({
   books: [] as unknown[],
   candidates: [] as unknown[],
   search: {} as { tab?: string },
+  workspaceSettings: undefined as { displayCurrency: string } | undefined,
+  fxRates: undefined as FxRatesStatus | undefined,
+  freshnessOptions: [] as unknown[],
   navigate: vi.fn(),
   mapBook: vi.fn(),
   linkMarkets: vi.fn(),
   saveEconomics: vi.fn(),
   saveCover: vi.fn(),
+  saveSettings: vi.fn(),
+  fxSync: vi.fn(),
   mutation: vi.fn(),
 }));
 
@@ -22,6 +34,15 @@ vi.mock("@tanstack/react-router", () => ({
 vi.mock("../api/endpoints", () => ({
   useAuditEvents: () => ({ isPending: false, error: null, data: [] }),
   useBooks: () => ({ isPending: false, error: null, data: mocks.books }),
+  useDataFreshness: (options?: unknown) => {
+    mocks.freshnessOptions.push(options);
+    return {
+      isPending: false,
+      error: null,
+      data: { profiles: [], fxRates: mocks.fxRates },
+    };
+  },
+  useEnqueueFxSync: () => ({ isPending: false, mutate: mocks.fxSync }),
   useEnqueueSync: () => ({ isPending: false, mutate: mocks.mutation }),
   useMapAdvertisedBook: () => ({
     isPending: false,
@@ -79,6 +100,11 @@ vi.mock("../api/endpoints", () => ({
     data: mocks.candidates,
   }),
   useUpdateProfile: () => ({ isPending: false, mutate: mocks.mutation }),
+  useWorkspaceSettings: () => ({ data: mocks.workspaceSettings }),
+  useUpdateWorkspaceSettings: () => ({
+    isPending: false,
+    mutate: mocks.saveSettings,
+  }),
 }));
 
 describe("SettingsPage book mapping", () => {
@@ -89,11 +115,110 @@ describe("SettingsPage book mapping", () => {
     mocks.linkMarkets.mockReset();
     mocks.saveEconomics.mockReset();
     mocks.saveCover.mockReset();
+    mocks.saveSettings.mockReset();
+    mocks.fxSync.mockReset();
     mocks.mutation.mockReset();
     mocks.navigate.mockReset();
     mocks.books = [];
     mocks.candidates = [];
+    mocks.workspaceSettings = undefined;
+    mocks.fxRates = undefined;
+    mocks.freshnessOptions = [];
     mocks.search = { tab: "books" };
+  });
+
+  it("offers the workspace display currency and saves a change", () => {
+    mocks.search = { tab: "profiles" };
+    mocks.workspaceSettings = { displayCurrency: "EUR" };
+    render(<SettingsPage />);
+
+    expect(screen.getByText("Workspace")).toBeInTheDocument();
+    const picker = screen.getByLabelText("Display currency");
+    expect(picker).toHaveValue("EUR");
+    // Enabled profile currencies plus the USD/EUR/GBP base set.
+    expect(screen.getByRole("option", { name: "AUD" })).toBeInTheDocument();
+
+    fireEvent.change(picker, { target: { value: "GBP" } });
+    expect(mocks.saveSettings).toHaveBeenCalledWith(
+      { displayCurrency: "GBP" },
+      expect.objectContaining({ onError: expect.any(Function) }),
+    );
+  });
+
+  it("defaults the display currency to USD before any setting is known", () => {
+    mocks.search = { tab: "profiles" };
+    render(<SettingsPage />);
+
+    expect(screen.getByLabelText("Display currency")).toHaveValue("USD");
+  });
+
+  it("shows the FX rates status and triggers a manual sync that force-polls freshness", () => {
+    mocks.search = { tab: "profiles" };
+    mocks.fxRates = {
+      latestRateDate: "2026-08-20",
+      lastRunState: "succeeded",
+      lastRunAt: "2026-08-20T17:01:00.000Z",
+      lastError: null,
+      stale: false,
+    };
+    render(<SettingsPage />);
+
+    expect(
+      screen.getByText("up to date through Aug 20, 2026"),
+    ).toBeInTheDocument();
+    // No forced polling before the trigger.
+    expect(mocks.freshnessOptions).toContainEqual({ poll: false });
+    expect(mocks.freshnessOptions).not.toContainEqual({ poll: true });
+
+    fireEvent.click(screen.getByRole("button", { name: "Sync rates now" }));
+    expect(mocks.fxSync).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      }),
+    );
+
+    // A queued run is force-polled until the worker claims it.
+    const callbacks = mocks.fxSync.mock.calls[0]![1] as {
+      onSuccess: (result: FxRatesStatus & { queued: boolean }) => void;
+    };
+    act(() => callbacks.onSuccess({ ...mocks.fxRates!, queued: true }));
+    expect(mocks.freshnessOptions.at(-1)).toEqual({ poll: true });
+  });
+
+  it("shows syncing and disables the trigger while an fx_sync run is active", () => {
+    mocks.search = { tab: "profiles" };
+    mocks.fxRates = {
+      latestRateDate: "2026-08-20",
+      lastRunState: "running",
+      lastRunAt: "2026-08-21T09:00:00.000Z",
+      lastError: null,
+      stale: false,
+    };
+    render(<SettingsPage />);
+
+    expect(screen.getByText("syncing…")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Sync rates now" }),
+    ).toBeDisabled();
+  });
+
+  it("shows not synced yet before the first fx_sync run", () => {
+    mocks.search = { tab: "profiles" };
+    mocks.fxRates = {
+      latestRateDate: null,
+      lastRunState: "never_run",
+      lastRunAt: null,
+      lastError: null,
+      stale: true,
+    };
+    render(<SettingsPage />);
+
+    expect(screen.getByText("not synced yet")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Sync rates now" }),
+    ).toBeEnabled();
   });
 
   it("groups an ASIN across profiles and submits confirmed book metadata", () => {

@@ -4,6 +4,7 @@ import {
   reports as reportsRepo,
   structure as structureRepo,
   recommendations as recommendationsRepo,
+  fx as fxRepo,
   withTransaction,
   enqueue as queueEnqueue,
   buildReportSpecFingerprint,
@@ -36,6 +37,7 @@ type SearchTermMetricsRow = metrics.SearchTermMetricsRow;
 type AdvertisedProductMetricsRow = metrics.AdvertisedProductMetricsRow;
 type PlacementMetricsRow = metrics.PlacementMetricsRow;
 type RecommendationInsert = recommendationsRepo.RecommendationInsert;
+export type FxRateRow = fxRepo.FxRateRow;
 
 /**
  * WorkerStore — the narrow persistence surface the job handlers depend on.
@@ -280,6 +282,14 @@ export interface WorkerStore {
 
   // --- metrics import (single transaction, idempotent upsert) ---
   importMetrics(facts: MetricFactRows): Promise<number>;
+
+  // --- fx rates (docs/fx-rates-all-market-plan.md §2) ---
+  /** Batch-insert fixings (ON CONFLICT DO NOTHING). Returns rows actually inserted. */
+  upsertFxRates(rows: readonly FxRateRow[]): Promise<number>;
+  /** Latest stored fixing date; null when no rates have been synced yet. */
+  getLatestFxRateDate(): Promise<string | null>;
+  /** Oldest metric date across the workspace's fact tables (fx backfill depth). */
+  getEarliestFactDate(): Promise<string | null>;
 
   // --- structure ---
   applyStructureSnapshot(
@@ -590,6 +600,25 @@ export function createDbStore(pool: Pool): WorkerStore {
             return metrics.upsertPlacementMetrics(client, facts.rows);
         }
       });
+    },
+
+    async upsertFxRates(rows) {
+      return fxRepo.upsertFxRates(db, rows);
+    },
+
+    getLatestFxRateDate() {
+      return fxRepo.getLatestRateDate(db);
+    },
+
+    async getEarliestFactDate() {
+      // Single-workspace product: fx rates are workspace-global, so resolve
+      // the one workspace here instead of threading its id through the payload.
+      const workspace = await db.query<{ id: string }>(
+        `select id::text from workspaces order by id limit 1`,
+      );
+      const workspaceId = workspace.rows[0]?.id;
+      if (!workspaceId) return null;
+      return fxRepo.getEarliestFactDate(db, workspaceId);
     },
 
     async applyStructureSnapshot(profile, snapshot) {

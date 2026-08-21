@@ -74,7 +74,7 @@ Limits are per client, per minute. Exceeding any tier returns
 | ------- | -------- | --------------------------------------------------------------------------------- |
 | Global  | 200/min  | Every route without an explicit tier                                              |
 | STRICT  | 10/min   | Login start/verify, Amazon OAuth start/callback                                   |
-| WRITE   | 20/min   | Sync requests, mappings, cover, book profile-links, cannibalization/max-CPC/creation sets, campaign negatives, campaign state/name, apply, rollback |
+| WRITE   | 20/min   | Sync requests, mappings, cover, book profile-links, cannibalization/max-CPC/creation sets, campaign negatives, campaign state/name, workspace settings, apply, rollback |
 | PREVIEW | 120/min  | `GET /api/change-sets/:id/preview`                                                |
 
 ### Request IDs
@@ -95,7 +95,10 @@ in server logs.
 
 Monetary values are always string-encoded decimals; floating point never
 appears in payloads. Values are never aggregated across currencies — mixing
-currencies in one view returns `409 MIXED_CURRENCY`.
+currencies in one view returns `409 MIXED_CURRENCY`. The one explicit
+exception is the all-market dashboard view (`country=all` on
+`GET /api/dashboard/summary`), which converts every fact into a single
+display currency through stored daily FX rates before aggregating.
 
 ---
 
@@ -243,6 +246,20 @@ complete UTC days are enqueued.
 - Errors: `409 PROFILE_DISABLED` when the profile is not enabled,
   `404 NOT_FOUND` for an unknown profile.
 
+### `POST /api/fx-rates/sync`
+
+Requests a manual FX-rates sync, mirroring the per-profile sync trigger. One
+`fx_sync` job is enqueued, deduped: a pending or running `fx_sync` job means
+no duplicate is created. There is no `sync_runs` row (that table is
+per-profile); the job queue and `fx_rates` coverage are the status source,
+exactly as `GET /api/system/data-freshness` reads them.
+
+- **Auth:** session + CSRF. **Rate:** WRITE. No recent-auth gate: this is a
+  read-only upstream fetch that changes no spend and no Amazon state.
+- Response `200`: the current `fxRates` status object (same shape as in
+  `GET /api/system/data-freshness`) plus `queued` (boolean) — `false` when
+  the request was deduped against an already queued or running job.
+
 ### `GET /api/syncs/:syncId`
 
 Response `200`: SyncRun; `404 NOT_FOUND` when unknown.
@@ -290,17 +307,27 @@ ad groups that advertise any of the selected books (union; a multi-book ad
 group contributes its whole numbers). Absent or empty means all products. An
 unknown book id fails the whole request with `404 NOT_FOUND`.
 
-### `GET /api/dashboard/summary?days&country&books`
+### `GET /api/dashboard/summary?days&country&books&currency`
 
-`country` is a two-letter country code (`/^[A-Za-z]{2}$/`, upper-cased),
-default `US`.
+`country` is a two-letter country code (`/^[A-Za-z]{2}$/`, upper-cased,
+default `US`) or the literal `all` — the FX-converted all-market view.
+`currency` is an optional ISO 4217 code selecting the display currency for
+converted views; when omitted the workspace's display currency applies (see
+`PATCH /api/workspace/settings`).
+
+With `country=all`, totals, previous-period totals, and the daily series are
+converted per fact date into the display currency — each fact at its own
+metric date's fixing (last-business-day fallback), cross-rated through the
+USD-pivot `fx_rates` table in SQL `numeric` math. Single-country behavior is
+unchanged.
 
 Response `200` (DashboardSummary):
 
 | Field              | Type              | Notes                                              |
 | ------------------ | ----------------- | -------------------------------------------------- |
 | dateRange          | `{start, end}`    | ISO dates                                          |
-| currency           | string            |                                                    |
+| currency           | string            | Display currency of the money fields               |
+| ratesAvailable     | boolean           | Whether `fx_rates` has any rows; gates the "All markets" option in the UI |
 | totals             | object            | `impressions`, `clicks`, `orders` (ints); `cost`, `sales` (money); `acos` (number \| null); `estimatedRoyalty`, `estimatedAdProfit` (money \| null) |
 | economicsMissing   | boolean           | True when no KDP economics exist for the view      |
 | dataCurrentThrough | timestamp         |                                                    |
@@ -308,20 +335,27 @@ Response `200` (DashboardSummary):
 | daily              | array, optional   | Per-day `{date, cost, sales, orders, estimatedRoyalty}` series |
 | previous           | object            | `{dateRange, totals}` for period-over-period: trailing windows use the immediately preceding same-length range; `days=mtd` uses the same day-of-month range in the previous calendar month (clamped if that month is shorter) |
 
-Errors: `409 MIXED_CURRENCY` when the selected window spans currencies.
+Errors: `409 MIXED_CURRENCY` when a single-country window somehow spans
+currencies; `409 FX_RATES_INCOMPLETE` when `country=all` (or an explicit
+`currency` conversion) is requested but stored rates don't cover the whole
+window. When `fx_rates` is completely empty, `country=all` instead returns
+`200` with `ratesAvailable: false` and zeroed totals — the UI disables the
+option rather than showing unconverted numbers.
 
-### `GET /api/dashboard/country-spend?days&books`
+### `GET /api/dashboard/country-spend?days&books&currency`
 
 Ad spend per marketplace country over the requested window, sorted by spend
 descending. Countries without metrics in the window are omitted. Powers
-spend-ordered country selectors.
+spend-ordered country selectors. The optional `currency` (ISO 4217) asks for
+each market's spend converted into that currency.
 
 Response `200` (CountrySpend):
 
 | Field      | Type             | Notes                                                  |
 | ---------- | ---------------- | ------------------------------------------------------ |
 | dateRange  | `{start, end}`   | ISO dates                                              |
-| countries  | array            | `{countryCode, currency, spend (money)}`, spend desc   |
+| currency   | string, optional | Present when `currency` was requested                  |
+| countries  | array            | `{countryCode, currency, spend (money), convertedSpend (money \| null)}`, spend desc; `convertedSpend` only when `currency` was requested, `null` when rates don't cover that market |
 
 ### `GET /api/campaigns?days&books`
 
@@ -776,6 +810,20 @@ ChangeAction shape (preview/apply/rollback responses):
 
 ---
 
+## Workspace settings
+
+### `PATCH /api/workspace/settings`
+
+Updates workspace-level settings. Currently the only field is the display
+currency used by the all-market dashboard view — a local write that changes
+no spend, so no recent-auth gate.
+
+- **Auth:** session + CSRF. **Rate:** WRITE.
+- Body: `{ "displayCurrency": "EUR" }` — ISO 4217 (`/^[A-Z]{3}$/`).
+- Response `200`: `{ "displayCurrency": "EUR" }`.
+
+---
+
 ## Audit & system
 
 ### `GET /api/audit-events`
@@ -785,8 +833,33 @@ Response `200`: the 100 most recent audit events —
 
 ### `GET /api/system/data-freshness`
 
-Response `200`: per-profile, per-dataset freshness —
-`{profileId, dataset, lastSuccessAt | null, completeThrough | null (date)}`.
+Response `200`: an envelope with per-profile, per-dataset freshness plus
+workspace-level FX rate health:
+
+```json
+{
+  "profiles": [
+    {
+      "profileId": "...",
+      "dataset": "metrics",
+      "lastSuccessAt": "2026-08-20T05:12:00.000Z",
+      "completeThrough": "2026-08-19"
+    }
+  ],
+  "fxRates": {
+    "latestRateDate": "2026-08-20",
+    "lastRunState": "succeeded",
+    "lastRunAt": "2026-08-20T17:05:00.000Z",
+    "lastError": null,
+    "stale": false
+  }
+}
+```
+
+`fxRates.lastRunState` is `succeeded`, `failed`, `running`, or `never_run`
+(no `fx_sync` job yet); `stale` is true when the stored rates lag the last
+business day. This powers the "FX rates" row on the overview's Sync status
+card and is present regardless of any selected market.
 
 ---
 

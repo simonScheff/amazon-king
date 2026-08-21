@@ -21,7 +21,8 @@ import type {
   CountrySpend,
   MaxCpcChangeSetResult,
   DashboardSummary,
-  DataFreshness,
+  DataFreshnessResponse,
+  FxSyncResult,
   MetricWindow,
   ProfileUpdate,
   Recommendation,
@@ -31,6 +32,8 @@ import type {
   SearchTermListRow,
   SyncRun,
   SyncRunSummary,
+  WorkspaceSettings,
+  WorkspaceSettingsUpdate,
 } from "@amazon-king/contracts";
 
 /**
@@ -153,19 +156,37 @@ export interface ReadService {
     amazonProfileId: string,
     meta: RequestMeta,
   ): Promise<SyncRun>;
+  /**
+   * Enqueue one fx_sync job (deduped against a pending/running one) and
+   * return the current FX status. A read-only upstream fetch: no sync_runs
+   * row (that table is per-profile) and no recent-auth gate.
+   */
+  requestFxSync(auth: AuthContext, meta: RequestMeta): Promise<FxSyncResult>;
   getSyncRun(workspaceId: string, syncRunId: string): Promise<SyncRun | null>;
   /** Recent sync runs of the workspace with per-report progress, newest first. */
   listSyncRuns(workspaceId: string): Promise<SyncRunSummary[]>;
+  /**
+   * Overview KPIs and trend. `countryCode` is a two-letter market or `"all"`
+   * (docs/fx-rates-all-market-plan.md §4): with `"all"` every marketplace is
+   * converted per fact date into `currency` (default: the workspace's
+   * display currency). `currency` is ignored for a specific country.
+   */
   dashboardSummary(
     workspaceId: string,
     days: MetricWindow,
     countryCode: string,
     bookIds?: string[],
+    currency?: string,
   ): Promise<DashboardSummary>;
+  /**
+   * Spend per marketplace. When `currency` is present, each row also carries
+   * a converted total in that currency (null when rates do not cover it).
+   */
   dashboardCountrySpend(
     workspaceId: string,
     days: MetricWindow,
     bookIds?: string[],
+    currency?: string,
   ): Promise<CountrySpend>;
   listCampaigns(
     workspaceId: string,
@@ -244,7 +265,18 @@ export interface ReadService {
   ): Promise<Recommendation | null>;
   listChangeSets(workspaceId: string): Promise<ChangeSet[]>;
   listAuditEvents(workspaceId: string): Promise<AuditEvent[]>;
-  dataFreshness(workspaceId: string): Promise<DataFreshness[]>;
+  /** Per-profile freshness plus the workspace-level FX sync health. */
+  dataFreshness(workspaceId: string): Promise<DataFreshnessResponse>;
+  /**
+   * Update workspace settings (currently only the display currency of the
+   * all-market view). A local display setting: CSRF + WRITE rate limit at the
+   * route, no recent-auth gate — it changes no spend and no stored facts.
+   */
+  updateWorkspaceSettings(
+    auth: AuthContext,
+    patch: WorkspaceSettingsUpdate,
+    meta: RequestMeta,
+  ): Promise<WorkspaceSettings>;
 }
 
 export interface ChangeSetWithActions {

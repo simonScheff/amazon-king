@@ -97,4 +97,59 @@ describe("CountrySelect", () => {
     );
     expect(onChange).toHaveBeenCalledWith("");
   });
+
+  it("offers the FX all-markets peer option with the 'all' value and no flag", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <CountrySelect
+        value="US"
+        options={options}
+        allMarketsLabel="All markets"
+        onChange={onChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Country" }));
+    const option = screen.getByRole("option", { name: /All markets/ });
+    // No flag icon for the converted view — there is no country to draw.
+    expect(option.querySelector(".fi")).toBeNull();
+    fireEvent.click(option.querySelector("button")!);
+    expect(onChange).toHaveBeenCalledWith("all");
+
+    rerender(
+      <CountrySelect
+        value="all"
+        options={options}
+        allMarketsLabel="All markets"
+        onChange={onChange}
+      />,
+    );
+    const trigger = screen.getByRole("button", { name: "Country" });
+    expect(trigger).toHaveTextContent("All markets");
+    expect(trigger.querySelector(".fi")).toBeNull();
+  });
+
+  it("disables the all-markets option with an explanation when rates are unavailable", () => {
+    const onChange = vi.fn();
+    render(
+      <CountrySelect
+        value="US"
+        options={options}
+        allMarketsLabel="All markets"
+        allMarketsDisabled
+        allMarketsDisabledReason="Exchange rates not synced yet"
+        onChange={onChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Country" }));
+    const button = screen
+      .getByRole("option", { name: /All markets/ })
+      .querySelector("button")!;
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("title", "Exchange rates not synced yet");
+
+    fireEvent.click(button);
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });

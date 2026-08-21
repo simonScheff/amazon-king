@@ -158,6 +158,7 @@ Cadence, from `apps/worker/src/jobs/schedule-tick.ts`:
 | `structure_sync`          | Every 45 min per enabled profile                            |
 | `metrics_sync`            | Once daily per enabled profile, after 05:00 UTC (yesterday) |
 | `recent_window_resync`    | Once daily per enabled profile, trailing 14 days            |
+| `fx_sync`                 | Once daily after 17:00 UTC — Frankfurter rate top-up into `fx_rates` (workspace-global) |
 | `recommendation_run`      | Chained by `metrics_sync` after a complete import           |
 
 Two deliberate design points:

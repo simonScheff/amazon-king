@@ -6,6 +6,7 @@ import {
   stringifySearchWith,
 } from "@tanstack/react-router";
 import {
+  dashboardCountrySchema,
   recommendationStateSchema,
   recommendationTypeSchema,
   type MetricWindow,
@@ -69,6 +70,20 @@ const appRoute = createRoute({
   component: AppLayout,
 });
 
+/**
+ * Shared `?country=` validation: a two-letter code (uppercased) or the `all`
+ * literal of the FX all-market view — same acceptance as the API's
+ * `dashboardCountrySchema`. The router merges the validated result over the
+ * raw search (Object.assign), so an invalid value must be explicitly nulled
+ * out — merely omitting it would leave the raw param in place.
+ */
+function validateCountrySearch(search: Record<string, unknown>): {
+  country?: string;
+} {
+  const country = dashboardCountrySchema.safeParse(search.country);
+  return country.success ? { country: country.data } : { country: undefined };
+}
+
 const overviewRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/",
@@ -76,13 +91,9 @@ const overviewRoute = createRoute({
     search: Record<string, unknown>,
   ): { days?: MetricWindow; country?: string } => {
     const days = parseDaysSearch(search.days);
-    const country =
-      typeof search.country === "string" && /^[A-Za-z]{2}$/.test(search.country)
-        ? search.country.toUpperCase()
-        : undefined;
     return {
       ...(days !== undefined ? { days } : {}),
-      ...(country ? { country } : {}),
+      ...validateCountrySearch(search),
     };
   },
   component: OverviewPage,
@@ -124,10 +135,6 @@ const campaignNewRoute = createRoute({
   validateSearch: (
     search: Record<string, unknown>,
   ): { recommendationId?: string; searchTerm?: string; country?: string } => {
-    const country =
-      typeof search.country === "string"
-        ? search.country.trim().toUpperCase()
-        : undefined;
     return {
       ...(typeof search.recommendationId === "string" &&
       search.recommendationId !== ""
@@ -136,9 +143,7 @@ const campaignNewRoute = createRoute({
       ...(typeof search.searchTerm === "string" && search.searchTerm !== ""
         ? { searchTerm: search.searchTerm }
         : {}),
-      ...(country !== undefined && /^[A-Z]{2}$/.test(country)
-        ? { country }
-        : {}),
+      ...validateCountrySearch(search),
     };
   },
   component: CampaignNewPage,
@@ -161,17 +166,8 @@ const campaignDetailRoute = createRoute({
 const searchTermsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/search-terms",
-  validateSearch: (search: Record<string, unknown>): { country?: string } => {
-    const country =
-      typeof search.country === "string"
-        ? search.country.trim().toUpperCase()
-        : undefined;
-    return {
-      ...(country !== undefined && /^[A-Z]{2}$/.test(country)
-        ? { country }
-        : {}),
-    };
-  },
+  validateSearch: (search: Record<string, unknown>): { country?: string } =>
+    validateCountrySearch(search),
   component: SearchTermsPage,
 });
 
@@ -182,15 +178,9 @@ const searchTermDetailRoute = createRoute({
     search: Record<string, unknown>,
   ): { days?: MetricWindow; country?: string } => {
     const days = parseDaysSearch(search.days);
-    const country =
-      typeof search.country === "string"
-        ? search.country.trim().toUpperCase()
-        : undefined;
     return {
       ...(days !== undefined ? { days } : {}),
-      ...(country !== undefined && /^[A-Z]{2}$/.test(country)
-        ? { country }
-        : {}),
+      ...validateCountrySearch(search),
     };
   },
   component: SearchTermDetailPage,

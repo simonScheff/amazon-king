@@ -37,6 +37,9 @@ invisible for that long. Do not fold reaping back into the loop.
     scheduled syncs create their own `sync_runs` row.
 - `schedule_tick` — self-rescheduling every 15 minutes, cadence per plan §8,
   deduped via `enqueueIfNotQueued`
+- `fx_sync` — workspace-global daily Frankfurter rate top-up into `fx_rates`
+  (docs/fx-rates-all-market-plan.md §2); scheduled by `schedule_tick` after
+  17:00 UTC, base URL from `FX_RATES_BASE_URL`
 - `metrics_sync` and `recommendation_run` — see below
 
 ## metrics_sync

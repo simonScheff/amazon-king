@@ -1,7 +1,11 @@
-import type { Recommendation } from "@amazon-king/contracts";
-import { cleanup, render, screen } from "@testing-library/react";
+import type {
+  CountrySpend,
+  FxRatesStatus,
+  Recommendation,
+} from "@amazon-king/contracts";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatDateTime } from "../lib/format";
 import { OverviewPage } from "./overview";
 
@@ -41,10 +45,27 @@ const emptyTotals = {
   estimatedAdProfit: null,
 };
 
+const fxUpToDate: FxRatesStatus = {
+  latestRateDate: "2026-08-20",
+  lastRunState: "succeeded",
+  lastRunAt: "2026-08-20T17:01:00.000Z",
+  lastError: null,
+  stale: false,
+};
+
+const mocks = vi.hoisted(() => ({
+  search: {} as Record<string, unknown>,
+  currency: "USD",
+  ratesAvailable: true,
+  fxRates: undefined as FxRatesStatus | undefined,
+  countrySpend: undefined as CountrySpend | undefined,
+  saveSettings: vi.fn(),
+}));
+
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children: ReactNode }) => <a href="#">{children}</a>,
   useNavigate: () => vi.fn(),
-  useSearch: () => ({}),
+  useSearch: () => mocks.search,
 }));
 
 vi.mock("../api/endpoints", () => ({
@@ -54,7 +75,8 @@ vi.mock("../api/endpoints", () => ({
     error: null,
     data: {
       dateRange: { start: "2026-07-22", end: "2026-08-20" },
-      currency: "USD",
+      currency: mocks.currency,
+      ratesAvailable: mocks.ratesAvailable,
       totals: emptyTotals,
       previous: {
         dateRange: { start: "2026-06-22", end: "2026-07-21" },
@@ -68,7 +90,7 @@ vi.mock("../api/endpoints", () => ({
   useDataFreshness: () => ({
     isPending: false,
     error: null,
-    data: [],
+    data: { profiles: [], fxRates: mocks.fxRates },
   }),
   useSyncRuns: () => ({ data: [] }),
   useProfiles: () => ({
@@ -96,7 +118,15 @@ vi.mock("../api/endpoints", () => ({
   useSearchTerms: () => ({ isPending: false, error: null, data: [] }),
   useCampaigns: () => ({ isPending: false, error: null, data: [] }),
   useBooks: () => ({ data: [] }),
-  useCountrySpend: () => ({ data: undefined }),
+  useCountrySpend: () => ({
+    isPending: false,
+    error: null,
+    data: mocks.countrySpend,
+  }),
+  useUpdateWorkspaceSettings: () => ({
+    isPending: false,
+    mutate: mocks.saveSettings,
+  }),
 }));
 
 vi.mock("../components/performance-trend-chart", () => ({
@@ -111,14 +141,171 @@ vi.mock("../components/performance-trend-chart", () => ({
   },
 }));
 
-describe("OverviewPage pending recommendations", () => {
-  afterEach(() => cleanup());
+beforeEach(() => {
+  mocks.search = {};
+  mocks.currency = "USD";
+  mocks.ratesAvailable = true;
+  mocks.fxRates = fxUpToDate;
+  mocks.countrySpend = undefined;
+  mocks.saveSettings.mockReset();
+});
 
+afterEach(() => cleanup());
+
+describe("OverviewPage pending recommendations", () => {
   it("shows when each pending finding was created", () => {
     render(<OverviewPage />);
 
     expect(
       screen.getByText(`Created ${formatDateTime(createdAt)}`),
     ).toBeInTheDocument();
+  });
+});
+
+describe("OverviewPage FX rates row", () => {
+  it("shows up-to-date rates with their coverage date", () => {
+    render(<OverviewPage />);
+
+    expect(screen.getByText("FX rates:")).toBeInTheDocument();
+    expect(
+      screen.getByText("up to date through Aug 20, 2026"),
+    ).toBeInTheDocument();
+  });
+
+  it("warns when the stored rates are stale", () => {
+    mocks.fxRates = {
+      ...fxUpToDate,
+      latestRateDate: "2026-08-14",
+      stale: true,
+    };
+    render(<OverviewPage />);
+
+    expect(
+      screen.getByText("stale · rates through Aug 14, 2026"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a truncated error when the last sync failed", () => {
+    mocks.fxRates = {
+      latestRateDate: "2026-08-19",
+      lastRunState: "failed",
+      lastRunAt: "2026-08-20T17:01:00.000Z",
+      lastError: `Frankfurter rates request failed: ${"x".repeat(200)}`,
+      stale: true,
+    };
+    render(<OverviewPage />);
+
+    expect(screen.getByText("sync failed")).toBeInTheDocument();
+    const error = screen.getByText(/Frankfurter rates request failed/);
+    expect(error.textContent!.length).toBeLessThanOrEqual(141);
+    expect(error.textContent).toMatch(/…$/);
+  });
+
+  it("shows syncing while a run is active", () => {
+    mocks.fxRates = { ...fxUpToDate, lastRunState: "running" };
+    render(<OverviewPage />);
+
+    expect(screen.getByText("syncing…")).toBeInTheDocument();
+  });
+
+  it("shows not synced yet before the first run", () => {
+    mocks.fxRates = {
+      latestRateDate: null,
+      lastRunState: "never_run",
+      lastRunAt: null,
+      lastError: null,
+      stale: true,
+    };
+    render(<OverviewPage />);
+
+    expect(screen.getByText("not synced yet")).toBeInTheDocument();
+  });
+});
+
+describe("OverviewPage all-market view", () => {
+  beforeEach(() => {
+    mocks.search = { country: "all" };
+    mocks.currency = "EUR";
+  });
+
+  it("renders All markets with figures in the display currency", () => {
+    render(<OverviewPage />);
+
+    const trigger = screen.getByRole("button", { name: "Country" });
+    expect(trigger).toHaveTextContent("All markets");
+    expect(trigger.querySelector(".fi")).toBeNull();
+    expect(screen.getByText(/all figures in EUR/)).toBeInTheDocument();
+    // KPI money is formatted in the display currency, not a market's.
+    expect(screen.getAllByText("€0.00").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Display currency")).toBeInTheDocument();
+  });
+
+  it("lists per-market spend converted with the native amount secondary", () => {
+    mocks.countrySpend = {
+      dateRange: { start: "2026-07-22", end: "2026-08-20" },
+      currency: "EUR",
+      countries: [
+        {
+          countryCode: "US",
+          currency: "USD",
+          spend: "11.0000",
+          convertedSpend: "10.0000",
+        },
+        {
+          countryCode: "JP",
+          currency: "JPY",
+          spend: "1500.0000",
+          convertedSpend: null,
+        },
+      ],
+    };
+    render(<OverviewPage />);
+
+    expect(screen.getByText("Spend by market")).toBeInTheDocument();
+    expect(screen.getByText("€10.00")).toBeInTheDocument();
+    expect(screen.getByText("($11.00)")).toBeInTheDocument();
+    // Rates do not cover this market: never a silently unconverted number.
+    expect(screen.getByText("(rates missing)")).toBeInTheDocument();
+  });
+
+  it("saves a new display currency through the workspace settings mutation", () => {
+    render(<OverviewPage />);
+
+    fireEvent.change(screen.getByLabelText("Display currency"), {
+      target: { value: "GBP" },
+    });
+
+    expect(mocks.saveSettings).toHaveBeenCalledWith(
+      { displayCurrency: "GBP" },
+      expect.objectContaining({ onError: expect.any(Function) }),
+    );
+  });
+});
+
+describe("OverviewPage all-markets gating", () => {
+  it("disables the All markets option with an explanation when rates are unavailable", () => {
+    mocks.ratesAvailable = false;
+    render(<OverviewPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Country" }));
+    const option = screen
+      .getByRole("option", { name: /All markets/ })
+      .querySelector("button")!;
+    expect(option).toBeDisabled();
+    expect(option).toHaveAttribute(
+      "title",
+      "Exchange rates not synced yet — see Sync status below",
+    );
+  });
+
+  it("enables the All markets option when rates are available", () => {
+    render(<OverviewPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Country" }));
+    expect(
+      screen
+        .getByRole("option", { name: /All markets/ })
+        .querySelector("button")!,
+    ).toBeEnabled();
   });
 });

@@ -11,6 +11,10 @@ import {
 } from "./repositories/metrics.js";
 import {
   campaignDailySeries,
+  convertedCountrySpend,
+  convertedDailySeries,
+  convertedDailyTotals,
+  convertedRoyaltySeries,
   listCampaignRows,
   listNegativeKeywordRows,
   listNegativeTargetRows,
@@ -19,7 +23,7 @@ import {
   overviewRoyaltySeries,
   searchTermDailySeries,
 } from "./repositories/dashboard.js";
-import { enqueue, claim, reapExpiredLeases, complete } from "./queue.js";
+import { enqueue, claim, reapExpiredLeases, complete, fail } from "./queue.js";
 import {
   upsertAd,
   upsertAdGroup,
@@ -52,6 +56,16 @@ import {
   findChangeActionByFingerprint,
   listRecentAppliedActions,
 } from "./repositories/changes.js";
+import {
+  upsertFxRates,
+  getLatestRateDate,
+  getEarliestFactDate,
+  getFxSyncStatus,
+} from "./repositories/fx.js";
+import {
+  getWorkspaceDisplayCurrency,
+  setWorkspaceDisplayCurrency,
+} from "./repositories/identity.js";
 import {
   buildChangeSetFingerprint,
   buildChangeActionFingerprint,
@@ -109,6 +123,10 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       "0009",
       "0010",
       "0011",
+      "0012",
+      "0013",
+      "0014",
+      "0015",
     ]);
     const again = await migrate(pool);
     expect(again).toEqual([]);
@@ -206,6 +224,514 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     await expect(
       dashboardTotals(pool, profileId, "2026-07-01", "2026-07-31"),
     ).rejects.toThrow(MixedCurrencyError);
+  });
+
+  it("fx rate upserts are immutable and converge on duplicate sync", async () => {
+    // No rates synced yet: coverage and lookups are null.
+    expect(await getLatestRateDate(pool)).toBeNull();
+
+    const fetchedAt = "2026-08-20T17:05:00.000Z";
+    const rows = [
+      {
+        rateDate: "2026-08-19",
+        baseCurrency: "USD",
+        quoteCurrency: "EUR",
+        rate: "0.9214",
+        source: "frankfurter:ecb",
+        fetchedAt,
+      },
+      {
+        rateDate: "2026-08-20",
+        baseCurrency: "USD",
+        quoteCurrency: "EUR",
+        rate: "0.9231",
+        source: "frankfurter:ecb",
+        fetchedAt,
+      },
+      {
+        rateDate: "2026-08-20",
+        baseCurrency: "USD",
+        quoteCurrency: "GBP",
+        rate: "0.7852",
+        source: "frankfurter:ecb",
+        fetchedAt,
+      },
+    ];
+    expect(await upsertFxRates(pool, rows)).toBe(3);
+
+    // A re-sync of the same window inserts nothing and never rewrites a
+    // stored rate, even if the upstream payload disagrees.
+    expect(
+      await upsertFxRates(pool, [
+        { ...rows[1]!, rate: "9.9999" },
+        { ...rows[0]! },
+      ]),
+    ).toBe(0);
+    const stored = await pool.query<{ rate: string }>(
+      `select rate::text as rate from fx_rates
+       where rate_date = '2026-08-20' and base_currency = 'USD'
+         and quote_currency = 'EUR'`,
+    );
+    expect(stored.rows[0]!.rate).toBe("0.9231");
+
+    expect(await getLatestRateDate(pool)).toBe("2026-08-20");
+  });
+
+  it("rejects non-positive fx rates", async () => {
+    await expect(
+      upsertFxRates(pool, [
+        {
+          rateDate: "2026-08-21",
+          baseCurrency: "USD",
+          quoteCurrency: "JPY",
+          rate: "0",
+          source: "frankfurter:ecb",
+          fetchedAt: "2026-08-21T17:05:00.000Z",
+        },
+      ]),
+    ).rejects.toThrow();
+  });
+
+  it("finds the earliest fact date across the workspace fact tables", async () => {
+    const ws = await pool.query<{ id: string }>(
+      `insert into workspaces (name) values ('fx workspace') returning id`,
+    );
+    const workspaceId = ws.rows[0]!.id;
+    const conn = await pool.query<{ id: string }>(
+      `insert into amazon_connections
+         (workspace_id, encrypted_refresh_token, encryption_key_version, status)
+       values ($1, '\\xdeadbeef'::bytea, 1, 'connected') returning id`,
+      [workspaceId],
+    );
+    const prof = await pool.query<{ id: string }>(
+      `insert into amazon_profiles
+         (connection_id, profile_id, region, country_code, currency_code)
+       values ($1, 'amzn-profile-' || gen_random_uuid(), 'EU', 'DE', 'EUR')
+       returning id`,
+      [conn.rows[0]!.id],
+    );
+    const profileId = prof.rows[0]!.id;
+
+    // No facts yet: nothing to backfill.
+    expect(await getEarliestFactDate(pool, workspaceId)).toBeNull();
+
+    const metricBase = {
+      impressions: 1,
+      clicks: 1,
+      cost: "1.00",
+      sales: "1.00",
+      orders: 0,
+      units: 0,
+      purchases7d: 0,
+      sales7d: "0",
+      purchases14d: 0,
+      sales14d: "0",
+      unitsSoldClicks7d: 0,
+      unitsSoldClicks14d: 0,
+      currency: "EUR",
+    };
+    await upsertCampaignMetrics(pool, [
+      {
+        ...metricBase,
+        profileId,
+        campaignId: "amzn-campaign-fx",
+        metricDate: "2026-05-10",
+      },
+    ]);
+    await upsertSearchTermMetrics(pool, [
+      {
+        ...metricBase,
+        profileId,
+        campaignId: "amzn-campaign-fx",
+        adGroupId: "amzn-adgroup-fx",
+        targetId: "amzn-target-fx",
+        searchTerm: "dragon fantasy",
+        metricDate: "2026-03-02",
+      },
+    ]);
+
+    // The oldest date wins regardless of which fact table holds it.
+    expect(await getEarliestFactDate(pool, workspaceId)).toBe("2026-03-02");
+  });
+
+  /** Seed one workspace with a US (USD) and a DE (EUR) profile. */
+  async function seedTwoCurrencyWorkspace() {
+    const ws = await pool.query<{ id: string }>(
+      `insert into workspaces (name) values ('fx convert workspace') returning id::text as id`,
+    );
+    const workspaceId = ws.rows[0]!.id;
+    const conn = await pool.query<{ id: string }>(
+      `insert into amazon_connections
+         (workspace_id, encrypted_refresh_token, encryption_key_version, status)
+       values ($1, '\\xdeadbeef'::bytea, 1, 'connected') returning id::text as id`,
+      [workspaceId],
+    );
+    const connectionId = conn.rows[0]!.id;
+    const us = await pool.query<{ id: string }>(
+      `insert into amazon_profiles
+         (connection_id, profile_id, region, country_code, currency_code)
+       values ($1, 'amzn-profile-' || gen_random_uuid(), 'NA', 'US', 'USD')
+       returning id::text as id`,
+      [connectionId],
+    );
+    const de = await pool.query<{ id: string }>(
+      `insert into amazon_profiles
+         (connection_id, profile_id, region, country_code, currency_code)
+       values ($1, 'amzn-profile-' || gen_random_uuid(), 'EU', 'DE', 'EUR')
+       returning id::text as id`,
+      [connectionId],
+    );
+    return {
+      workspaceId,
+      usProfileId: us.rows[0]!.id,
+      deProfileId: de.rows[0]!.id,
+    };
+  }
+
+  const fxMetricValues = {
+    impressions: 10,
+    clicks: 1,
+    cost: "0.00",
+    sales: "0.00",
+    orders: 0,
+    units: 0,
+    purchases7d: 0,
+    sales7d: "0",
+    purchases14d: 0,
+    sales14d: "0",
+    unitsSoldClicks7d: 0,
+    unitsSoldClicks14d: 0,
+  };
+
+  it("converts facts into one display currency at each fact date's fixing", async () => {
+    const { usProfileId, deProfileId } = await seedTwoCurrencyWorkspace();
+    const fetchedAt = "2026-08-15T09:00:00.000Z";
+    await upsertFxRates(pool, [
+      // Older fixing: a buggy lookup picking the wrong date shows up here.
+      {
+        rateDate: "2026-08-13",
+        baseCurrency: "USD",
+        quoteCurrency: "EUR",
+        rate: "1.0000",
+        source: "frankfurter",
+        fetchedAt,
+      },
+      {
+        rateDate: "2026-08-13",
+        baseCurrency: "USD",
+        quoteCurrency: "GBP",
+        rate: "1.0000",
+        source: "frankfurter",
+        fetchedAt,
+      },
+      // Friday fixings; the weekend has no rows by design.
+      {
+        rateDate: "2026-08-14",
+        baseCurrency: "USD",
+        quoteCurrency: "EUR",
+        rate: "0.8000",
+        source: "frankfurter",
+        fetchedAt,
+      },
+      {
+        rateDate: "2026-08-14",
+        baseCurrency: "USD",
+        quoteCurrency: "GBP",
+        rate: "0.5000",
+        source: "frankfurter",
+        fetchedAt,
+      },
+    ]);
+    for (const metricDate of ["2026-08-14", "2026-08-15"]) {
+      await upsertCampaignMetrics(pool, [
+        {
+          ...fxMetricValues,
+          profileId: usProfileId,
+          campaignId: "amzn-campaign-fxc-us",
+          metricDate,
+          cost: "10.00",
+          currency: "USD",
+        },
+        {
+          ...fxMetricValues,
+          profileId: deProfileId,
+          campaignId: "amzn-campaign-fxc-de",
+          metricDate,
+          cost: "10.00",
+          currency: "EUR",
+        },
+      ]);
+    }
+    const profiles = [usProfileId, deProfileId];
+    // USD→GBP 0.5, so 10 USD → 5 GBP; EUR→GBP = 0.5 / 0.8 = 0.625, so
+    // 10 EUR → 6.25 GBP. The Saturday fact uses Friday's fixing.
+    const totals = await convertedDailyTotals(
+      pool,
+      profiles,
+      "2026-08-14",
+      "2026-08-15",
+      "GBP",
+    );
+    expect(totals).toEqual({
+      impressions: 40,
+      clicks: 4,
+      cost: "22.5000",
+      sales: "0.0000",
+      orders: 0,
+      units: 0,
+      ratesMissing: false,
+    });
+
+    const daily = await convertedDailySeries(
+      pool,
+      profiles,
+      "2026-08-14",
+      "2026-08-15",
+      "GBP",
+    );
+    expect(daily).toEqual([
+      {
+        date: "2026-08-14",
+        cost: "11.2500",
+        sales: "0.0000",
+        orders: 0,
+        ratesMissing: false,
+      },
+      {
+        date: "2026-08-15",
+        cost: "11.2500",
+        sales: "0.0000",
+        orders: 0,
+        ratesMissing: false,
+      },
+    ]);
+
+    const countrySpend = await convertedCountrySpend(
+      pool,
+      profiles,
+      "2026-08-14",
+      "2026-08-15",
+      "GBP",
+    );
+    expect(countrySpend).toEqual(
+      expect.arrayContaining([
+        { countryCode: "US", convertedSpend: "10.0000", ratesMissing: false },
+        { countryCode: "DE", convertedSpend: "12.5000", ratesMissing: false },
+      ]),
+    );
+  });
+
+  it("flags facts whose currency has no covering fixing instead of converting them", async () => {
+    const { usProfileId, deProfileId } = await seedTwoCurrencyWorkspace();
+    // JPY has no fixings at all in this database; a JPY fact can never
+    // convert, no matter which other rates earlier tests stored.
+    await upsertCampaignMetrics(pool, [
+      {
+        ...fxMetricValues,
+        profileId: deProfileId,
+        campaignId: "amzn-campaign-fxm-de",
+        metricDate: "2026-08-13",
+        cost: "10.00",
+        currency: "JPY",
+      },
+      {
+        ...fxMetricValues,
+        profileId: usProfileId,
+        campaignId: "amzn-campaign-fxm-us",
+        metricDate: "2026-08-13",
+        cost: "4.00",
+        currency: "USD",
+      },
+    ]);
+    // Display USD: the USD fact converts 1:1; the JPY fact has no fixing ≤
+    // the 13th, contributes nothing, and raises rates_missing.
+    const totals = await convertedDailyTotals(
+      pool,
+      [usProfileId, deProfileId],
+      "2026-08-13",
+      "2026-08-13",
+      "USD",
+    );
+    expect(totals.ratesMissing).toBe(true);
+    expect(totals.cost).toBe("4.0000");
+  });
+
+  it("converts per-copy royalty with each book's own marketplace economics", async () => {
+    const { workspaceId, usProfileId, deProfileId } =
+      await seedTwoCurrencyWorkspace();
+    await upsertFxRates(pool, [
+      {
+        rateDate: "2026-08-14",
+        baseCurrency: "USD",
+        quoteCurrency: "EUR",
+        rate: "0.8000",
+        source: "frankfurter",
+        fetchedAt: "2026-08-15T09:00:00.000Z",
+      },
+      {
+        rateDate: "2026-08-14",
+        baseCurrency: "USD",
+        quoteCurrency: "GBP",
+        rate: "0.5000",
+        source: "frankfurter",
+        fetchedAt: "2026-08-15T09:00:00.000Z",
+      },
+    ]);
+    for (const [profileId, key] of [
+      [usProfileId, "us"],
+      [deProfileId, "de"],
+    ] as const) {
+      const campaign = await upsertCampaign(pool, {
+        profileId,
+        amazonCampaignId: `amzn-campaign-fxr-${key}`,
+        name: "FX royalty campaign",
+        state: "enabled",
+      });
+      const adGroup = await upsertAdGroup(pool, {
+        profileId,
+        campaignId: campaign.id,
+        amazonAdGroupId: `amzn-ad-group-fxr-${key}`,
+        name: "FX royalty ad group",
+        state: "enabled",
+      });
+      await upsertAd(pool, {
+        profileId,
+        adGroupId: adGroup.id,
+        amazonAdId: `amzn-ad-fxr-${key}`,
+        asin: "B0FXROYAL1",
+        state: "enabled",
+      });
+    }
+    const book = await mapAdvertisedProductToBook(pool, {
+      workspaceId,
+      profileIds: [usProfileId, deProfileId],
+      asin: "B0FXROYAL1",
+      title: "FX Royalty Book",
+      format: "paperback",
+    });
+    await upsertBookEconomics(pool, {
+      bookId: book!.id,
+      profileId: usProfileId,
+      effectiveFrom: "2026-08-01",
+      currency: "USD",
+      listPrice: "12.00",
+      estimatedRoyaltyPerSale: "7.00",
+      goalMode: "balanced",
+    });
+    await upsertBookEconomics(pool, {
+      bookId: book!.id,
+      profileId: deProfileId,
+      effectiveFrom: "2026-08-01",
+      currency: "EUR",
+      listPrice: "10.00",
+      estimatedRoyaltyPerSale: "6.00",
+      goalMode: "balanced",
+    });
+    await upsertAdvertisedProductMetrics(pool, [
+      // One order shipping two copies: two royalties.
+      {
+        ...fxMetricValues,
+        profileId: usProfileId,
+        campaignId: "amzn-campaign-fxr-us",
+        adGroupId: "amzn-ad-group-fxr-us",
+        adId: "amzn-ad-fxr-us",
+        metricDate: "2026-08-14",
+        orders: 1,
+        units: 2,
+        currency: "USD",
+      },
+      // Three orders, units never imported: degrades to orders.
+      {
+        ...fxMetricValues,
+        profileId: deProfileId,
+        campaignId: "amzn-campaign-fxr-de",
+        adGroupId: "amzn-ad-group-fxr-de",
+        adId: "amzn-ad-fxr-de",
+        metricDate: "2026-08-14",
+        orders: 3,
+        units: 0,
+        currency: "EUR",
+      },
+    ]);
+    // US: 2 copies × 7 USD = 14 USD → ×0.5 = 7 GBP.
+    // DE: 3 copies × 6 EUR = 18 EUR → ×(0.5/0.8) = 11.25 GBP.
+    const royalty = await convertedRoyaltySeries(
+      pool,
+      [usProfileId, deProfileId],
+      "2026-08-14",
+      "2026-08-14",
+      "GBP",
+    );
+    expect(royalty).toEqual([
+      {
+        date: "2026-08-14",
+        estimatedRoyalty: "18.2500",
+        economicsMissing: false,
+        ratesMissing: false,
+      },
+    ]);
+  });
+
+  it("reports fx_sync health from fx_rates and the job queue", async () => {
+    // This test file runs sequentially and no other test enqueues fx_sync.
+    const before = await getFxSyncStatus(pool);
+    expect(before.lastStatus).toBeNull();
+    expect(before.lastRunAt).toBeNull();
+    expect(before.lastError).toBeNull();
+
+    await upsertFxRates(pool, [
+      {
+        rateDate: "2026-08-14",
+        baseCurrency: "USD",
+        quoteCurrency: "EUR",
+        rate: "0.8000",
+        source: "frankfurter",
+        fetchedAt: "2026-08-15T09:00:00.000Z",
+      },
+    ]);
+    const jobId = await enqueue(pool, "fx_sync", {});
+    const claimed = await claim(pool, "worker-fx", ["fx_sync"], 60);
+    expect(claimed?.id).toBe(jobId);
+    // A claimed but unfinished run reports as running.
+    expect((await getFxSyncStatus(pool)).lastStatus).toBe("running");
+    await complete(pool, jobId, "worker-fx");
+
+    const succeeded = await getFxSyncStatus(pool);
+    expect(succeeded.latestRateDate).not.toBeNull();
+    expect(succeeded.lastStatus).toBe("done");
+    expect(succeeded.lastRunAt).not.toBeNull();
+    expect(succeeded.lastError).toBeNull();
+
+    const failedId = await enqueue(pool, "fx_sync", {});
+    const failedClaim = await claim(pool, "worker-fx", ["fx_sync"], 60);
+    expect(failedClaim?.id).toBe(failedId);
+    await fail(
+      pool,
+      failedId,
+      "worker-fx",
+      "Frankfurter rates request failed: HTTP 502",
+      { terminal: true },
+    );
+
+    const failed = await getFxSyncStatus(pool);
+    expect(failed.lastStatus).toBe("dead");
+    expect(failed.lastRunAt).not.toBeNull();
+    expect(failed.lastError).toBe("Frankfurter rates request failed: HTTP 502");
+  });
+
+  it("reads and updates the workspace display currency", async () => {
+    const ws = await pool.query<{ id: string }>(
+      `insert into workspaces (name) values ('display currency workspace') returning id::text as id`,
+    );
+    const workspaceId = ws.rows[0]!.id;
+    expect(await getWorkspaceDisplayCurrency(pool, workspaceId)).toBe("USD");
+    expect(await setWorkspaceDisplayCurrency(pool, workspaceId, "EUR")).toBe(
+      true,
+    );
+    expect(await getWorkspaceDisplayCurrency(pool, workspaceId)).toBe("EUR");
+    expect(await setWorkspaceDisplayCurrency(pool, "999999999", "GBP")).toBe(
+      false,
+    );
   });
 
   it("two concurrent claimers never get the same job", async () => {

@@ -17,3 +17,4 @@ export * as identity from "./repositories/identity.js";
 export * as connections from "./repositories/connections.js";
 export * as dashboard from "./repositories/dashboard.js";
 export * as bidPolicies from "./repositories/bid-policies.js";
+export * as fx from "./repositories/fx.js";

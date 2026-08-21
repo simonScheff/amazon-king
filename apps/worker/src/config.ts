@@ -29,6 +29,9 @@ export interface WorkerConfig {
   recommendationFreshnessHours: number;
   /** schedule_tick self-rescheduling interval (plan §8 cadence). */
   scheduleTickMs: number;
+  /** Frankfurter base URL for fx_sync; point at a self-hosted container to
+   * override (docs/fx-rates-all-market-plan.md §2). */
+  fxRatesBaseUrl: string;
 }
 
 function intEnv(name: string, fallback: number): number {
@@ -72,5 +75,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
     recentWindowDays: intEnv("RECENT_WINDOW_DAYS", 14),
     recommendationFreshnessHours: intEnv("RECOMMENDATION_FRESHNESS_HOURS", 48),
     scheduleTickMs: intEnv("SCHEDULE_TICK_MS", 15 * 60_000),
+    fxRatesBaseUrl: env.FX_RATES_BASE_URL || "https://api.frankfurter.dev",
   };
 }

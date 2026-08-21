@@ -1277,6 +1277,376 @@ export async function dailySeries(
   }));
 }
 
+/* ---------------------------------------------------------------------------
+ * All-market converting queries (docs/fx-rates-all-market-plan.md §4).
+ *
+ * Used only for the dashboard's `country=all` view. Every monetary fact is
+ * converted at the fixing of its own metric date (decision 2), cross-rated
+ * through the USD pivot in SQL on `numeric` — never in floating point:
+ * converted = amount * (pivot(display, D) / pivot(native, D)), where
+ * pivot(X, D) is the fx_rates rate for base USD, quote X, at the latest
+ * rate_date <= D (last-business-day fallback), and pivot('USD', D) = 1.
+ * A fact whose currency has no covering fixing contributes NULL and raises
+ * `rates_missing` — converted numbers are never silently left unconverted
+ * (decision 8). Sums are rounded to 4 decimal places so results fit the
+ * string-encoded decimal contract. Read-only: stored facts are never
+ * rewritten (decision 4).
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Lateral joins resolving the pivot rates for one fact row: `dr` for the
+ * display currency (parameter $N), `nr` for the row's native currency. USD's
+ * pivot rate is 1 by definition; any other currency resolves the latest
+ * fixing at or before the fact's metric date and stays NULL when fx_rates
+ * does not cover that date.
+ */
+function fxRateJoins(displayParamIndex: number): string {
+  return `cross join lateral (
+       select case
+                when $${displayParamIndex} = 'USD' then 1::numeric
+                else (
+                  select f.rate
+                  from fx_rates f
+                  where f.base_currency = 'USD'
+                    and f.quote_currency = $${displayParamIndex}
+                    and f.rate_date <= m.metric_date
+                  order by f.rate_date desc
+                  limit 1
+                )
+              end as rate
+     ) dr
+     cross join lateral (
+       select case
+                when m.currency = 'USD' then 1::numeric
+                else (
+                  select f.rate
+                  from fx_rates f
+                  where f.base_currency = 'USD'
+                    and f.quote_currency = m.currency
+                    and f.rate_date <= m.metric_date
+                  order by f.rate_date desc
+                  limit 1
+                )
+              end as rate
+     ) nr`;
+}
+
+export interface ConvertedTotals {
+  impressions: number;
+  clicks: number;
+  cost: string;
+  sales: string;
+  orders: number;
+  units: number;
+  /** True when a non-zero fact lacked a covering fixing for its date. */
+  ratesMissing: boolean;
+}
+
+/**
+ * Cost/sales totals of the given profiles over a window, converted into one
+ * display currency per fact date. Counts (impressions/clicks/orders/units)
+ * have no currency and are plain sums. `bookIds` (null or empty = no filter)
+ * applies the same ad-group-grain book filter as `dailySeries`.
+ */
+export async function convertedDailyTotals(
+  db: Db,
+  profilePks: readonly string[],
+  dateStart: string,
+  dateEnd: string,
+  displayCurrency: string,
+  bookIds: bigint[] | null = null,
+): Promise<ConvertedTotals> {
+  if (profilePks.length === 0) {
+    return {
+      impressions: 0,
+      clicks: 0,
+      cost: "0",
+      sales: "0",
+      orders: 0,
+      units: 0,
+      ratesMissing: false,
+    };
+  }
+  const result = await db.query<{
+    impressions: string;
+    clicks: string;
+    cost: string;
+    sales: string;
+    orders: string;
+    units: string;
+    rates_missing: boolean;
+  }>(
+    `select coalesce(sum(m.impressions), 0)::text as impressions,
+            coalesce(sum(m.clicks), 0)::text as clicks,
+            coalesce(round(sum(m.cost * dr.rate / nr.rate), 4), 0)::text as cost,
+            coalesce(round(sum(m.sales * dr.rate / nr.rate), 4), 0)::text as sales,
+            coalesce(sum(m.orders), 0)::text as orders,
+            coalesce(sum(m.units), 0)::text as units,
+            coalesce(bool_or(
+              (dr.rate is null or nr.rate is null)
+              and (m.cost <> 0 or m.sales <> 0)
+            ), false) as rates_missing
+     from campaign_metrics_daily m
+     ${fxRateJoins(5)}
+     where m.profile_id = any($1::bigint[])
+       and m.metric_date between $2 and $3
+       and (coalesce(cardinality($4::bigint[]), 0) = 0 or exists (
+         select 1
+         from campaigns fc
+         join ad_groups fg on fg.campaign_id = fc.id
+         join ads fa
+           on fa.profile_id = fg.profile_id and fa.ad_group_id = fg.id
+         join book_profile_links fb
+           on fb.profile_id = fg.profile_id
+          and fb.marketplace_asin = fa.asin
+          and fb.enabled = true
+         where fc.profile_id = m.profile_id
+           and fc.amazon_campaign_id = m.campaign_id
+           and fb.book_id = any($4)
+       ))`,
+    [profilePks.map(String), dateStart, dateEnd, bookIds, displayCurrency],
+  );
+  const row = result.rows[0]!;
+  return {
+    impressions: Number(row.impressions),
+    clicks: Number(row.clicks),
+    cost: row.cost,
+    sales: row.sales,
+    orders: Number(row.orders),
+    units: Number(row.units),
+    ratesMissing: row.rates_missing,
+  };
+}
+
+export interface ConvertedDailyPoint {
+  date: string;
+  cost: string;
+  sales: string;
+  orders: number;
+  /** True when a non-zero fact on this date lacked a covering fixing. */
+  ratesMissing: boolean;
+}
+
+/**
+ * Per-day cost/sales/orders across all given profiles, converted into one
+ * display currency per fact date (trend chart of the all-market view). Rows
+ * are grouped by metric date only — every value already shares the display
+ * currency, so there is nothing left for the caller to merge.
+ */
+export async function convertedDailySeries(
+  db: Db,
+  profilePks: readonly string[],
+  dateStart: string,
+  dateEnd: string,
+  displayCurrency: string,
+  bookIds: bigint[] | null = null,
+): Promise<ConvertedDailyPoint[]> {
+  if (profilePks.length === 0) {
+    return [];
+  }
+  const result = await db.query<{
+    metric_date: string;
+    cost: string;
+    sales: string;
+    orders: string;
+    rates_missing: boolean;
+  }>(
+    `select m.metric_date::text as metric_date,
+            round(sum(m.cost * dr.rate / nr.rate), 4)::text as cost,
+            round(sum(m.sales * dr.rate / nr.rate), 4)::text as sales,
+            sum(m.orders)::text as orders,
+            coalesce(bool_or(
+              (dr.rate is null or nr.rate is null)
+              and (m.cost <> 0 or m.sales <> 0)
+            ), false) as rates_missing
+     from campaign_metrics_daily m
+     ${fxRateJoins(5)}
+     where m.profile_id = any($1::bigint[])
+       and m.metric_date between $2 and $3
+       and (coalesce(cardinality($4::bigint[]), 0) = 0 or exists (
+         select 1
+         from campaigns fc
+         join ad_groups fg on fg.campaign_id = fc.id
+         join ads fa
+           on fa.profile_id = fg.profile_id and fa.ad_group_id = fg.id
+         join book_profile_links fb
+           on fb.profile_id = fg.profile_id
+          and fb.marketplace_asin = fa.asin
+          and fb.enabled = true
+         where fc.profile_id = m.profile_id
+           and fc.amazon_campaign_id = m.campaign_id
+           and fb.book_id = any($4)
+       ))
+     group by m.metric_date
+     order by m.metric_date`,
+    [profilePks.map(String), dateStart, dateEnd, bookIds, displayCurrency],
+  );
+  return result.rows.map((row) => ({
+    date: row.metric_date,
+    cost: row.cost,
+    sales: row.sales,
+    orders: Number(row.orders),
+    ratesMissing: row.rates_missing,
+  }));
+}
+
+export interface ConvertedRoyaltyPoint {
+  date: string;
+  /** Null when any advertised order that day lacks in-effect economics. */
+  estimatedRoyalty: string | null;
+  economicsMissing: boolean;
+  /** True when an earned royalty on this date lacked a covering fixing. */
+  ratesMissing: boolean;
+}
+
+/**
+ * All-market variant of `overviewRoyaltySeries`: the same per-book,
+ * per-marketplace economics and the same `greatest(units, orders)` per-copy
+ * valuation, with each fact date's royalty converted into the display
+ * currency at that date's fixing. Grouped by metric date only. Missing
+ * economics still hide the day's royalty instead of guessing (plan §9).
+ */
+export async function convertedRoyaltySeries(
+  db: Db,
+  profilePks: readonly string[],
+  dateStart: string,
+  dateEnd: string,
+  displayCurrency: string,
+  bookIds: bigint[] | null = null,
+): Promise<ConvertedRoyaltyPoint[]> {
+  if (profilePks.length === 0) {
+    return [];
+  }
+  const result = await db.query<{
+    metric_date: string;
+    economics_missing: boolean;
+    estimated_royalty: string | null;
+    rates_missing: boolean;
+  }>(
+    `select m.metric_date::text as metric_date,
+            bool_or(m.orders > 0 and economics.estimated_royalty_per_sale is null)
+              as economics_missing,
+            case
+              when bool_or(
+                m.orders > 0 and economics.estimated_royalty_per_sale is null
+              )
+                then null
+              else round(coalesce(
+                sum(${royaltyCopies("m")} * economics.estimated_royalty_per_sale
+                    * dr.rate / nr.rate),
+                0
+              ), 4)::text
+            end as estimated_royalty,
+            coalesce(bool_or(
+              (dr.rate is null or nr.rate is null)
+              and ${royaltyCopies("m")} > 0
+              and economics.estimated_royalty_per_sale is not null
+            ), false) as rates_missing
+     from advertised_product_metrics_daily m
+     left join ads a
+       on a.profile_id = m.profile_id and a.amazon_ad_id = m.ad_id
+     left join lateral (
+       select be.estimated_royalty_per_sale
+       from book_profile_links bpl
+       join book_economics be
+         on be.book_id = bpl.book_id and be.profile_id = bpl.profile_id
+       where bpl.profile_id = m.profile_id
+         and bpl.marketplace_asin = a.asin
+         and bpl.enabled = true
+         and be.currency = m.currency
+         and be.effective_from <= m.metric_date
+       order by be.effective_from desc, be.id desc
+       limit 1
+     ) economics on true
+     ${fxRateJoins(5)}
+     where m.profile_id = any($1::bigint[])
+       and m.metric_date between $2 and $3
+       and (coalesce(cardinality($4::bigint[]), 0) = 0 or exists (
+         select 1
+         from ads fa
+         join book_profile_links fb
+           on fb.profile_id = fa.profile_id
+          and fb.marketplace_asin = fa.asin
+          and fb.enabled = true
+         where fa.profile_id = m.profile_id
+           and fa.amazon_ad_id = m.ad_id
+           and fb.book_id = any($4)
+       ))
+     group by m.metric_date
+     order by m.metric_date`,
+    [profilePks.map(String), dateStart, dateEnd, bookIds, displayCurrency],
+  );
+  return result.rows.map((row) => ({
+    date: row.metric_date,
+    estimatedRoyalty: row.estimated_royalty,
+    economicsMissing: row.economics_missing,
+    ratesMissing: row.rates_missing,
+  }));
+}
+
+export interface ConvertedCountrySpendRow {
+  countryCode: string;
+  /** Total spend in the display currency over the window. */
+  convertedSpend: string;
+  /** True when a non-zero spend fact lacked a covering fixing. */
+  ratesMissing: boolean;
+}
+
+/**
+ * Per-market spend totals converted into one display currency (per fact
+ * date), backing the converted figures on the country-spend cards.
+ */
+export async function convertedCountrySpend(
+  db: Db,
+  profilePks: readonly string[],
+  dateStart: string,
+  dateEnd: string,
+  displayCurrency: string,
+  bookIds: bigint[] | null = null,
+): Promise<ConvertedCountrySpendRow[]> {
+  if (profilePks.length === 0) {
+    return [];
+  }
+  const result = await db.query<{
+    country_code: string;
+    converted_spend: string;
+    rates_missing: boolean;
+  }>(
+    `select p.country_code as country_code,
+            round(coalesce(sum(m.cost * dr.rate / nr.rate), 0), 4)::text
+              as converted_spend,
+            coalesce(bool_or(
+              (dr.rate is null or nr.rate is null) and m.cost <> 0
+            ), false) as rates_missing
+     from campaign_metrics_daily m
+     join amazon_profiles p on p.id = m.profile_id
+     ${fxRateJoins(5)}
+     where m.profile_id = any($1::bigint[])
+       and m.metric_date between $2 and $3
+       and (coalesce(cardinality($4::bigint[]), 0) = 0 or exists (
+         select 1
+         from campaigns fc
+         join ad_groups fg on fg.campaign_id = fc.id
+         join ads fa
+           on fa.profile_id = fg.profile_id and fa.ad_group_id = fg.id
+         join book_profile_links fb
+           on fb.profile_id = fg.profile_id
+          and fb.marketplace_asin = fa.asin
+          and fb.enabled = true
+         where fc.profile_id = m.profile_id
+           and fc.amazon_campaign_id = m.campaign_id
+           and fb.book_id = any($4)
+       ))
+     group by p.country_code`,
+    [profilePks.map(String), dateStart, dateEnd, bookIds, displayCurrency],
+  );
+  return result.rows.map((row) => ({
+    countryCode: row.country_code,
+    convertedSpend: row.converted_spend,
+    ratesMissing: row.rates_missing,
+  }));
+}
+
 export interface DataFreshnessRow {
   profilePk: string;
   amazonProfileId: string;

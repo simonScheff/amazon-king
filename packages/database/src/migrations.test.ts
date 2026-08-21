@@ -82,6 +82,22 @@ describe("migration files", () => {
     expect(migration?.sql).toContain("(profile_id, marketplace_asin)");
   });
 
+  it("adds the fx_rates table and the workspace display currency", async () => {
+    const migrations = await loadMigrations();
+    const migration = migrations.find(
+      (file) => file.filename === "0014_fx_rates.sql",
+    );
+    expect(migration?.sql).toContain("create table fx_rates");
+    expect(migration?.sql).toContain(
+      "primary key (rate_date, base_currency, quote_currency)",
+    );
+    expect(migration?.sql).toContain("check (rate > 0)");
+    expect(migration?.sql).toContain("alter table workspaces");
+    expect(migration?.sql).toContain(
+      "display_currency char(3) not null default 'USD'",
+    );
+  });
+
   it("allows campaign-creation change sets and create actions", async () => {
     const migrations = await loadMigrations();
     const migration = migrations.find(

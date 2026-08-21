@@ -6,6 +6,7 @@ import { createMetricsSyncHandler } from "./metrics-sync.js";
 import { createRecentWindowResyncHandler } from "./recent-window-resync.js";
 import { createRecommendationRunHandler } from "./recommendation-run.js";
 import { createConnectionHealthHandler } from "./connection-health.js";
+import { createFxSyncHandler } from "./fx-sync.js";
 import { createScheduleTickHandler } from "./schedule-tick.js";
 
 /** All job types the worker claims (plan §8 cadence). */
@@ -16,6 +17,7 @@ export const JOB_TYPES = [
   "recent_window_resync",
   "recommendation_run",
   "connection_health",
+  "fx_sync",
   "schedule_tick",
 ] as const;
 
@@ -27,6 +29,7 @@ export function createJobHandlers(deps: JobDeps): Record<string, JobHandler> {
     recent_window_resync: createRecentWindowResyncHandler(deps),
     recommendation_run: createRecommendationRunHandler(deps),
     connection_health: createConnectionHealthHandler(deps),
+    fx_sync: createFxSyncHandler(deps),
     schedule_tick: createScheduleTickHandler(deps),
   };
 }

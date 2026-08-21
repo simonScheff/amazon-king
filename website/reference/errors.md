@@ -74,7 +74,8 @@ The response also echoes the `x-request-id` header for log correlation.
 | `ASIN_ALREADY_LINKED`         | Another catalog book already uses this ASIN in one of the selected markets. | Linking a marketplace ASIN that is already claimed. | Use the book that already owns the ASIN, or pick a different ASIN. |
 | `BOOK_PROFILE_ASIN_MISMATCH`  | The book is already linked to a selected profile with a different ASIN. | Retrying a marketplace link with a new ASIN. | Keep the existing marketplace ASIN, or use a market that is not yet linked. |
 | `PROFILE_DISABLED`            | The profile is disabled. | Requesting a sync for a profile with `enabled: false`. | Enable the profile via `PATCH /api/profiles/:profileId`. |
-| `MIXED_CURRENCY`              | A view would aggregate money across currencies. | Dashboard/search-term query spanning marketplaces with different currencies. | Narrow the query with the `country` parameter. |
+| `MIXED_CURRENCY`              | A view would aggregate money across currencies. | Dashboard/search-term query spanning marketplaces with different currencies. | Narrow the query with the `country` parameter — or use `country=all` on the dashboard summary, which converts explicitly. |
+| `FX_RATES_INCOMPLETE`         | A requested currency conversion lacks stored FX rates for part of the window. | `country=all` (or an explicit `currency`) on `GET /api/dashboard/summary` while `fx_rates` does not cover every fact date. | Wait for the daily `fx_sync` job (after 17:00 UTC) or check its health on the overview's Sync status card; nothing unconverted is ever returned. |
 
 ## 429 — Rate limited
 

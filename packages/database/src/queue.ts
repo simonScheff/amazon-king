@@ -74,6 +74,29 @@ export async function enqueue(
 }
 
 /**
+ * Enqueue a job unless a matching one is already pending or running (payload
+ * containment, so a double-submitted trigger does not stack duplicates).
+ * Returns the new job id, or null when a duplicate was already queued.
+ */
+export async function enqueueIfNotQueued(
+  db: Db,
+  type: string,
+  payload: unknown = {},
+  runAt?: Date,
+): Promise<string | null> {
+  const existing = await db.query<{ id: string }>(
+    `select id::text from job_queue
+     where type = $1 and status in ('pending', 'running') and payload @> $2::jsonb
+     limit 1`,
+    [type, JSON.stringify(payload)],
+  );
+  if (existing.rows[0]) {
+    return null;
+  }
+  return enqueue(db, type, payload, runAt);
+}
+
+/**
  * Claim at most one runnable job of the given types for workerId.
  * Uses FOR UPDATE SKIP LOCKED so concurrent claimers never get the same job;
  * the lease expires after leaseSeconds unless completed or heartbeated.
@@ -147,7 +170,8 @@ export async function complete(
 ): Promise<boolean> {
   const result = await db.query<{ id: string }>(
     `update job_queue
-     set status = 'done', locked_by = null, lease_expires_at = null
+     set status = 'done', locked_by = null, lease_expires_at = null,
+         finished_at = now()
      where id = $1 and status = 'running' and locked_by = $2
      returning id`,
     [jobId, workerId],
@@ -186,7 +210,8 @@ export async function fail(
   if (exhausted) {
     const result = await db.query<{ status: JobStatus }>(
       `update job_queue
-       set status = 'dead', last_error = $3, locked_by = null, lease_expires_at = null
+       set status = 'dead', last_error = $3, locked_by = null, lease_expires_at = null,
+           finished_at = now()
        where id = $1 and status = 'running' and locked_by = $2
        returning status`,
       [jobId, workerId, error],

@@ -79,7 +79,7 @@ link is printed straight to the API log.
 
 <div class="ak-screenshot">
 
-![Amazon King overview dashboard showing KPI cards, a daily performance trend chart, profitability, top recommendations, and sync health](/screenshots/overview.png)
+![Amazon King overview dashboard in the All markets view — KPI cards converted to one display currency, a daily performance trend chart, profitability, and top recommendations](/screenshots/overview.png)
 
 </div>
 

@@ -86,6 +86,44 @@ describe("schedule_tick", () => {
     expect(store.jobs.some((job) => job.type === "structure_sync")).toBe(true);
   });
 
+  it("enqueues fx_sync only after 17:00 UTC (ECB fixing published)", async () => {
+    const before = new FakeStore();
+    await runHandler(
+      createScheduleTickHandler(
+        tickDeps(before, new Date("2026-08-06T16:30:00.000Z")),
+      ),
+      {},
+    );
+    expect(before.jobs.some((job) => job.type === "fx_sync")).toBe(false);
+
+    const after = new FakeStore();
+    await runHandler(
+      createScheduleTickHandler(
+        tickDeps(after, new Date("2026-08-06T18:00:00.000Z")),
+      ),
+      {},
+    );
+    const fxJob = after.jobs.find((job) => job.type === "fx_sync");
+    expect(fxJob).toBeDefined();
+    expect(fxJob!.payload).toEqual({});
+    const nextTick = after.jobs.find((job) => job.type === "schedule_tick")!;
+    const marks = (nextTick.payload as { lastEnqueued: Record<string, string> })
+      .lastEnqueued;
+    expect(marks["fx_sync"]).toBeDefined();
+  });
+
+  it("does not re-enqueue fx_sync when ticked again the same day", async () => {
+    const store = new FakeStore();
+    const now = new Date("2026-08-06T18:00:00.000Z");
+    const handler = createScheduleTickHandler(tickDeps(store, now));
+    await runHandler(handler, {});
+    expect(store.jobs.filter((job) => job.type === "fx_sync")).toHaveLength(1);
+
+    const nextTick = store.jobs.find((job) => job.type === "schedule_tick")!;
+    await runHandler(handler, nextTick.payload);
+    expect(store.jobs.filter((job) => job.type === "fx_sync")).toHaveLength(1);
+  });
+
   it("skips disabled profiles", async () => {
     const store = new FakeStore();
     store.profiles.push({ ...ENABLED_PROFILE, enabled: false });

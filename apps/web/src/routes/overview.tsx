@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import {
   useAmazonStatus,
+  useCountrySpend,
   useDashboardSummary,
   useDataFreshness,
   useProfiles,
@@ -10,7 +11,9 @@ import {
 } from "../api/endpoints";
 import type { SyncRunSummary } from "@amazon-king/contracts";
 import { CountrySelect } from "../components/country-select";
+import { DisplayCurrencySelect } from "../components/display-currency-select";
 import { Flag } from "../components/flag";
+import { FxRatesRow } from "../components/fx-rates-row";
 import { KpiCard } from "../components/kpi-card";
 import { TimeframeSelect } from "../components/timeframe-select";
 import {
@@ -34,7 +37,7 @@ import {
   ordersUnitsHint,
   percentChange,
 } from "../lib/format";
-import { resolveCountry } from "../lib/marketplaces";
+import { countryNameForCode, resolveCountry } from "../lib/marketplaces";
 import { previousDeltaLabel, resolveTimeframe } from "../lib/timeframe";
 import { useSpendSortedMarketplaces } from "../lib/use-spend-sorted-marketplaces";
 
@@ -51,10 +54,20 @@ export function OverviewPage() {
   const profiles = useProfiles();
   const marketplaces = useSpendSortedMarketplaces(days, bookIds);
   const country = resolveCountry(search.country, marketplaces);
+  // "all" is the FX-converted all-market view: every enabled market at once,
+  // figures in the single workspace display currency.
+  const isAllMarkets = country === "all";
   const selectedMarketplace = marketplaces.find(
     (marketplace) => marketplace.countryCode === country,
   );
-  const selectedProfileIds = new Set(selectedMarketplace?.profileIds ?? []);
+  const selectedProfileIds = new Set(
+    isAllMarkets
+      ? marketplaces.flatMap((marketplace) => marketplace.profileIds)
+      : (selectedMarketplace?.profileIds ?? []),
+  );
+  const countryLabel = isAllMarkets
+    ? "All markets"
+    : (selectedMarketplace?.countryName ?? country);
 
   const summary = useDashboardSummary(days, country, bookIds);
   const freshness = useDataFreshness();
@@ -66,7 +79,7 @@ export function OverviewPage() {
       recommendation.profileId !== null &&
       selectedProfileIds.has(recommendation.profileId),
   );
-  const visibleFreshness = (freshness.data ?? []).filter((item) =>
+  const visibleFreshness = (freshness.data?.profiles ?? []).filter((item) =>
     selectedProfileIds.has(item.profileId),
   );
 
@@ -84,6 +97,16 @@ export function OverviewPage() {
     .slice(0, 10);
 
   const currency = summary.data?.currency ?? "USD";
+  // Returned for every country selection, so it gates the "All markets"
+  // option even before that view is ever requested.
+  const ratesAvailable = summary.data?.ratesAvailable ?? false;
+  // Per-market spend converted into the display currency (all-market view
+  // only; without the param the API omits convertedSpend entirely).
+  const countrySpend = useCountrySpend(
+    days,
+    bookIds,
+    isAllMarkets && summary.data ? currency : undefined,
+  );
   const totals = summary.data?.totals;
   const previousTotals = summary.data?.previous.totals;
   const deltaLabel = previousDeltaLabel(days);
@@ -128,6 +151,9 @@ export function OverviewPage() {
               value={country}
               options={marketplaces}
               disabled={profiles.isPending || marketplaces.length === 0}
+              allMarketsLabel="All markets"
+              allMarketsDisabled={!ratesAvailable}
+              allMarketsDisabledReason="Exchange rates not synced yet — see Sync status below"
               onChange={(countryCode) =>
                 navigate({
                   to: "/",
@@ -137,6 +163,12 @@ export function OverviewPage() {
               }
             />
           </label>
+          {isAllMarkets ? (
+            <label className="flex items-center gap-2 text-sm text-zinc-400">
+              <span>Currency</span>
+              <DisplayCurrencySelect value={currency} options={marketplaces} />
+            </label>
+          ) : null}
           <TimeframeSelect
             value={days}
             onChange={(window) =>
@@ -166,7 +198,9 @@ export function OverviewPage() {
             </time>{" "}
             · {formatDate(summary.data.dateRange.start)} –{" "}
             {formatDate(summary.data.dateRange.end)} ·{" "}
-            {selectedMarketplace ? (
+            {isAllMarkets ? (
+              <>All markets · all figures in {currency}</>
+            ) : selectedMarketplace ? (
               <>
                 <Flag
                   countryCode={selectedMarketplace.countryCode}
@@ -283,6 +317,58 @@ export function OverviewPage() {
                 bookIds={bookIds}
                 profileIds={selectedProfileIds}
               />
+
+              {isAllMarkets ? (
+                <Card>
+                  <CardHeader
+                    title="Spend by market"
+                    action={
+                      <span className="text-xs text-zinc-500">
+                        in {currency} · native in parentheses
+                      </span>
+                    }
+                  />
+                  {countrySpend.isPending ? (
+                    <CardBody>
+                      <Loading />
+                    </CardBody>
+                  ) : countrySpend.error ? (
+                    <CardBody>
+                      <ErrorState error={countrySpend.error} />
+                    </CardBody>
+                  ) : (countrySpend.data?.countries.length ?? 0) === 0 ? (
+                    <CardBody>
+                      <EmptyState>No spend in this window.</EmptyState>
+                    </CardBody>
+                  ) : (
+                    <ul className="flex flex-col gap-1 px-5 py-3">
+                      {countrySpend.data!.countries.map((entry) => (
+                        <li
+                          key={entry.countryCode}
+                          className="flex items-baseline gap-2 py-0.5 text-sm"
+                        >
+                          <Flag countryCode={entry.countryCode} />
+                          <span className="text-zinc-300">
+                            {countryNameForCode(entry.countryCode)}
+                          </span>
+                          <span className="ml-auto tabular-nums text-zinc-100">
+                            {entry.convertedSpend != null
+                              ? formatMoney(entry.convertedSpend, currency)
+                              : "—"}
+                          </span>
+                          <span className="text-xs tabular-nums text-zinc-500">
+                            (
+                            {entry.convertedSpend != null
+                              ? formatMoney(entry.spend, entry.currency)
+                              : "rates missing"}
+                            )
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Card>
+              ) : null}
             </div>
 
             <Card className="flex flex-col border-zinc-700 bg-zinc-850 shadow-[0_8px_24px_rgba(0,0,0,0.5)]">
@@ -307,8 +393,7 @@ export function OverviewPage() {
               ) : visibleRecommendations.length === 0 ? (
                 <CardBody>
                   <EmptyState>
-                    No pending recommendations for{" "}
-                    {selectedMarketplace?.countryName ?? country}.
+                    No pending recommendations for {countryLabel}.
                   </EmptyState>
                 </CardBody>
               ) : (
@@ -385,14 +470,14 @@ export function OverviewPage() {
                   <span className="text-zinc-500">—</span>
                 )}
               </div>
+              <FxRatesRow fxRates={freshness.data?.fxRates} />
               {freshness.isPending ? (
                 <Loading />
               ) : freshness.error ? (
                 <ErrorState error={freshness.error} />
               ) : visibleFreshness.length === 0 ? (
                 <p className="text-zinc-500">
-                  No sync runs yet for{" "}
-                  {selectedMarketplace?.countryName ?? country}.
+                  No sync runs yet for {countryLabel}.
                 </p>
               ) : (
                 <ul className="flex flex-col gap-2.5">

@@ -5,6 +5,7 @@ import {
   resolveCountry,
   sortMarketplacesBySpend,
   countryNameForCode,
+  displayCurrencyOptions,
 } from "./marketplaces";
 
 function profile(
@@ -54,6 +55,30 @@ describe("marketplace country choices", () => {
     expect(resolveCountry(undefined, withUs)).toBe("US");
     expect(resolveCountry("GB", withUs)).toBe("GB");
     expect(resolveCountry("US", withoutUs)).toBe("GB");
+  });
+
+  it("passes the all-market literal through unchanged", () => {
+    const options = marketplaceOptions([profile("US", "USD")]);
+
+    expect(resolveCountry("all", options)).toBe("all");
+    expect(resolveCountry("all", [])).toBe("all");
+  });
+});
+
+describe("displayCurrencyOptions", () => {
+  it("offers enabled-market currencies plus USD/EUR/GBP, sorted", () => {
+    const options = marketplaceOptions([
+      profile("US", "USD"),
+      profile("JP", "JPY"),
+      profile("CA", "CAD", { enabled: false }),
+    ]);
+
+    expect(displayCurrencyOptions(options)).toEqual([
+      "EUR",
+      "GBP",
+      "JPY",
+      "USD",
+    ]);
   });
 });
 

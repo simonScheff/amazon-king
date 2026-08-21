@@ -9,18 +9,25 @@ data** — never the owner's real books, campaigns, or Amazon covers. The mock
 dataset lives in a scratch database so the developer's real local data is
 untouched.
 
-The seven committed screenshots are 2880×1800 PNGs (1440×900 viewport at
+The eight committed screenshots are 2880×1800 PNGs (1440×900 viewport at
 deviceScaleFactor 2) in `website/public/screenshots/`:
 
-| File                    | Page (demo stack URL)                              | Show                                                              |
-| ----------------------- | -------------------------------------------------- | ----------------------------------------------------------------- |
-| `login.png`             | `/login` **after** submitting the email            | the dev "Continue sign-in" link state                             |
-| `overview.png`          | `/`                                                | KPI cards, daily charts, pending recommendations                  |
-| `recommendations.png`   | `/recommendations`                                 | mixed states (pending/approved/applied/expired)                   |
-| `recommendation-detail` | `/recommendations/5`                               | a bid-change finding: current-vs-proposed comparison and evidence |
-| `campaign-detail.png`   | `/campaigns/490700000000091`                       | KPIs, profit chart, ad groups tab                                 |
-| `change-center.png`     | `/changes`                                         | draft/previewed/failed/applied mix                                |
-| `settings.png`          | `/settings?tab=books` with the first book expanded | book covers plus the per-country economics form                   |
+| File                     | Page (demo stack URL)                              | Show                                                                                              |
+| ------------------------ | -------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `login.png`              | `/login` **after** submitting the email            | the dev "Continue sign-in" link state                                                             |
+| `overview.png`           | `/?country=all`                                    | the All markets view: Currency picker, converted KPI cards, daily charts, pending recommendations |
+| `recommendations.png`    | `/recommendations`                                 | mixed states (pending/approved/applied/expired)                                                   |
+| `recommendation-detail`  | `/recommendations/5`                               | a bid-change finding: current-vs-proposed comparison and evidence                                 |
+| `campaign-detail.png`    | `/campaigns/490700000000091`                       | KPIs, profit chart, ad groups tab                                                                 |
+| `change-center.png`      | `/changes`                                         | draft/previewed/failed/applied mix                                                                |
+| `settings.png`           | `/settings?tab=books` with the first book expanded | book covers plus the per-country economics form                                                   |
+| `settings-workspace.png` | `/settings?tab=profiles`                           | the Workspace card's display-currency picker above the profiles table                             |
+
+The FX-gated UI (the enabled "All markets" option and the "FX rates" row on
+the Sync status card) needs rates in the demo DB, which the seed does not
+create — insert synthetic business-day rows into `fx_rates` plus a `done`
+`fx_sync` row in `job_queue` after seeding, or those elements render in their
+"not synced yet" state.
 
 ## 1. Seed the scratch database
 

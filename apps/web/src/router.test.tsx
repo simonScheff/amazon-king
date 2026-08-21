@@ -92,6 +92,62 @@ describe("global books search param", () => {
   });
 });
 
+describe("country search param", () => {
+  afterEach(cleanup);
+
+  it("accepts the all-market literal and two-letter codes, and keeps them on update", async () => {
+    render(<RouterProvider router={router} />);
+
+    // The FX all-market view is carried by the same param as a market.
+    await router.navigate({ to: "/", search: { country: "all" } as never });
+    await screen.findByText("overview page");
+    expect(leafSearch()).toEqual({ country: "all" });
+    expect(router.state.location.href).toBe("/?country=all");
+
+    // A functional update that spreads prev keeps the selection, exactly like
+    // a specific country (this is how the overview's selectors navigate).
+    await router.navigate({
+      to: "/",
+      search: (prev) => ({ ...prev, days: 14 }),
+      replace: true,
+    });
+    expect(leafSearch()).toEqual({ country: "all", days: 14 });
+    expect(router.state.location.href).toBe("/?country=all&days=14");
+
+    // Two-letter codes keep their uppercase normalization.
+    await router.navigate({ to: "/", search: { country: "de" } as never });
+    expect(leafSearch()).toEqual({ country: "DE" });
+
+    // Search-term pages accept the literal too.
+    await router.navigate({
+      to: "/search-terms",
+      search: { country: "all" } as never,
+    });
+    await screen.findByText("search terms page");
+    expect(leafSearch()).toEqual({ country: "all" });
+
+    await router.navigate({
+      to: "/search-terms/$term",
+      params: { term: "fantasy books" },
+      search: { country: "ALL" } as never,
+    });
+    await screen.findByText("search term detail page");
+    expect(leafSearch()).toEqual({ country: "all" });
+    expect(router.state.location.href).toBe(
+      "/search-terms/fantasy%20books?country=all",
+    );
+  });
+
+  it("drops invalid country values", async () => {
+    render(<RouterProvider router={router} />);
+
+    await router.navigate({ to: "/", search: { country: "USA" } as never });
+    await screen.findByText("overview page");
+    expect(leafSearch()).toEqual({});
+    expect(router.state.location.href).toBe("/");
+  });
+});
+
 describe("days search param", () => {
   afterEach(cleanup);
 

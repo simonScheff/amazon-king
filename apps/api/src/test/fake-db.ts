@@ -34,9 +34,13 @@ export interface FakeTables {
   ads: FakeRow[];
   books: FakeRow[];
   bookProfileLinks: FakeRow[];
+  bookEconomics: FakeRow[];
   searchTermMetricsDaily: FakeRow[];
+  campaignMetricsDaily: FakeRow[];
+  advertisedProductMetricsDaily: FakeRow[];
   negativeKeywords: FakeRow[];
   negativeTargets: FakeRow[];
+  fxRates: FakeRow[];
 }
 
 function emptyTables(): FakeTables {
@@ -65,9 +69,13 @@ function emptyTables(): FakeTables {
     ads: [],
     books: [],
     bookProfileLinks: [],
+    bookEconomics: [],
     searchTermMetricsDaily: [],
+    campaignMetricsDaily: [],
+    advertisedProductMetricsDaily: [],
     negativeKeywords: [],
     negativeTargets: [],
+    fxRates: [],
   };
 }
 
@@ -378,6 +386,75 @@ export class FakeDb {
     return row;
   }
 
+  seedBookEconomics(overrides: Partial<FakeRow> = {}): FakeRow {
+    const row = {
+      id: nextId(),
+      book_id: "1",
+      profile_id: "1",
+      effective_from: "2026-01-01",
+      currency: "USD",
+      list_price: "12.0000",
+      estimated_royalty_per_sale: "7.0000",
+      target_acos: null,
+      goal_mode: "balanced",
+      ...overrides,
+    };
+    this.tables.bookEconomics.push(row);
+    return row;
+  }
+
+  seedFxRate(overrides: Partial<FakeRow> = {}): FakeRow {
+    const row = {
+      rate_date: "2026-08-14",
+      base_currency: "USD",
+      quote_currency: "EUR",
+      rate: "0.8000",
+      source: "frankfurter",
+      fetched_at: new Date(),
+      ...overrides,
+    };
+    this.tables.fxRates.push(row);
+    return row;
+  }
+
+  seedCampaignMetric(overrides: Partial<FakeRow> = {}): FakeRow {
+    const row = {
+      profile_id: "1",
+      campaign_id: "camp-1",
+      metric_date: "2026-08-14",
+      impressions: 10,
+      clicks: 1,
+      cost: "5.0000",
+      sales: "0.0000",
+      orders: 0,
+      units: 0,
+      currency: "USD",
+      ...overrides,
+    };
+    this.tables.campaignMetricsDaily.push(row);
+    return row;
+  }
+
+  seedAdvertisedProductMetric(overrides: Partial<FakeRow> = {}): FakeRow {
+    const row = {
+      profile_id: "1",
+      campaign_id: "camp-1",
+      ad_group_id: "ag-1",
+      ad_id: "ad-1",
+      metric_date: "2026-08-14",
+      impressions: 10,
+      clicks: 1,
+      cost: "0.0000",
+      sales: "0.0000",
+      orders: 0,
+      units: 0,
+      currency: "USD",
+      ...overrides,
+    };
+    this.tables.advertisedProductMetricsDaily.push(row);
+    return row;
+  }
+
   // -- query dispatch ---------------------------------------------------------
 
   async query(sql: string, params: unknown[] = []): Promise<QueryResult> {
@@ -413,6 +490,38 @@ export class FakeDb {
       (c) => c.id === row.connection_id,
     );
     return connection?.workspace_id === workspaceId;
+  }
+
+  /**
+   * Emulates the lateral fx_rates join of the converting dashboard queries:
+   * the latest fixing at or before the fact date (USD is 1 by definition),
+   * null when the stored rates do not cover the date.
+   */
+  private fxRateFor(currency: string, date: string): number | null {
+    if (currency === "USD") return 1;
+    let best: string | null = null;
+    let rate: number | null = null;
+    for (const row of this.tables.fxRates) {
+      const rateDate = String(row.rate_date);
+      if (
+        row.quote_currency === currency &&
+        rateDate <= date &&
+        (best === null || rateDate > best)
+      ) {
+        best = rateDate;
+        rate = Number(row.rate);
+      }
+    }
+    return rate;
+  }
+
+  private latestFxRateDate(): string | null {
+    let latest: string | null = null;
+    for (const row of this.tables.fxRates) {
+      const rateDate = String(row.rate_date);
+      if (latest === null || rateDate > latest) latest = rateDate;
+    }
+    return latest;
   }
 
   private handlers(): Handler[] {
@@ -731,6 +840,25 @@ export class FakeDb {
       },
 
       // -- queue ---------------------------------------------------------------
+      {
+        // enqueueIfNotQueued: payload-containment dedupe on pending/running.
+        match: "select id::text from job_queue",
+        handle: (p) => {
+          const payload = JSON.parse(p[1] as string) as Record<string, unknown>;
+          const hit = t.jobQueue.find(
+            (j) =>
+              j.type === p[0] &&
+              ["pending", "running"].includes(String(j.status)) &&
+              Object.entries(payload).every(
+                ([key, value]) =>
+                  JSON.stringify(
+                    (j.payload as Record<string, unknown> | null)?.[key],
+                  ) === JSON.stringify(value),
+              ),
+          );
+          return this.ok(hit ? [{ id: hit.id }] : []);
+        },
+      },
       {
         match: "insert into job_queue",
         handle: (p) => {
@@ -1230,6 +1358,56 @@ export class FakeDb {
 
       // -- campaign metrics ----------------------------------------------------
       {
+        match: "select currency, sum(impressions)::text as impressions",
+        handle: (p) => {
+          // metrics.dashboardTotals: per-currency totals; the repository
+          // throws MixedCurrencyError when more than one row comes back.
+          const profileId = String(p[0]);
+          const start = String(p[1]);
+          const end = String(p[2]);
+          const byCurrency = new Map<string, FakeRow>();
+          for (const fact of t.campaignMetricsDaily) {
+            const date = String(fact.metric_date);
+            if (
+              String(fact.profile_id) !== profileId ||
+              date < start ||
+              date > end
+            ) {
+              continue;
+            }
+            const currency = String(fact.currency);
+            const row = byCurrency.get(currency) ?? {
+              currency,
+              impressions: 0,
+              clicks: 0,
+              cost: 0,
+              sales: 0,
+              orders: 0,
+              units: 0,
+            };
+            row.impressions =
+              Number(row.impressions) + Number(fact.impressions);
+            row.clicks = Number(row.clicks) + Number(fact.clicks);
+            row.cost = Number(row.cost) + Number(fact.cost);
+            row.sales = Number(row.sales) + Number(fact.sales);
+            row.orders = Number(row.orders) + Number(fact.orders);
+            row.units = Number(row.units) + Number(fact.units);
+            byCurrency.set(currency, row);
+          }
+          return this.ok(
+            [...byCurrency.values()].map((row) => ({
+              currency: row.currency,
+              impressions: String(row.impressions),
+              clicks: String(row.clicks),
+              cost: Number(row.cost).toFixed(4),
+              sales: Number(row.sales).toFixed(4),
+              orders: String(row.orders),
+              units: String(row.units),
+            })),
+          );
+        },
+      },
+      {
         match:
           "from search_term_metrics_daily m where m.profile_id = $1 and m.campaign_id = $2",
         handle: (p) => {
@@ -1454,6 +1632,330 @@ export class FakeDb {
                   ),
               })),
           ),
+      },
+
+      // -- workspace settings --------------------------------------------------
+      {
+        match: "select display_currency from workspaces where id = $1",
+        handle: (p) =>
+          this.ok(
+            t.workspaces
+              .filter((w) => w.id === p[0])
+              .map((w) => ({ display_currency: w.display_currency ?? "USD" })),
+          ),
+      },
+      {
+        match: "update workspaces set display_currency = $2 where id = $1",
+        handle: (p) => {
+          const row = t.workspaces.find((w) => w.id === p[0]);
+          if (!row) return { rows: [], rowCount: 0 };
+          row.display_currency = p[1];
+          return { rows: [{ id: row.id }], rowCount: 1 };
+        },
+      },
+
+      // -- fx rates and fx_sync health ------------------------------------------
+      {
+        match: "select max(rate_date)::text as latest from fx_rates",
+        handle: () => this.ok([{ latest: this.latestFxRateDate() }]),
+      },
+      {
+        match: "where q.type = 'fx_sync'",
+        handle: () => {
+          const job = t.jobQueue
+            .filter(
+              (j) =>
+                j.type === "fx_sync" &&
+                (["running", "done", "failed", "dead"].includes(
+                  String(j.status),
+                ) ||
+                  (j.status === "pending" && Number(j.attempts ?? 0) > 0)),
+            )
+            .sort((a, b) => Number(b.id) - Number(a.id))[0];
+          return this.ok([
+            {
+              latest_rate_date: this.latestFxRateDate(),
+              last_status: job ? job.status : null,
+              last_run_at: job
+                ? (job.finished_at ?? job.heartbeat_at ?? job.run_at ?? null)
+                : null,
+              last_error: job ? (job.last_error ?? null) : null,
+            },
+          ]);
+        },
+      },
+
+      // -- converting dashboard queries (country=all / country-spend) -----------
+      {
+        match: "coalesce(sum(m.impressions), 0)::text as impressions",
+        handle: (p, db) => {
+          const profileIds = (p[0] as string[]).map(String);
+          const start = String(p[1]);
+          const end = String(p[2]);
+          const display = String(p[4]);
+          let impressions = 0;
+          let clicks = 0;
+          let orders = 0;
+          let units = 0;
+          let cost = 0;
+          let sales = 0;
+          let ratesMissing = false;
+          for (const fact of t.campaignMetricsDaily) {
+            const date = String(fact.metric_date);
+            if (
+              !profileIds.includes(String(fact.profile_id)) ||
+              date < start ||
+              date > end
+            ) {
+              continue;
+            }
+            impressions += Number(fact.impressions);
+            clicks += Number(fact.clicks);
+            orders += Number(fact.orders);
+            units += Number(fact.units);
+            const dr = db.fxRateFor(display, date);
+            const nr = db.fxRateFor(String(fact.currency), date);
+            if (dr === null || nr === null) {
+              if (Number(fact.cost) !== 0 || Number(fact.sales) !== 0) {
+                ratesMissing = true;
+              }
+              continue;
+            }
+            cost += (Number(fact.cost) * dr) / nr;
+            sales += (Number(fact.sales) * dr) / nr;
+          }
+          return this.ok([
+            {
+              impressions: String(impressions),
+              clicks: String(clicks),
+              cost: cost.toFixed(4),
+              sales: sales.toFixed(4),
+              orders: String(orders),
+              units: String(units),
+              rates_missing: ratesMissing,
+            },
+          ]);
+        },
+      },
+      {
+        match: "round(sum(m.cost * dr.rate / nr.rate), 4)::text as cost",
+        handle: (p, db) => {
+          const profileIds = (p[0] as string[]).map(String);
+          const start = String(p[1]);
+          const end = String(p[2]);
+          const display = String(p[4]);
+          const byDate = new Map<
+            string,
+            { cost: number; sales: number; orders: number; missing: boolean }
+          >();
+          for (const fact of t.campaignMetricsDaily) {
+            const date = String(fact.metric_date);
+            if (
+              !profileIds.includes(String(fact.profile_id)) ||
+              date < start ||
+              date > end
+            ) {
+              continue;
+            }
+            const entry = byDate.get(date) ?? {
+              cost: 0,
+              sales: 0,
+              orders: 0,
+              missing: false,
+            };
+            entry.orders += Number(fact.orders);
+            const dr = db.fxRateFor(display, date);
+            const nr = db.fxRateFor(String(fact.currency), date);
+            if (dr === null || nr === null) {
+              if (Number(fact.cost) !== 0 || Number(fact.sales) !== 0) {
+                entry.missing = true;
+              }
+            } else {
+              entry.cost += (Number(fact.cost) * dr) / nr;
+              entry.sales += (Number(fact.sales) * dr) / nr;
+            }
+            byDate.set(date, entry);
+          }
+          return this.ok(
+            [...byDate.entries()]
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([date, entry]) => ({
+                metric_date: date,
+                cost: entry.cost.toFixed(4),
+                sales: entry.sales.toFixed(4),
+                orders: String(entry.orders),
+                rates_missing: entry.missing,
+              })),
+          );
+        },
+      },
+      {
+        match: "rates_missing from advertised_product_metrics_daily m",
+        handle: (p, db) => {
+          const profileIds = (p[0] as string[]).map(String);
+          const start = String(p[1]);
+          const end = String(p[2]);
+          const display = String(p[4]);
+          const byDate = new Map<
+            string,
+            { missing: boolean; royalty: number; ratesMissing: boolean }
+          >();
+          for (const fact of t.advertisedProductMetricsDaily) {
+            const date = String(fact.metric_date);
+            if (
+              !profileIds.includes(String(fact.profile_id)) ||
+              date < start ||
+              date > end
+            ) {
+              continue;
+            }
+            const ad = t.ads.find(
+              (a) =>
+                a.profile_id === fact.profile_id &&
+                a.amazon_ad_id === fact.ad_id,
+            );
+            const link = ad
+              ? t.bookProfileLinks.find(
+                  (l) =>
+                    l.profile_id === fact.profile_id &&
+                    l.marketplace_asin === ad.asin &&
+                    l.enabled === true,
+                )
+              : undefined;
+            const economics = link
+              ? t.bookEconomics
+                  .filter(
+                    (be) =>
+                      be.book_id === link.book_id &&
+                      be.profile_id === link.profile_id &&
+                      be.currency === fact.currency &&
+                      String(be.effective_from) <= date,
+                  )
+                  .sort(
+                    (a, b) =>
+                      String(b.effective_from).localeCompare(
+                        String(a.effective_from),
+                      ) || Number(b.id) - Number(a.id),
+                  )[0]
+              : undefined;
+            const copies = Math.max(Number(fact.units), Number(fact.orders));
+            const entry = byDate.get(date) ?? {
+              missing: false,
+              royalty: 0,
+              ratesMissing: false,
+            };
+            if (Number(fact.orders) > 0 && !economics) entry.missing = true;
+            const dr = db.fxRateFor(display, date);
+            const nr = db.fxRateFor(String(fact.currency), date);
+            if (dr === null || nr === null) {
+              if (copies > 0 && economics) entry.ratesMissing = true;
+            } else if (economics) {
+              entry.royalty +=
+                (copies * Number(economics.estimated_royalty_per_sale) * dr) /
+                nr;
+            }
+            byDate.set(date, entry);
+          }
+          return this.ok(
+            [...byDate.entries()]
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([date, entry]) => ({
+                metric_date: date,
+                economics_missing: entry.missing,
+                estimated_royalty: entry.missing
+                  ? null
+                  : entry.royalty.toFixed(4),
+                rates_missing: entry.ratesMissing,
+              })),
+          );
+        },
+      },
+      {
+        match: "as converted_spend",
+        handle: (p, db) => {
+          const profileIds = (p[0] as string[]).map(String);
+          const start = String(p[1]);
+          const end = String(p[2]);
+          const display = String(p[4]);
+          const byCountry = new Map<
+            string,
+            { spend: number; missing: boolean }
+          >();
+          for (const fact of t.campaignMetricsDaily) {
+            const date = String(fact.metric_date);
+            if (
+              !profileIds.includes(String(fact.profile_id)) ||
+              date < start ||
+              date > end
+            ) {
+              continue;
+            }
+            const profile = t.amazonProfiles.find(
+              (ap) => ap.id === fact.profile_id,
+            );
+            if (!profile) continue;
+            const country = String(profile.country_code);
+            const entry = byCountry.get(country) ?? {
+              spend: 0,
+              missing: false,
+            };
+            const dr = db.fxRateFor(display, date);
+            const nr = db.fxRateFor(String(fact.currency), date);
+            if (dr === null || nr === null) {
+              if (Number(fact.cost) !== 0) entry.missing = true;
+            } else {
+              entry.spend += (Number(fact.cost) * dr) / nr;
+            }
+            byCountry.set(country, entry);
+          }
+          return this.ok(
+            [...byCountry.entries()].map(([country, entry]) => ({
+              country_code: country,
+              converted_spend: entry.spend.toFixed(4),
+              rates_missing: entry.missing,
+            })),
+          );
+        },
+      },
+
+      // -- data freshness ---------------------------------------------------------
+      {
+        match: "cross join (values ('structure'), ('metrics'))",
+        handle: (p, db) => {
+          const rows: FakeRow[] = [];
+          for (const profile of t.amazonProfiles.filter((r) =>
+            db.profileForConnectionWorkspace(p[0], r),
+          )) {
+            for (const dataset of ["structure", "metrics"]) {
+              const lastRun = t.syncRuns
+                .filter(
+                  (r) =>
+                    r.profile_id === profile.id &&
+                    r.kind === dataset &&
+                    r.status === "complete" &&
+                    r.finished_at,
+                )
+                .sort(
+                  (a, b) =>
+                    new Date(String(b.finished_at)).getTime() -
+                    new Date(String(a.finished_at)).getTime(),
+                )[0];
+              const metricDates = t.campaignMetricsDaily
+                .filter((m) => m.profile_id === profile.id)
+                .map((m) => String(m.metric_date))
+                .sort();
+              rows.push({
+                profile_pk: profile.id,
+                amazon_profile_id: profile.profile_id,
+                dataset,
+                last_success_at: lastRun ? lastRun.finished_at : null,
+                complete_through:
+                  dataset === "metrics" ? (metricDates.at(-1) ?? null) : null,
+              });
+            }
+          }
+          return this.ok(rows);
+        },
       },
     ];
   }

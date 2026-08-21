@@ -17,6 +17,11 @@ describe("formatMoney", () => {
     expect(formatMoney("12.3400", "EUR")).toContain("12.34");
   });
 
+  it("renders the symbol of the given display currency", () => {
+    expect(formatMoney("10.0000", "EUR")).toBe("€10.00");
+    expect(formatMoney("10.0000", "GBP")).toBe("£10.00");
+  });
+
   it("renders a placeholder for null/undefined (economics missing state)", () => {
     expect(formatMoney(null, "USD")).toBe("—");
     expect(formatMoney(undefined, "USD")).toBe("—");

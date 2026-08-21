@@ -71,6 +71,7 @@ with a `missing_lwa_credentials` auth error until they are set.
 | `RECENT_WINDOW_DAYS`             | `14`               | Days re-imported by `recent_window_resync` to absorb attribution lag. |
 | `RECOMMENDATION_FRESHNESS_HOURS` | `48`               | Recommendation runs skip when the last complete metrics sync is older than this. |
 | `SCHEDULE_TICK_MS`               | `900000` (15 min)  | `schedule_tick` self-rescheduling interval. |
+| `FX_RATES_BASE_URL`              | `https://api.frankfurter.dev` | Base URL of the Frankfurter-compatible FX API the daily `fx_sync` job fetches (`GET {base}/v2/rates?base=USD&from=…`). Keyless and quota-free; point at a self-hosted Frankfurter container to avoid the public instance. |
 
 ## Token encryption (`packages/crypto`)
 

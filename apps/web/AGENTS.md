@@ -99,16 +99,71 @@ Overview, campaign detail, and search-term detail share
 search-term **list** pages deliberately hardcode a 30-day profitability window
 and have no selector.
 
+## All-market view and display currency (FX plan §5)
+
+The overview country selector offers **"All markets"** as a peer of the
+specific markets (`allMarketsLabel` on `src/components/country-select.tsx` —
+same control, no flag). Selecting it sets `?country=all`; the overview
+route's `validateSearch` accepts the `all` literal via the contracts
+`dashboardCountrySchema` (same acceptance as the API). The option is
+disabled with a tooltip pointing at the Sync status card until the summary
+response reports `ratesAvailable: true` — that field comes back on every
+summary response, so the gate works before the view is ever requested.
+
+With `country=all` the overview converts everything into the single
+workspace display currency:
+
+- `useDashboardSummary` and `useCountrySpend` take an optional `currency`
+  override; when omitted the API applies the workspace setting. The overview
+  passes the summary's returned `currency` to country-spend so the **Spend
+  by market** card shows each market's converted spend with the native
+  figure in parentheses (`—` / "rates missing" when rates don't cover that
+  market).
+- A **Currency** picker (`src/components/display-currency-select.tsx`)
+  appears in the overview header only while `all` is active; the same picker
+  lives in the **Workspace** card on Settings → Profiles. Both PATCH
+  `/api/workspace/settings` via `useUpdateWorkspaceSettings` — a local write
+  (CSRF, WRITE rate limit, no recent-auth gate). There is no GET endpoint:
+  `useWorkspaceSettings` subscribes to a `["workspace-settings"]` cache entry
+  (`enabled: false`, never fetches) that the successful PATCH seeds, and
+  falls back to USD (the server default) when the cache is empty. The
+  mutation then invalidates the dashboard-summary and country-spend queries.
+- Query keys carry `country` (including `all`) and `currency` or TanStack
+  Query would serve another view's numbers — same rule as `books`.
+
+The Sync status card shows an **FX rates** row (`FxRatesRow` in
+`src/components/fx-rates-row.tsx`, shared with the Settings Workspace card)
+fed by `useDataFreshness()`, whose response is an envelope
+`{ profiles, fxRates }` (the bare-array shape predates FX). Row
+states: `syncing…` (last run `running`), `sync failed` with the error,
+`not synced yet` (never run), `stale · rates through <date>` (warning tone),
+and `up to date through <date>`. FX health is workspace-level, so the row
+renders regardless of the selected market. `useDataFreshness` polls every 10s
+while `fxRates.lastRunState === "running"` (or while a caller forces polling),
+mirroring how the overview polls sync runs.
+
+The Settings Workspace card pairs the row with a **Sync rates now** button
+(`useEnqueueFxSync` → `POST /api/fx-rates/sync`): a manual trigger for the
+daily rates job, deduped server-side, disabled while a run is active. A
+just-triggered sync is invisible in the status until the worker claims the
+job, so the card force-polls freshness until the run appears.
+
+Search terms are the exception: their API stays two-letter only, so the
+search-terms hooks translate `country === "all"` into no country filter
+(unfiltered) rather than sending `all` downstream.
+
 ## Settings page
 
 `src/routes/settings.tsx` is split into four URL-backed tabs
 (`?tab=profiles|books|asins|audit`, validated in `src/router.tsx`):
 profiles & sync, books & economics, new-ASIN identification, and the audit
 log. Tab badges surface outstanding setup work (unconfigured economics, new
-ASINs). Books that still need setup auto-expand; each market's economics edit
-in a single table row, with the effective-from date and notes behind the
-row's **Details** toggle, and market linking behind the collapsed **Link
-another market** section.
+ASINs). The profiles tab leads with the Workspace card (display currency plus
+the FX rates status row and its **Sync rates now** manual trigger — see the
+FX section above). Books that still need setup auto-expand; each market's
+economics edit in a single table row, with the effective-from date and notes
+behind the row's **Details** toggle, and market linking behind the collapsed
+**Link another market** section.
 
 ## New-campaign wizard
 

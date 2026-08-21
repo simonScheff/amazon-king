@@ -34,6 +34,29 @@ overview's Sync status card polls while a run is active.
 preceding same-length range for trailing 7/14/30/60d, or prior-month MTD when
 `days=mtd`. Those power the period-over-period deltas on the overview KPI cards.
 
+## All-market view and display currency (FX plan §4)
+
+`GET /api/dashboard/summary` accepts `country=all` plus an optional `currency`
+(default: `workspaces.display_currency`). With `all`, the read service uses the
+converting queries in `repositories/dashboard.ts` (`convertedDailyTotals`,
+`convertedDailySeries`, `convertedRoyaltySeries`) that cross-rate each fact
+through the USD pivot at its own metric date; the response carries `currency`
+and `ratesAvailable` (returned for single-country views too, so the client can
+gate the option). An empty `fx_rates` table yields zeroed totals with
+`ratesAvailable: false`; partial coverage is a 409 `FX_RATES_INCOMPLETE` —
+never silently unconverted numbers. Single-country behavior is unchanged.
+`GET /api/dashboard/country-spend` takes an optional `currency` and then adds
+`convertedSpend` per market (null when uncovered). `GET
+/api/system/data-freshness` returns `{ profiles, fxRates }` — FX health is
+workspace-level. `PATCH /api/workspace/settings` writes the display currency:
+local write, CSRF + WRITE rate limit, no recent-auth gate.
+`POST /api/fx-rates/sync` is the manual FX-rates trigger: it enqueues one
+`fx_sync` job deduped via `enqueueIfNotQueued` (a pending/running job means no
+duplicate), audits `fx_sync.request`, and returns the current `fxRates` status
+plus a `queued` flag. Same guard posture as the settings write (CSRF + WRITE
+rate, no recent-auth) — it is a read-only upstream fetch with no `sync_runs`
+row, since that table is per-profile.
+
 ## Royalty is valued per copy, not per order
 
 Every royalty query in `repositories/dashboard.ts` values

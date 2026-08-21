@@ -26,6 +26,8 @@ in `schema_migrations`. The shape follows `docs/plan.md` §7.
 | `0011_recommendation_dismissals.sql` | `recommendation_dismissals` keyed by the worker's identity tuple so a rejected finding is not re-raised.                                                                                                                                                                               |
 | `0012_negative_targets.sql`       | `negative_targets` table persisting campaign/ad-group negative ASIN targets returned by structure sync.                                                                                                                                                                                |
 | `0013_book_profile_link_asin_unique.sql` | Unique `(profile_id, marketplace_asin)` on `book_profile_links` so one catalog book owns an advertised ASIN inside a profile. |
+| `0014_fx_rates.sql`               | `fx_rates` — append-only daily exchange-rate fixings against a USD pivot (primary key `(rate_date, base_currency, quote_currency)`), plus `workspaces.display_currency` (default `'USD'`) for the all-market dashboard view. |
+| `0015_job_queue_finished_at.sql`  | `job_queue.finished_at` — terminal timestamp used (among other things) to report the last `fx_sync` run in data freshness. |
 
 ## Conventions
 
@@ -36,7 +38,11 @@ Established in `0001_initial.sql` and held throughout:
   `unique (profile_id, amazon_campaign_id)`).
 - Money is `numeric(19,4)` with `>= 0` checks (`campaign_bid_policies.max_cpc`
   requires `> 0`); currency is `char(3)` stored **per row** — never aggregate
-  across currencies.
+  across currencies. The single explicit conversion is the all-market
+  dashboard view: read-side only, cross-rating each fact through the
+  USD-pivot `fx_rates` table at its own metric date (last-business-day
+  fallback) into the workspace display currency. Stored facts are never
+  rewritten.
 - Timestamps are `timestamptz`; dates are `date`.
 - Attribution windows stay explicit: `purchases7d`/`sales7d`,
   `purchases14d`/`sales14d`, and `unitsSoldClicks7d`/`unitsSoldClicks14d` are

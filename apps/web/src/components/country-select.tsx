@@ -13,6 +13,9 @@ export function CountrySelect({
   disabled = false,
   onChange,
   allLabel,
+  allMarketsLabel,
+  allMarketsDisabled = false,
+  allMarketsDisabledReason,
   "aria-label": ariaLabel = "Country",
 }: {
   value: string;
@@ -24,6 +27,17 @@ export function CountrySelect({
    * the country selection — used when a filter covers every market.
    */
   allLabel?: string;
+  /**
+   * When set, prepends an "All markets" peer option whose value is the
+   * `all` literal (`?country=all`) — the FX-converted all-market view
+   * (docs/fx-rates-all-market-plan.md, decision 6). No flag: there is no
+   * country to draw. Distinct from `allLabel`, which clears a filter.
+   */
+  allMarketsLabel?: string;
+  /** Disables the all-markets option (e.g. FX rates not synced yet). */
+  allMarketsDisabled?: boolean;
+  /** Tooltip explaining why the all-markets option is disabled. */
+  allMarketsDisabledReason?: string;
   "aria-label"?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -54,9 +68,11 @@ export function CountrySelect({
     ? selected.countryName
     : value === "" && allLabel
       ? allLabel
-      : value === "US"
-        ? "United States"
-        : value;
+      : value === "all" && allMarketsLabel
+        ? allMarketsLabel
+        : value === "US"
+          ? "United States"
+          : value;
 
   return (
     <div ref={rootRef} className="relative">
@@ -76,7 +92,7 @@ export function CountrySelect({
           ▾
         </span>
       </button>
-      {open && (options.length > 0 || allLabel) ? (
+      {open && (options.length > 0 || allLabel || allMarketsLabel) ? (
         <ul
           role="listbox"
           aria-label={ariaLabel}
@@ -110,6 +126,27 @@ export function CountrySelect({
                 className="flex w-full items-center gap-2 whitespace-nowrap px-3 py-2 text-left text-sm text-zinc-100 hover:bg-zinc-800 focus-visible:bg-zinc-800 focus-visible:outline-none"
               >
                 <span>{allLabel}</span>
+              </button>
+            </li>
+          ) : null}
+          {allMarketsLabel ? (
+            <li role="option" aria-selected={value === "all"}>
+              <button
+                type="button"
+                autoFocus={value === "all"}
+                disabled={allMarketsDisabled}
+                title={
+                  allMarketsDisabled ? allMarketsDisabledReason : undefined
+                }
+                onClick={() => {
+                  onChange("all");
+                  setOpen(false);
+                  triggerRef.current?.focus();
+                }}
+                className="flex w-full items-center gap-2 whitespace-nowrap px-3 py-2 text-left text-sm text-zinc-100 hover:bg-zinc-800 focus-visible:bg-zinc-800 focus-visible:outline-none disabled:cursor-not-allowed disabled:text-zinc-500 disabled:hover:bg-transparent"
+              >
+                <span>{allMarketsLabel}</span>
+                <span className="text-xs text-zinc-500">(one currency)</span>
               </button>
             </li>
           ) : null}

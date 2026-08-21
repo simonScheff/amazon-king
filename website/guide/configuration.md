@@ -121,6 +121,35 @@ Keep it `true` until you have completed the read-only validation checklist
 and the live-write validation sequence with a test account or a dedicated
 low-risk campaign. See [Applying & rolling back changes](/guide/applying-changes).
 
+## Exchange rates and the all-market view
+
+The overview's country selector has an **All markets** option that aggregates
+every enabled marketplace in a single display currency. Conversion is
+explicit and read-only: the worker's daily `fx_sync` job stores daily
+exchange-rate fixings (USD pivot, from the keyless
+[Frankfurter](https://frankfurter.dev) API) in the `fx_rates` table, and each
+fact is converted at the fixing of its own metric date. Stored figures keep
+their native marketplace currency; the optimizer and all Amazon writes are
+unaffected.
+
+- `fx_sync` runs once daily after 17:00 UTC (so the day's ECB fixing is
+  published). On first run it backfills from your oldest imported metric
+  date, so historical views convert immediately. You can also trigger it
+  manually with **Sync rates now** in **Settings → Profiles → Workspace**
+  (next to the FX rates status), which calls `POST /api/fx-rates/sync`.
+- `FX_RATES_BASE_URL` (worker, default `https://api.frankfurter.dev`) selects
+  the rates API. Frankfurter is open source and self-hostable — point the
+  variable at your own container to avoid depending on the public instance.
+- The display currency is a workspace setting (default `USD`), editable in
+  **Settings → Profiles → Workspace** or from the **Currency** picker that
+  appears on the overview while All markets is active.
+
+![Settings Profiles tab with the Workspace card holding the display-currency picker](/screenshots/settings-workspace.png)
+- Until rates are synced, the All markets option is disabled and the Sync
+  status card shows an **FX rates** row (`not synced yet` / `up to date
+  through <date>` / `sync failed`) — converted numbers are never silently
+  unconverted.
+
 ## Token encryption key
 
 `TOKEN_ENCRYPTION_KEY` is the master key for envelope-encrypting Amazon

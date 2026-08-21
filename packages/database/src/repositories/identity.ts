@@ -114,3 +114,36 @@ export async function findMembership(
     ? { workspaceId: row.workspace_id, userId: row.user_id, role: row.role }
     : null;
 }
+
+/**
+ * Currency of the workspace's all-market dashboard view
+ * (docs/fx-rates-all-market-plan.md, decision 5). Null only when the
+ * workspace row itself is missing; the column defaults to 'USD'.
+ */
+export async function getWorkspaceDisplayCurrency(
+  db: Db,
+  workspaceId: string,
+): Promise<string | null> {
+  const result = await db.query<{ display_currency: string }>(
+    `select display_currency from workspaces where id = $1`,
+    [workspaceId],
+  );
+  return result.rows[0]?.display_currency ?? null;
+}
+
+/**
+ * Update the workspace's display currency. A display setting only — stored
+ * facts keep their native currency and are never rewritten. Returns false
+ * when the workspace does not exist.
+ */
+export async function setWorkspaceDisplayCurrency(
+  db: Db,
+  workspaceId: string,
+  displayCurrency: string,
+): Promise<boolean> {
+  const result = await db.query<{ id: string }>(
+    `update workspaces set display_currency = $2 where id = $1 returning id`,
+    [workspaceId, displayCurrency],
+  );
+  return result.rowCount === 1;
+}

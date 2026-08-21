@@ -34,7 +34,10 @@ owner-controlled switches: `enabled` (include it in syncs and analysis) and
 
 *Why it matters:* you can import and analyze a marketplace for weeks before
 trusting the system to write to it, and every monetary figure stays in the
-profile's own currency — Amazon King never aggregates across currencies.
+profile's own currency — Amazon King never aggregates across currencies,
+except in the explicit **All markets** overview, which converts each day's
+figures through stored daily FX rates into one display currency (see
+[Configuration](/guide/configuration#exchange-rates-and-the-all-market-view)).
 
 ## Syncs
 

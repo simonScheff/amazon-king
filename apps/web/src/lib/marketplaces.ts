@@ -54,16 +54,41 @@ export function marketplaceOptions(
     });
 }
 
-/** Prefer a valid URL choice, then the USA, then the first enabled country. */
+/**
+ * Prefer a valid URL choice, then the USA, then the first enabled country.
+ * The all-market view (`country=all`, docs/fx-rates-all-market-plan.md
+ * decision 6) is a first-class choice and passes through unchanged — the API
+ * reports `ratesAvailable: false` when it cannot convert yet.
+ */
 export function resolveCountry(
   requestedCountry: string | undefined,
   options: readonly MarketplaceOption[],
 ): string {
+  if (requestedCountry === "all") return "all";
   if (options.some((option) => option.countryCode === requestedCountry)) {
     return requestedCountry!;
   }
   if (options.some((option) => option.countryCode === "US")) return "US";
   return options[0]?.countryCode ?? "US";
+}
+
+/** The picker always offers these, even with no enabled profile using them. */
+const BASE_DISPLAY_CURRENCIES = ["USD", "EUR", "GBP"];
+
+/**
+ * Currencies offered by the display-currency picker: every currency present
+ * among the enabled marketplaces plus USD/EUR/GBP, sorted.
+ */
+export function displayCurrencyOptions(
+  options: readonly MarketplaceOption[],
+): string[] {
+  const currencies = new Set(BASE_DISPLAY_CURRENCIES);
+  for (const option of options) {
+    for (const currencyCode of option.currencyCodes) {
+      currencies.add(currencyCode);
+    }
+  }
+  return [...currencies].sort();
 }
 
 /**

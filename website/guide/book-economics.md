@@ -76,7 +76,8 @@ toggle. Each entry carries:
 | `notes` | Free text, kept with the entry. |
 
 Money fields are decimal strings in the profile's currency; amazon-king never
-aggregates across currencies.
+aggregates across currencies (the FX-converted All markets overview is the
+one explicit, read-side exception).
 
 ### Effective-dated history
 

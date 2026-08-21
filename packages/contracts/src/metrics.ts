@@ -1,9 +1,11 @@
 import { z } from "zod";
 import {
+  bookIdListParamSchema,
   currencyCodeSchema,
   decimalStringSchema,
   isoDateSchema,
   isoDateTimeSchema,
+  metricWindowSchema,
   nonNegativeDecimalStringSchema,
 } from "./common.js";
 
@@ -24,12 +26,60 @@ const dashboardTotalsSchema = metricTotalsSchema.extend({
   estimatedAdProfit: decimalStringSchema.nullable(),
 });
 
+/**
+ * Overview market filter: a two-letter Amazon country code, or `"all"` for
+ * the all-market view that converts every marketplace into a single display
+ * currency (docs/fx-rates-all-market-plan.md, decision 6). Case-insensitive
+ * on input; normalized to uppercase codes / lowercase `"all"`.
+ */
+export const dashboardCountrySchema = z
+  .string()
+  .trim()
+  .regex(
+    /^(?:[A-Za-z]{2}|all)$/i,
+    "Expected a two-letter country code or 'all'",
+  )
+  .transform((value) =>
+    value.toLowerCase() === "all" ? "all" : value.toUpperCase(),
+  );
+export type DashboardCountry = z.infer<typeof dashboardCountrySchema>;
+
+/**
+ * GET /api/dashboard/summary query. `currency` selects the display currency
+ * of the all-market view and is validated as ISO 4217; it is ignored for a
+ * specific country, whose totals stay in the native currency.
+ */
+export const dashboardSummaryQuerySchema = z.object({
+  days: metricWindowSchema.default(30),
+  books: bookIdListParamSchema,
+  country: dashboardCountrySchema.default("US"),
+  currency: currencyCodeSchema.optional(),
+});
+export type DashboardSummaryQuery = z.infer<typeof dashboardSummaryQuerySchema>;
+
+/**
+ * GET /api/dashboard/country-spend query. When `currency` is present, each
+ * per-market row also carries a converted total in that currency.
+ */
+export const countrySpendQuerySchema = z.object({
+  days: metricWindowSchema.default(30),
+  books: bookIdListParamSchema,
+  currency: currencyCodeSchema.optional(),
+});
+export type CountrySpendQuery = z.infer<typeof countrySpendQuerySchema>;
+
 export const dashboardSummarySchema = z.object({
   dateRange: z.object({
     start: isoDateSchema,
     end: isoDateSchema,
   }),
   currency: currencyCodeSchema,
+  /**
+   * True when the fx_rates table holds at least one fixing, i.e. the
+   * all-market view (`country=all`) can convert. Returned for every country
+   * selection so the client can enable or disable the "all markets" option.
+   */
+  ratesAvailable: z.boolean(),
   totals: dashboardTotalsSchema,
   /**
    * Totals for the comparison window, powering period-over-period on the
@@ -75,11 +125,22 @@ export const countrySpendSchema = z.object({
     start: isoDateSchema,
     end: isoDateSchema,
   }),
+  /**
+   * Display currency of the converted totals; present only when the request
+   * asked for conversion (the `currency` query param).
+   */
+  currency: currencyCodeSchema.optional(),
   countries: z.array(
     z.object({
       countryCode: z.string(),
       currency: currencyCodeSchema,
       spend: nonNegativeDecimalStringSchema,
+      /**
+       * Spend converted into the response `currency`, per fact date. Null
+       * when stored FX rates do not cover this market's window — never a
+       * silently unconverted number. Absent when no conversion was requested.
+       */
+      convertedSpend: nonNegativeDecimalStringSchema.nullable().optional(),
     }),
   ),
 });

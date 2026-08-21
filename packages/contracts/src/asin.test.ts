@@ -11,12 +11,21 @@ describe("isAsin", () => {
     expect(isAsin("  B012345678 \n")).toBe(true);
   });
 
+  it("accepts print-book ASINs in ISBN-10 shape", () => {
+    expect(isAsin("1526367769")).toBe(true);
+    expect(isAsin("009951689X")).toBe(true);
+    expect(isAsin("009951689x")).toBe(true);
+  });
+
   it("rejects plain search terms and malformed ASINs", () => {
     expect(isAsin("tractor colouring book")).toBe(false);
+    expect(isAsin("bestseller")).toBe(false);
     expect(isAsin("B01234567")).toBe(false);
     expect(isAsin("B0123456789")).toBe(false);
     expect(isAsin("A012345678")).toBe(false);
     expect(isAsin("B0-2345678")).toBe(false);
+    expect(isAsin("152636776")).toBe(false);
+    expect(isAsin("15263677693")).toBe(false);
     expect(isAsin("")).toBe(false);
   });
 

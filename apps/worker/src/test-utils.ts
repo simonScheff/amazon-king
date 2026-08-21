@@ -8,6 +8,7 @@ import type {
   CompletedSyncRun,
   ConnectionRecord,
   DailyFact,
+  FxRateRow,
   MetricFactRows,
   ProfileRecord,
   RecentChangeRecord,
@@ -87,6 +88,7 @@ export class FakeStore implements WorkerStore {
   };
   economics: BookEconomicsRecord[] = [];
   recentChanges: RecentChangeRecord[] = [];
+  fxRates: FxRateRow[] = [];
   expiredCount = 0;
   /** Converged fact rows keyed by reportType|grain — proves idempotent upserts. */
   convergedFacts = new Map<string, unknown>();
@@ -293,6 +295,39 @@ export class FakeStore implements WorkerStore {
 
   async applyStructureSnapshot() {
     // Not needed by handler tests; structure is set directly on the fake.
+  }
+
+  async upsertFxRates(rows: readonly FxRateRow[]) {
+    // ON CONFLICT DO NOTHING: a stored fixing is never overwritten.
+    let inserted = 0;
+    for (const row of rows) {
+      const exists = this.fxRates.some(
+        (stored) =>
+          stored.rateDate === row.rateDate &&
+          stored.baseCurrency === row.baseCurrency &&
+          stored.quoteCurrency === row.quoteCurrency,
+      );
+      if (exists) continue;
+      this.fxRates.push(row);
+      inserted += 1;
+    }
+    return inserted;
+  }
+  async getLatestFxRateDate() {
+    let latest: string | null = null;
+    for (const row of this.fxRates) {
+      if (latest === null || row.rateDate > latest) latest = row.rateDate;
+    }
+    return latest;
+  }
+  async getEarliestFactDate() {
+    let earliest: string | null = null;
+    for (const facts of Object.values(this.facts)) {
+      for (const fact of facts) {
+        if (earliest === null || fact.date < earliest) earliest = fact.date;
+      }
+    }
+    return earliest;
   }
 
   async enqueue(type: string, payload: unknown, runAt?: Date) {

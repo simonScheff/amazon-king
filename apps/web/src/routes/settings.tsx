@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   bookFormatSchema,
@@ -13,6 +13,8 @@ import {
 import {
   useAuditEvents,
   useBooks,
+  useDataFreshness,
+  useEnqueueFxSync,
   useEnqueueSync,
   useMapAdvertisedBook,
   useProfiles,
@@ -20,6 +22,7 @@ import {
   useSaveBookEconomics,
   useUnmappedAdvertisedProducts,
   useUpdateProfile,
+  useWorkspaceSettings,
 } from "../api/endpoints";
 import { useToast } from "../components/toast";
 import { Badge } from "../components/ui/badge";
@@ -29,10 +32,12 @@ import { Input, Select } from "../components/ui/input";
 import { Table, Td, Th } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
 import { Flag } from "../components/flag";
+import { FxRatesRow } from "../components/fx-rates-row";
 import { BookCoverThumb } from "../components/book-covers";
 import { formatDate, formatDateTime, labelize } from "../lib/format";
-import { countryNameForCode } from "../lib/marketplaces";
+import { countryNameForCode, marketplaceOptions } from "../lib/marketplaces";
 import { LinkBookToMarketsForm } from "../components/link-book-to-markets";
+import { DisplayCurrencySelect } from "../components/display-currency-select";
 
 export const SETTINGS_TABS = ["profiles", "books", "asins", "audit"] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
@@ -576,6 +581,84 @@ function BookSettingsCard({
   );
 }
 
+function WorkspaceCard() {
+  const profiles = useProfiles();
+  const settings = useWorkspaceSettings();
+  const fxSync = useEnqueueFxSync();
+  const toast = useToast();
+  const [triggeredAt, setTriggeredAt] = useState<string | null>(null);
+  // A just-enqueued fx_sync job is invisible in the status until the worker
+  // claims it, so force polling until the run shows up; from then on
+  // useDataFreshness polls on its own while the run is active.
+  const freshness = useDataFreshness({ poll: triggeredAt !== null });
+  const fxRates = freshness.data?.fxRates;
+
+  useEffect(() => {
+    if (triggeredAt === null || !fxRates) return;
+    const claimed = fxRates.lastRunState === "running";
+    const finished =
+      (fxRates.lastRunState === "succeeded" ||
+        fxRates.lastRunState === "failed") &&
+      fxRates.lastRunAt !== null &&
+      fxRates.lastRunAt >= triggeredAt;
+    if (claimed || finished) setTriggeredAt(null);
+  }, [triggeredAt, fxRates]);
+
+  // No GET endpoint: the cache holds the last PATCH result; fresh installs
+  // default to USD on the server (workspaces.display_currency).
+  const displayCurrency = settings.data?.displayCurrency ?? "USD";
+  return (
+    <Card>
+      <CardHeader title="Workspace" />
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-4">
+        <label className="flex items-center gap-2 text-sm text-zinc-400">
+          <span>Display currency</span>
+          <DisplayCurrencySelect
+            value={displayCurrency}
+            options={marketplaceOptions(profiles.data ?? [])}
+          />
+        </label>
+        <p className="text-xs text-zinc-500">
+          Used by the All markets overview. Stored figures keep their native
+          marketplace currency.
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-zinc-800 px-4 py-4 text-sm">
+        <FxRatesRow fxRates={fxRates} />
+        <Button
+          size="sm"
+          className="ml-auto"
+          disabled={
+            fxSync.isPending ||
+            triggeredAt !== null ||
+            fxRates?.lastRunState === "running"
+          }
+          onClick={() =>
+            fxSync.mutate(undefined, {
+              onSuccess: (result) => {
+                setTriggeredAt(new Date().toISOString());
+                toast(
+                  result.queued
+                    ? "FX rates sync queued"
+                    : "An FX rates sync is already queued",
+                );
+              },
+              onError: (error) =>
+                toast(`FX sync failed: ${error.message}`, "error"),
+            })
+          }
+        >
+          {fxSync.isPending ? "Queuing…" : "Sync rates now"}
+        </Button>
+        <p className="w-full text-xs text-zinc-500">
+          Daily exchange rates behind the All markets overview. They sync
+          automatically every day after 17:00 UTC.
+        </p>
+      </div>
+    </Card>
+  );
+}
+
 function ProfilesCard() {
   const profiles = useProfiles();
   return (
@@ -797,7 +880,12 @@ export function SettingsPage() {
         </nav>
       </div>
 
-      {tab === "profiles" ? <ProfilesCard /> : null}
+      {tab === "profiles" ? (
+        <>
+          <WorkspaceCard />
+          <ProfilesCard />
+        </>
+      ) : null}
       {tab === "books" ? <BooksCard /> : null}
       {tab === "asins" ? <NewAsinsCard /> : null}
       {tab === "audit" ? <AuditCard /> : null}

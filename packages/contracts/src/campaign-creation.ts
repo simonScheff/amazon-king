@@ -21,7 +21,7 @@ export type CampaignCreationMatchType = z.infer<
 export const campaignCreationTargetSchema = z.object({
   asin: z
     .string()
-    .regex(ASIN_PATTERN, "Expected a 10-character ASIN starting with B0"),
+    .regex(ASIN_PATTERN, "Expected a 10-character ASIN (B0… or ISBN-10)"),
   bid: nonNegativeDecimalStringSchema.optional(),
 });
 export type CampaignCreationTarget = z.infer<

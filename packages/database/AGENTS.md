@@ -20,7 +20,10 @@ silently. CI runs them against a real PostgreSQL service.
 - `src/repositories/` — explicit modules with **parameterized SQL only**. No
   query builder, no string interpolation of user input.
 - `src/queue.ts` — the PostgreSQL job queue, claiming with
-  `FOR UPDATE SKIP LOCKED` plus leases.
+  `FOR UPDATE SKIP LOCKED` plus leases. `enqueueIfNotQueued` enqueues only
+  when no pending/running job with a containing payload exists (the API's
+  manual `fx_sync` trigger uses it; the worker store carries the same query
+  for its schedule tick).
 
 To add a migration, use the `add-migration` skill.
 
@@ -50,3 +53,19 @@ To add a migration, use the `add-migration` skill.
   `(book_id, profile_id)`. Marketplace links come from advertised ASINs or from
   owner-confirmed `linkBookToProfiles` when a book has no ads in that market
   yet; two catalog books cannot claim the same ASIN in one profile.
+- `fx_rates` stores daily exchange-rate fixings against a single USD pivot and
+  is append-only: `repositories/fx.ts` inserts with `ON CONFLICT DO NOTHING`,
+  so a stored rate is never rewritten and converted numbers stay reproducible.
+  Dates without a fixing (weekends/holidays) have no row; readers fall back to
+  the most recent earlier `rate_date`. `workspaces.display_currency` is a
+  display setting only — stored facts keep their native currency.
+- The converting dashboard queries (`convertedDailyTotals`,
+  `convertedDailySeries`, `convertedRoyaltySeries`, `convertedCountrySpend` in
+  `repositories/dashboard.ts`) serve the `country=all` view: each fact is
+  cross-rated through the USD pivot at its own metric date via lateral joins
+  (`rate_date <= fact_date order by rate_date desc limit 1`, USD = 1), all on
+  `numeric`, rounded to 4 decimals. A fact without a covering fixing
+  contributes NULL and raises `rates_missing` — never a silent 1:1.
+  `fx.getFxSyncStatus` reads coverage plus the last `fx_sync` job state for
+  the freshness endpoint; `job_queue.finished_at` (migration 0015) is stamped
+  by `complete` and terminal `fail`.

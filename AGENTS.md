@@ -163,7 +163,15 @@ These are binding design constraints from the plan; code must follow them.
 From `docs/plan.md` §7:
 
 - Monetary values: fixed-precision `numeric`; never aggregate across currencies
-  without explicit conversion.
+  without explicit conversion. The one explicit conversion is the all-market
+  dashboard view (`docs/fx-rates-all-market-plan.md`): read-side only,
+  cross-rated through the USD-pivot `fx_rates` table in SQL at each fact's own
+  metric date. The surface around it: `GET /api/dashboard/summary` accepts
+  `country=all` plus an optional `currency` (default the workspace's
+  `display_currency`, set via `PATCH /api/workspace/settings`), rates arrive
+  via the worker's daily `fx_sync` job (`FX_RATES_BASE_URL`, Frankfurter), and
+  the optimizer, recommendations, and writes keep working in native currency —
+  conversion never touches stored facts.
 - Amazon IDs: text; internal PKs: `bigint generated always as identity`; unique
   constraint per Amazon external ID within its profile.
 - Timestamps: timezone-aware.

@@ -16,6 +16,8 @@ import type { JobDeps } from "./types.js";
  * - metrics_sync per enabled profile: once daily after data settles (05:00 UTC)
  * - recent_window_resync per enabled profile: once daily (attribution lag)
  * - connection_health: every 4 hours
+ * - fx_sync: once daily after 17:00 UTC (the day's ECB fixing, ~16:00 CET,
+ *   is published by then); workspace-global, not per-profile
  * - recommendation_run: chained by metrics_sync on success, not scheduled here
  */
 const PROFILE_DISCOVERY_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -23,6 +25,8 @@ const STRUCTURE_SYNC_INTERVAL_MS = 45 * 60 * 1000;
 const CONNECTION_HEALTH_INTERVAL_MS = 4 * 60 * 60 * 1000;
 /** Daily jobs wait until Amazon data is reasonably settled (UTC hour). */
 const DAILY_AFTER_UTC_HOUR = 5;
+/** fx_sync waits for the day's ECB fixing (~16:00 CET) to be published. */
+const FX_SYNC_AFTER_UTC_HOUR = 17;
 
 const payloadSchema = z.looseObject({
   lastEnqueued: z.record(z.string(), z.string()).optional(),
@@ -40,8 +44,11 @@ export function createScheduleTickHandler(deps: JobDeps): JobHandler {
       const stamp = next[key];
       return stamp === undefined || nowMs - Date.parse(stamp) >= intervalMs;
     };
-    const dueDaily = (key: string): boolean => {
-      if (now.getUTCHours() < DAILY_AFTER_UTC_HOUR) {
+    const dueDaily = (
+      key: string,
+      afterUtcHour: number = DAILY_AFTER_UTC_HOUR,
+    ): boolean => {
+      if (now.getUTCHours() < afterUtcHour) {
         return false;
       }
       const stamp = next[key];
@@ -58,6 +65,11 @@ export function createScheduleTickHandler(deps: JobDeps): JobHandler {
     if (dueAfter("connection_health", CONNECTION_HEALTH_INTERVAL_MS)) {
       await deps.store.enqueueIfNotQueued("connection_health", {});
       mark("connection_health");
+    }
+    // Workspace-global: one fx_sync per day, not per profile.
+    if (dueDaily("fx_sync", FX_SYNC_AFTER_UTC_HOUR)) {
+      await deps.store.enqueueIfNotQueued("fx_sync", {});
+      mark("fx_sync");
     }
 
     const profiles = await deps.store.listEnabledProfiles();
