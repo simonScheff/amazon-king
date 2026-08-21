@@ -286,7 +286,10 @@ export function OverviewPage() {
           )}
 
           <div className="grid gap-6 lg:grid-cols-3">
-            <div className="flex flex-col gap-6 lg:col-span-2">
+            {/* min-w-0: grid items default to min-width auto, which lets the
+                Recharts ResponsiveContainer ratchet the track wider than the
+                viewport on small screens. */}
+            <div className="flex min-w-0 flex-col gap-6 lg:col-span-2">
               <Card>
                 <CardHeader title="Daily performance — click a metric card to toggle its line" />
                 <CardBody>
@@ -371,7 +374,7 @@ export function OverviewPage() {
               ) : null}
             </div>
 
-            <Card className="flex flex-col border-zinc-700 bg-zinc-850 shadow-[0_8px_24px_rgba(0,0,0,0.5)]">
+            <Card className="flex min-w-0 flex-col border-zinc-700 bg-zinc-850 shadow-[0_8px_24px_rgba(0,0,0,0.5)]">
               <CardHeader
                 title="Pending recommendations"
                 action={

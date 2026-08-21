@@ -17,8 +17,8 @@ Route handlers are thin wrappers over injectable services declared in
 use the SQL-matching in-memory `FakeDb` (`src/test/fake-db.ts`), so a new
 repository query must be understood by `FakeDb` to be testable here.
 
-The route surface is `docs/plan.md` §11 plus the frontend's contract
-extensions: `GET /api/change-sets`, cannibalization comparison, campaign-level
+The route surface includes `GET /api/change-sets`, cannibalization comparison,
+campaign-level
 negative-exact and negative-target draft creation, `csrfToken` on the session
 response, `amazonConsoleUrl` on campaign list/detail payloads (built from the
 profile's `account_id` entity id, null when absent), `negativeTargets` on
@@ -34,7 +34,7 @@ overview's Sync status card polls while a run is active.
 preceding same-length range for trailing 7/14/30/60d, or prior-month MTD when
 `days=mtd`. Those power the period-over-period deltas on the overview KPI cards.
 
-## All-market view and display currency (FX plan §4)
+## All-market view and display currency
 
 `GET /api/dashboard/summary` accepts `country=all` plus an optional `currency`
 (default: `workspaces.display_currency`). With `all`, the read service uses the

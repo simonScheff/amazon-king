@@ -99,7 +99,7 @@ Overview, campaign detail, and search-term detail share
 search-term **list** pages deliberately hardcode a 30-day profitability window
 and have no selector.
 
-## All-market view and display currency (FX plan §5)
+## All-market view and display currency
 
 The overview country selector offers **"All markets"** as a peer of the
 specific markets (`allMarketsLabel` on `src/components/country-select.tsx` —

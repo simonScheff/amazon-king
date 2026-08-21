@@ -29,8 +29,8 @@ import {
 import { countryNameForCode } from "../lib/marketplaces";
 import { useSpendSortedMarketplaces } from "../lib/use-spend-sorted-marketplaces";
 import { compareNullable, nextSort, type Sort } from "../lib/sorting";
-
-const PROFITABILITY_DAYS = 30;
+import { resolveTimeframe, windowQualifier } from "../lib/timeframe";
+import { TimeframeSelect } from "../components/timeframe-select";
 
 const TEXT_COLUMNS = ["searchTerm"] as const;
 
@@ -79,18 +79,17 @@ function sortValue(
 
 export function SearchTermsPage() {
   const search = useSearch({ strict: false }) as {
+    days?: number | "mtd";
     books?: string[];
     country?: string;
   };
   const country = search.country;
+  const days = resolveTimeframe(search.days);
   const navigate = useNavigate();
   const profiles = useProfiles();
   const books = useBooks();
-  const searchTerms = useSearchTerms(PROFITABILITY_DAYS, search.books, country);
-  const marketplaces = useSpendSortedMarketplaces(
-    PROFITABILITY_DAYS,
-    search.books,
-  );
+  const searchTerms = useSearchTerms(days, search.books, country);
+  const marketplaces = useSpendSortedMarketplaces(days, search.books);
   const [sort, setSort] = useState<Sort<SortKey>>({
     key: "cost",
     direction: "desc",
@@ -135,6 +134,16 @@ export function SearchTermsPage() {
           Search terms
         </h1>
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          <TimeframeSelect
+            value={days}
+            onChange={(window) =>
+              navigate({
+                to: "/search-terms",
+                search: (prev) => ({ ...prev, days: window }),
+                replace: true,
+              })
+            }
+          />
           <CountrySelect
             value={country ?? ""}
             options={marketplaces}
@@ -181,7 +190,7 @@ export function SearchTermsPage() {
                       onSort={onSort}
                     />
                     <SortButton
-                      label={`${PROFITABILITY_DAYS}-day profit`}
+                      label={`${windowQualifier(days)} profit`}
                       column="profit"
                       sort={sort}
                       onSort={onSort}
@@ -198,7 +207,7 @@ export function SearchTermsPage() {
                   className="text-right"
                 />
                 <SortableTh
-                  label={`${PROFITABILITY_DAYS}-day profit`}
+                  label={`${windowQualifier(days)} profit`}
                   column="profit"
                   sort={sort}
                   onSort={onSort}
@@ -283,7 +292,7 @@ export function SearchTermsPage() {
                             to="/search-terms/$term"
                             params={{ term: term.searchTerm }}
                             search={{
-                              days: PROFITABILITY_DAYS,
+                              days,
                               ...(defaultCountry
                                 ? { country: defaultCountry }
                                 : {}),
@@ -299,7 +308,7 @@ export function SearchTermsPage() {
                           />
                           <div className="mt-2 md:hidden">
                             <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-                              {PROFITABILITY_DAYS}-day profit
+                              {windowQualifier(days)} profit
                             </p>
                             <ProfitabilityResult
                               status={profitStatus}
@@ -333,7 +342,7 @@ export function SearchTermsPage() {
                     </Td>
                     <Td
                       className="hidden whitespace-nowrap md:table-cell"
-                      aria-label={`${term.searchTerm} ${PROFITABILITY_DAYS}-day profit: ${profitStatus.label}`}
+                      aria-label={`${term.searchTerm} ${windowQualifier(days)} profit: ${profitStatus.label}`}
                     >
                       <ProfitabilityResult
                         status={profitStatus}

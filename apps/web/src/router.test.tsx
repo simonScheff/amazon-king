@@ -151,13 +151,21 @@ describe("country search param", () => {
 describe("days search param", () => {
   afterEach(cleanup);
 
-  it("keeps ?days=mtd on overview, campaign detail, and search-term detail", async () => {
+  it("keeps ?days=mtd on overview, search terms, and both detail pages", async () => {
     render(<RouterProvider router={router} />);
 
     await router.navigate({ to: "/", search: { days: "mtd" } as never });
     await screen.findByText("overview page");
     expect(leafSearch()).toEqual({ days: "mtd" });
     expect(router.state.location.href).toBe("/?days=mtd");
+
+    await router.navigate({
+      to: "/search-terms",
+      search: { days: "mtd" } as never,
+    });
+    await screen.findByText("search terms page");
+    expect(leafSearch()).toEqual({ days: "mtd" });
+    expect(router.state.location.href).toBe("/search-terms?days=mtd");
 
     await router.navigate({
       to: "/campaigns/$id",

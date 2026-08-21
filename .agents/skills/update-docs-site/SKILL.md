@@ -42,9 +42,8 @@ on merges to `main`.
 
 - `website/` is public, user-facing: installing, configuring, and operating a
   self-hosted deployment.
-- `docs/` is internal: `plan.md` is the authoritative specification,
-  `remaining-work-plan.md` tracks sequencing, plus `operations.md` and
-  `self-hosting.md`. `docs/` is excluded from the Prettier check.
+- `docs/` is internal working notes (`operations.md`, `self-hosting.md`, and
+  draft design notes) and is excluded from the Prettier check.
 
-A behavior change often needs both: the plan or remaining-work notes for intent,
-and the website for what an operator must now do differently.
+A behavior change often needs both: internal notes for intent, and the website
+for what an operator must now do differently.

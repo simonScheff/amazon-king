@@ -14,7 +14,9 @@ const mocks = vi.hoisted(() => ({
   useSearchTerms: vi.fn(),
   useProfiles: vi.fn(),
   useBooks: vi.fn(),
-  useSearch: vi.fn(() => ({}) as { books?: string[]; country?: string }),
+  useSearch: vi.fn(
+    () => ({}) as { days?: number | "mtd"; books?: string[]; country?: string },
+  ),
   useNavigate: vi.fn(() => vi.fn()),
 }));
 
@@ -294,6 +296,64 @@ describe("SearchTermsPage", () => {
       books: ["book-1"],
       country: undefined,
     });
+  });
+
+  it("changes the profit window through the timeframe selector", () => {
+    const navigate = vi.fn();
+    mocks.useNavigate.mockReturnValue(navigate);
+    render(<SearchTermsPage />);
+
+    // The default 30-day window is pressed.
+    expect(screen.getByRole("button", { name: "30d" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "7d" }));
+    const call = navigate.mock.calls.at(-1)?.[0] as {
+      to: string;
+      search: (prev: Record<string, unknown>) => Record<string, unknown>;
+      replace: boolean;
+    };
+    expect(call.to).toBe("/search-terms");
+    expect(call.replace).toBe(true);
+    // The functional update preserves the other filters.
+    expect(call.search({ books: ["book-1"], country: "DE" })).toEqual({
+      books: ["book-1"],
+      country: "DE",
+      days: 7,
+    });
+  });
+
+  it("uses the window from the URL for the query and profit labels", () => {
+    mocks.useSearch.mockReturnValue({ days: 14 });
+    render(<SearchTermsPage />);
+
+    expect(mocks.useSearchTerms).toHaveBeenCalledWith(14, undefined, undefined);
+    expect(
+      screen.getByRole("columnheader", { name: "14-day profit" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("fantasy books 14-day profit: Profitable"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "14d" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("labels the month-to-date window", () => {
+    mocks.useSearch.mockReturnValue({ days: "mtd" });
+    render(<SearchTermsPage />);
+
+    expect(mocks.useSearchTerms).toHaveBeenCalledWith(
+      "mtd",
+      undefined,
+      undefined,
+    );
+    expect(
+      screen.getByRole("columnheader", { name: "MTD profit" }),
+    ).toBeInTheDocument();
   });
 
   it("shows an empty state naming the market when it has no search terms", () => {

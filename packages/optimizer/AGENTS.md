@@ -12,10 +12,10 @@ here.
 
 ## Layout
 
-All nine plan §9 rules live under `src/rules/`, each with a `*_RULE_VERSION`
-constant. Alongside them: `proposedBid` per the plan formula with its ±15%
-clamp, guardrails in `guardrails.ts` (`checkGuardrails`, plan §10), ranking in
-`rank.ts`, and smoothed conversion rates in `calc.ts`.
+All nine rules live under `src/rules/`, each with a `*_RULE_VERSION` constant.
+Alongside them: `proposedBid` with its ±15% clamp, guardrails in
+`guardrails.ts` (`checkGuardrails`), ranking in `rank.ts`, and smoothed
+conversion rates in `calc.ts`.
 
 To add or change a rule, use the `add-optimizer-rule` skill.
 

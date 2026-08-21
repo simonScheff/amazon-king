@@ -2,9 +2,6 @@
 
 Guidance for AI coding agents working in this repository.
 
-`docs/plan.md` is the authoritative specification — read it before changing
-behavior.
-
 ## Where the rest of the context lives
 
 This file holds only what applies to every task. Detail lives next to the code.
@@ -24,10 +21,17 @@ This file holds only what applies to every task. Detail lives next to the code.
 `packages/crypto`, and `packages/observability` are small enough to read
 directly.
 
-Procedural workflows are skills in `.agents/skills/`: `local-stack`,
-`add-migration`, `add-optimizer-rule`, `update-docs-site`,
-`update-website-screenshots`, `live-amazon-validation`, and
-`expose-localhost`.
+**Procedural workflows are skills in `.agents/skills/`:**
+
+| Skill                        | Use it to                                             |
+| ---------------------------- | ----------------------------------------------------- |
+| `local-stack`                | Run and troubleshoot the app locally                  |
+| `add-migration`              | Add a database migration and wire it through          |
+| `add-optimizer-rule`         | Add or change a recommendation rule                   |
+| `update-docs-site`           | Update the public VitePress docs site                 |
+| `update-website-screenshots` | Refresh the docs screenshots with the current UI      |
+| `live-amazon-validation`     | Gate any run against real Amazon credentials          |
+| `expose-localhost`           | Share the local dev server over a public HTTPS tunnel |
 
 ## Project overview
 
@@ -50,19 +54,19 @@ the Amazon Ads API **only after explicit human approval**.
 
 ## Project status
 
-Treat the project as **alpha**. The code for plan Phases 2–7 exists and
-open-source/CI work has started Phase 8, but no end-to-end run against real
-Amazon credentials has happened (Phase 1 spike) and production hardening is
-incomplete.
+Treat the project as **alpha**. The core features — Amazon connection, data
+ingestion, KDP economics, dashboard, recommendation engine, and human-approved
+writes — are implemented, and open-source/CI hardening has started, but no
+end-to-end run against real Amazon credentials has happened and production
+hardening is incomplete.
 
-Do not enable real Amazon writes or begin Phase 9 automation until the earlier
-live validation gates in `docs/plan.md` §16 are complete. Current gaps and
-sequencing live in `docs/remaining-work-plan.md`.
+Do not enable real Amazon writes or begin automation work until live validation
+is complete — follow the `live-amazon-validation` skill.
 
 ## Technology stack
 
-Implemented and following `docs/plan.md` §4. New code should fit these
-boundaries unless an accepted design proposal changes them.
+New code should fit these boundaries unless an accepted design proposal changes
+them.
 
 | Layer       | Choice                                                                           |
 | ----------- | -------------------------------------------------------------------------------- |
@@ -116,7 +120,7 @@ stack. For local setup and troubleshooting, use the `local-stack` skill.
 
 ## Key architectural rules
 
-These are binding design constraints from the plan; code must follow them.
+These are binding design constraints; code must follow them.
 
 - **Two separate logins.** Login A: app sign-in (passwordless email/passkey,
   `HttpOnly`/`Secure`/`SameSite=Lax` session cookie, CSRF protection, rate
@@ -160,18 +164,16 @@ These are binding design constraints from the plan; code must follow them.
 
 ## Data model conventions
 
-From `docs/plan.md` §7:
-
 - Monetary values: fixed-precision `numeric`; never aggregate across currencies
   without explicit conversion. The one explicit conversion is the all-market
-  dashboard view (`docs/fx-rates-all-market-plan.md`): read-side only,
-  cross-rated through the USD-pivot `fx_rates` table in SQL at each fact's own
-  metric date. The surface around it: `GET /api/dashboard/summary` accepts
-  `country=all` plus an optional `currency` (default the workspace's
-  `display_currency`, set via `PATCH /api/workspace/settings`), rates arrive
-  via the worker's daily `fx_sync` job (`FX_RATES_BASE_URL`, Frankfurter), and
-  the optimizer, recommendations, and writes keep working in native currency —
-  conversion never touches stored facts.
+  dashboard view: read-side only, cross-rated through the USD-pivot `fx_rates`
+  table in SQL at each fact's own metric date. The surface around it:
+  `GET /api/dashboard/summary` accepts `country=all` plus an optional
+  `currency` (default the workspace's `display_currency`, set via
+  `PATCH /api/workspace/settings`), rates arrive via the worker's daily
+  `fx_sync` job (`FX_RATES_BASE_URL`, Frankfurter), and the optimizer,
+  recommendations, and writes keep working in native currency — conversion
+  never touches stored facts.
 - Amazon IDs: text; internal PKs: `bigint generated always as identity`; unique
   constraint per Amazon external ID within its profile.
 - Timestamps: timezone-aware.
@@ -187,7 +189,7 @@ From `docs/plan.md` §7:
 
 ## Security considerations
 
-Non-negotiable requirements from `docs/plan.md` §13:
+Non-negotiable requirements:
 
 - The LWA client secret lives only in the deployment secret manager — never
   per-user, never in code, never logged.
@@ -212,7 +214,7 @@ Non-negotiable requirements from `docs/plan.md` §13:
 
 ## Testing strategy
 
-New code should come with tests at the appropriate layer (`docs/plan.md` §14):
+New code should come with tests at the appropriate layer:
 
 - **Unit:** ACoS/ROAS/profit/break-even-CPC math, smoothing, currency handling;
   every optimization rule at thresholds and edge cases; guardrails and

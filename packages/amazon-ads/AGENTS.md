@@ -19,7 +19,7 @@ are mature. Never build production reporting on beta endpoints.
   skew and a circuit breaker that flips a connection to `reconnect_required`.
 - `http.ts` — regional transport honoring `Retry-After` with full-jitter
   backoff.
-- `gateway.ts` — the plan §6 `AmazonAdsGateway`: profiles, Reporting v3
+- `gateway.ts` — the `AmazonAdsGateway` boundary: profiles, Reporting v3
   request/poll/stream-download, SP v3 structure lists, keyword bid updates and
   negative keywords with per-item 207 mapping, and SP entity creation.
 

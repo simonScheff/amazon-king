@@ -10,8 +10,8 @@ credentials has happened yet, and this repository can spend real money.
 
 ## Phase gates
 
-`docs/plan.md` §16 defines Phases 0–9 with explicit "done when" acceptance
-criteria:
+The project is planned in Phases 0–9, each with explicit "done when"
+acceptance criteria:
 
 | Phase | Scope                                  |
 | ----- | -------------------------------------- |
@@ -76,5 +76,5 @@ non-negative counts, and currency.
 
 Follow the incident procedure: disable writes with the kill switch, rotate
 secrets if exposure is suspected, invalidate sessions, and disconnect Amazon.
-Record what happened — a live incident is the most valuable input the plan can
-get.
+Record what happened — a live incident is the most valuable input the project
+can get.

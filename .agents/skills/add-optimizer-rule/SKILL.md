@@ -5,8 +5,8 @@ whenToUse: When work touches packages/optimizer/src/rules, or when changing how 
 ---
 
 Rules are deterministic and pure. Read `packages/optimizer/AGENTS.md` for the
-purity contract and `docs/plan.md` §9 and §10 for rule and guardrail
-specifications.
+purity contract and the root `AGENTS.md` for the binding optimizer and
+guardrail constraints.
 
 ## Non-negotiables
 

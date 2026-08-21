@@ -166,8 +166,15 @@ const campaignDetailRoute = createRoute({
 const searchTermsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/search-terms",
-  validateSearch: (search: Record<string, unknown>): { country?: string } =>
-    validateCountrySearch(search),
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { days?: MetricWindow; country?: string } => {
+    const days = parseDaysSearch(search.days);
+    return {
+      ...(days !== undefined ? { days } : {}),
+      ...validateCountrySearch(search),
+    };
+  },
   component: SearchTermsPage,
 });
 

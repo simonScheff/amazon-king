@@ -62,7 +62,9 @@ function TopCard({
   error: unknown;
 }) {
   return (
-    <Card>
+    // min-w-0: as a grid item the card's automatic minimum is its min-content
+    // (the un-truncated row text), which can exceed the viewport on mobile.
+    <Card className="min-w-0">
       <CardHeader
         title={title}
         action={<span className="text-xs text-zinc-500">{note}</span>}
