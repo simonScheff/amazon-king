@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useSearch } from "@tanstack/react-router";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import type { CampaignListRow } from "@amazon-king/contracts";
 import { useBooks, useCampaigns, useProfiles } from "../api/endpoints";
 import { BookCoverStack } from "../components/book-covers";
@@ -29,8 +29,8 @@ import {
 import { countryNameForCode } from "../lib/marketplaces";
 import { useSpendSortedMarketplaces } from "../lib/use-spend-sorted-marketplaces";
 import { compareNullable, nextSort, type Sort } from "../lib/sorting";
-
-const PROFITABILITY_DAYS = 30;
+import { resolveTimeframe, windowQualifier } from "../lib/timeframe";
+import { TimeframeSelect } from "../components/timeframe-select";
 
 const TEXT_COLUMNS = ["name", "profile", "state"] as const;
 
@@ -80,8 +80,13 @@ function sortValue(row: CampaignListRow, key: SortKey): number | string | null {
 }
 
 export function CampaignsPage() {
-  const search = useSearch({ strict: false }) as { books?: string[] };
-  const campaigns = useCampaigns(PROFITABILITY_DAYS, search.books);
+  const search = useSearch({ strict: false }) as {
+    days?: number | "mtd";
+    books?: string[];
+  };
+  const days = resolveTimeframe(search.days);
+  const navigate = useNavigate();
+  const campaigns = useCampaigns(days, search.books);
   const profiles = useProfiles();
   const books = useBooks();
   const [sort, setSort] = useState<Sort<SortKey>>({
@@ -94,7 +99,7 @@ export function CampaignsPage() {
   const countryByProfile = new Map(
     (profiles.data ?? []).map((p) => [p.profileId, p.countryCode]),
   );
-  const marketplaces = useSpendSortedMarketplaces(PROFITABILITY_DAYS);
+  const marketplaces = useSpendSortedMarketplaces(days);
   const marketProfileIds = new Set(
     country === ""
       ? []
@@ -128,6 +133,16 @@ export function CampaignsPage() {
           Campaigns
         </h1>
         <div className="flex items-center gap-2">
+          <TimeframeSelect
+            value={days}
+            onChange={(window) =>
+              navigate({
+                to: "/campaigns",
+                search: (prev) => ({ ...prev, days: window }),
+                replace: true,
+              })
+            }
+          />
           <CountrySelect
             value={country}
             options={marketplaces}
@@ -178,7 +193,7 @@ export function CampaignsPage() {
                       onSort={onSort}
                     />
                     <SortButton
-                      label={`${PROFITABILITY_DAYS}-day profit`}
+                      label={`${windowQualifier(days)} profit`}
                       column="profit"
                       sort={sort}
                       onSort={onSort}
@@ -199,7 +214,7 @@ export function CampaignsPage() {
                   onSort={onSort}
                 />
                 <SortableTh
-                  label={`${PROFITABILITY_DAYS}-day profit`}
+                  label={`${windowQualifier(days)} profit`}
                   column="profit"
                   sort={sort}
                   onSort={onSort}
@@ -285,14 +300,14 @@ export function CampaignsPage() {
                           <Link
                             to="/campaigns/$id"
                             params={{ id: c.campaignId }}
-                            search={{ days: PROFITABILITY_DAYS }}
+                            search={{ days }}
                             className="text-sky-400 hover:underline"
                           >
                             {c.name}
                           </Link>
                           <div className="mt-2 md:hidden">
                             <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-                              {PROFITABILITY_DAYS}-day profit
+                              {windowQualifier(days)} profit
                             </p>
                             <ProfitabilityResult
                               status={profitStatus}
@@ -329,7 +344,7 @@ export function CampaignsPage() {
                     </Td>
                     <Td
                       className="hidden whitespace-nowrap md:table-cell"
-                      aria-label={`${c.name} ${PROFITABILITY_DAYS}-day profit: ${profitStatus.label}`}
+                      aria-label={`${c.name} ${windowQualifier(days)} profit: ${profitStatus.label}`}
                     >
                       <ProfitabilityResult
                         status={profitStatus}

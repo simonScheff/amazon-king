@@ -14,11 +14,13 @@ const mocks = vi.hoisted(() => ({
   useCampaigns: vi.fn(),
   useProfiles: vi.fn(),
   useBooks: vi.fn(),
+  useNavigate: vi.fn(() => vi.fn()),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children: ReactNode }) => <a href="#">{children}</a>,
   useSearch: () => ({}) as { books?: string[] },
+  useNavigate: mocks.useNavigate,
 }));
 
 vi.mock("../api/endpoints", () => ({
