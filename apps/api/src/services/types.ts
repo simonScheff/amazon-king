@@ -24,6 +24,7 @@ import type {
   DataFreshnessResponse,
   FxSyncResult,
   MetricWindow,
+  NegativeRemovalCreate,
   ProfileUpdate,
   Recommendation,
   RecommendationState,
@@ -333,6 +334,18 @@ export interface ChangeService {
     auth: AuthContext,
     amazonCampaignId: string,
     searchTerms: string[],
+    meta: RequestMeta,
+  ): Promise<ChangeSetWithActions>;
+  /**
+   * Re-include a shopper term or product by removing a synced negative: a
+   * draft change set with one `remove_negative_exact` /
+   * `remove_negative_target` action built from the mirror row. Fingerprinted,
+   * so re-submitting the same removal replays the set.
+   */
+  createNegativeRemovalChangeSet(
+    auth: AuthContext,
+    amazonCampaignId: string,
+    input: NegativeRemovalCreate,
     meta: RequestMeta,
   ): Promise<ChangeSetWithActions>;
   /**

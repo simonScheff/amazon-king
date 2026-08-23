@@ -20,6 +20,7 @@ import { CampaignHeader } from "../components/campaign-header";
 import { CampaignMaxCpc } from "../components/campaign-max-cpc";
 import { PerformanceTrendChart } from "../components/performance-trend-chart";
 import { ProfitabilityResult } from "../components/profitability-result";
+import { ReincludeNegative } from "../components/reinclude-negative";
 import { Badge } from "../components/ui/badge";
 import { Card, CardBody, CardHeader } from "../components/ui/card";
 import { SortableTh } from "../components/ui/sortable-th";
@@ -122,7 +123,15 @@ function formatAmazonLabel(value: string) {
     .join(" ");
 }
 
-function NegativeKeywordsTable({ rows }: { rows: NegativeKeywordRow[] }) {
+function NegativeKeywordsTable({
+  rows,
+  campaignId,
+  editable,
+}: {
+  rows: NegativeKeywordRow[];
+  campaignId: string;
+  editable: boolean;
+}) {
   if (rows.length === 0) {
     return (
       <EmptyState>
@@ -139,6 +148,7 @@ function NegativeKeywordsTable({ rows }: { rows: NegativeKeywordRow[] }) {
           <Th>Applied to</Th>
           <Th>Added</Th>
           <Th>State</Th>
+          {editable ? <Th /> : null}
         </tr>
       </thead>
       <tbody>
@@ -159,6 +169,16 @@ function NegativeKeywordsTable({ rows }: { rows: NegativeKeywordRow[] }) {
                   {formatAmazonLabel(state)}
                 </Badge>
               </Td>
+              {editable ? (
+                <Td className="text-right">
+                  <ReincludeNegative
+                    campaignId={campaignId}
+                    kind="keyword"
+                    negativeId={row.id}
+                    label={row.keywordText}
+                  />
+                </Td>
+              ) : null}
             </tr>
           );
         })}
@@ -170,9 +190,13 @@ function NegativeKeywordsTable({ rows }: { rows: NegativeKeywordRow[] }) {
 function NegativeProductsTable({
   rows,
   countryCode,
+  campaignId,
+  editable,
 }: {
   rows: NegativeTargetRow[];
   countryCode?: string;
+  campaignId: string;
+  editable: boolean;
 }) {
   if (rows.length === 0) {
     return (
@@ -190,6 +214,7 @@ function NegativeProductsTable({
           <Th>Applied to</Th>
           <Th>Added</Th>
           <Th>State</Th>
+          {editable ? <Th /> : null}
         </tr>
       </thead>
       <tbody>
@@ -217,6 +242,16 @@ function NegativeProductsTable({
                   {formatAmazonLabel(state)}
                 </Badge>
               </Td>
+              {editable ? (
+                <Td className="text-right">
+                  <ReincludeNegative
+                    campaignId={campaignId}
+                    kind="target"
+                    negativeId={row.id}
+                    label={row.asin}
+                  />
+                </Td>
+              ) : null}
             </tr>
           );
         })}
@@ -556,11 +591,17 @@ export function CampaignDetailPage() {
             {tab === "maxCpc" ? (
               <CampaignMaxCpc campaignId={id} />
             ) : tab === "negativeKeywords" ? (
-              <NegativeKeywordsTable rows={campaign.data.negativeKeywords} />
+              <NegativeKeywordsTable
+                rows={campaign.data.negativeKeywords}
+                campaignId={id}
+                editable={editable}
+              />
             ) : tab === "negativeTargets" ? (
               <NegativeProductsTable
                 rows={campaign.data.negativeTargets}
                 countryCode={country}
+                campaignId={id}
+                editable={editable}
               />
             ) : (
               <MetricsTable

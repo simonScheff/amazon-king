@@ -18,6 +18,7 @@ import {
   dashboardSummaryQuerySchema,
   loginRequestSchema,
   metricWindowSchema,
+  negativeRemovalCreateSchema,
   profileUpdateSchema,
   recommendationStateSchema,
   recommendationTypeSchema,
@@ -693,6 +694,26 @@ export async function buildServer(
         auth,
         campaignId,
         body.searchTerms,
+        meta(request),
+      );
+      return result.changeSet;
+    },
+  );
+
+  // Re-include: draft the removal of a synced negative keyword or ASIN target.
+  // Same guard posture as drafting negatives — nothing reaches Amazon until
+  // the draft is applied in Change center, which keeps the recent-auth gate.
+  app.post(
+    "/api/campaigns/:campaignId/negatives/removals",
+    { config: { rateLimit: WRITE_RATE } },
+    async (request) => {
+      const auth = await authenticate(request);
+      const { campaignId } = request.params as { campaignId: string };
+      const body = parse(negativeRemovalCreateSchema, request.body);
+      const result = await services.changes.createNegativeRemovalChangeSet(
+        auth,
+        campaignId,
+        body,
         meta(request),
       );
       return result.changeSet;

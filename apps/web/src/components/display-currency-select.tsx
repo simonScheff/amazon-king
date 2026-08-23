@@ -11,7 +11,7 @@ import { useToast } from "./toast";
  * the Settings page. PATCHes the workspace setting; the mutation invalidates
  * the dashboard queries, which then re-fetch converted figures in the new
  * currency. Options are the currencies present among enabled profiles plus
- * USD/EUR/GBP.
+ * USD/EUR/GBP/ILS.
  */
 export function DisplayCurrencySelect({
   value,

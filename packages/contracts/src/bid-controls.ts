@@ -137,6 +137,19 @@ export type SearchTermNegativesResult = z.infer<
   typeof searchTermNegativesResultSchema
 >;
 
+/**
+ * Re-include a shopper term or product by removing a synced negative.
+ * `negativeId` is the Amazon negative keyword / negative target id shown on
+ * the campaign detail negatives tabs; `kind` picks the mirror table the id
+ * belongs to. The result is a draft change set — nothing reaches Amazon until
+ * it is applied from Change center.
+ */
+export const negativeRemovalCreateSchema = z.object({
+  kind: z.enum(["keyword", "target"]),
+  negativeId: z.string().trim().min(1),
+});
+export type NegativeRemovalCreate = z.infer<typeof negativeRemovalCreateSchema>;
+
 /** The applied one-click campaign update (pause/enable or rename). */
 export const campaignUpdateResultSchema = z.object({
   changeSet: changeSetSchema,

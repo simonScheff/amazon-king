@@ -14,8 +14,10 @@ guardrails, verification.
 
 The same page lists ad groups, targets, search terms, **negative keywords**,
 and **negative products** (ASIN exclusions) from the last structure sync.
-Those tables are read-only — adding or removing a negative still goes through
-a recommendation or Change center draft.
+Each negative row has a **Re-include** button: it drafts a change set that
+removes the negative, so the term or product can serve again once the draft is
+applied in Change center. Adding a negative still goes through a
+recommendation or Change center draft.
 
 ## Pause / enable / rename
 
@@ -117,8 +119,11 @@ guarantees the term is never blocked in all campaigns at once — the new
 destination must exist on Amazon first.
 
 ::: info
-Negative ASIN targets are not rollbackable; negative exact keywords created
-this way are (they are verified app-created negatives).
+Both negative exact keywords and negative ASIN targets created this way are
+rollbackable from the Change center (they are verified app-created negatives);
+a rollback removes the negative again. The **Re-include** button on the
+campaign's negatives tabs does the same for any synced negative, however it
+was created.
 :::
 
 ## Max CPC

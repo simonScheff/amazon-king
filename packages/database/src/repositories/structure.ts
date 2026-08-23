@@ -414,6 +414,99 @@ export async function deleteMissingNegativeTargets(
   return result.rowCount ?? 0;
 }
 
+export interface NegativeKeywordRow {
+  id: string;
+  profileId: string;
+  campaignId: string; // internal campaigns.id
+  adGroupId: string | null; // internal ad_groups.id; null is campaign-level
+  amazonNegativeKeywordId: string;
+  keywordText: string;
+  matchType: string;
+  state: string;
+}
+
+/** Fetch one synced negative keyword by its Amazon id within a campaign. */
+export async function findNegativeKeywordByAmazonId(
+  db: Db,
+  campaignPk: string,
+  amazonNegativeKeywordId: string,
+): Promise<NegativeKeywordRow | null> {
+  const result = await db.query<{
+    id: string;
+    profile_id: string;
+    campaign_id: string;
+    ad_group_id: string | null;
+    amazon_negative_keyword_id: string;
+    keyword_text: string;
+    match_type: string;
+    state: string;
+  }>(
+    `select id, profile_id, campaign_id, ad_group_id,
+            amazon_negative_keyword_id, keyword_text, match_type, state
+     from negative_keywords
+     where campaign_id = $1 and amazon_negative_keyword_id = $2`,
+    [campaignPk, amazonNegativeKeywordId],
+  );
+  const row = result.rows[0];
+  return row
+    ? {
+        id: row.id,
+        profileId: row.profile_id,
+        campaignId: row.campaign_id,
+        adGroupId: row.ad_group_id,
+        amazonNegativeKeywordId: row.amazon_negative_keyword_id,
+        keywordText: row.keyword_text,
+        matchType: row.match_type,
+        state: row.state,
+      }
+    : null;
+}
+
+export interface NegativeTargetRow {
+  id: string;
+  profileId: string;
+  campaignId: string; // internal campaigns.id
+  adGroupId: string | null; // internal ad_groups.id; null is campaign-level
+  amazonNegativeTargetId: string;
+  expressionAsin: string;
+  state: string;
+}
+
+/** Fetch one synced negative ASIN target by its Amazon id within a campaign. */
+export async function findNegativeTargetByAmazonId(
+  db: Db,
+  campaignPk: string,
+  amazonNegativeTargetId: string,
+): Promise<NegativeTargetRow | null> {
+  const result = await db.query<{
+    id: string;
+    profile_id: string;
+    campaign_id: string;
+    ad_group_id: string | null;
+    amazon_negative_target_id: string;
+    expression_asin: string;
+    state: string;
+  }>(
+    `select id, profile_id, campaign_id, ad_group_id,
+            amazon_negative_target_id, expression_asin, state
+     from negative_targets
+     where campaign_id = $1 and amazon_negative_target_id = $2`,
+    [campaignPk, amazonNegativeTargetId],
+  );
+  const row = result.rows[0];
+  return row
+    ? {
+        id: row.id,
+        profileId: row.profile_id,
+        campaignId: row.campaign_id,
+        adGroupId: row.ad_group_id,
+        amazonNegativeTargetId: row.amazon_negative_target_id,
+        expressionAsin: row.expression_asin,
+        state: row.state,
+      }
+    : null;
+}
+
 export interface EntityChange {
   id: string;
   entityType: string;

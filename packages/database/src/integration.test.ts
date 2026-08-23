@@ -127,6 +127,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       "0013",
       "0014",
       "0015",
+      "0016",
     ]);
     const again = await migrate(pool);
     expect(again).toEqual([]);
@@ -848,6 +849,15 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       matchType: "NEGATIVE_EXACT",
       state: "ENABLED",
     });
+    // Amazon keeps deleted negatives queryable; the dashboard hides them.
+    await upsertNegativeKeyword(pool, {
+      profileId,
+      campaignId: campaign.id,
+      amazonNegativeKeywordId: "amzn-negative-deleted",
+      keywordText: "gone books",
+      matchType: "NEGATIVE_EXACT",
+      state: "DELETED",
+    });
 
     expect(repeated.id).toBe(first.id);
     await expect(listNegativeKeywordRows(pool, campaign.id)).resolves.toEqual([
@@ -876,6 +886,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     expect(
       await deleteMissingNegativeKeywords(pool, profileId, [
         "amzn-negative-ad-group",
+        "amzn-negative-deleted",
       ]),
     ).toBe(1);
     await expect(listNegativeKeywordRows(pool, campaign.id)).resolves.toEqual([
@@ -921,6 +932,14 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       expressionAsin: "B0FR4NDK6Y",
       state: "ENABLED",
     });
+    // Amazon keeps deleted negative targets queryable; the dashboard hides them.
+    await upsertNegativeTarget(pool, {
+      profileId,
+      campaignId: campaign.id,
+      amazonNegativeTargetId: "amzn-negative-target-deleted",
+      expressionAsin: "B0GONE0000",
+      state: "DELETED",
+    });
 
     expect(repeated.id).toBe(first.id);
     await expect(listNegativeTargetRows(pool, campaign.id)).resolves.toEqual([
@@ -949,13 +968,14 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     expect(
       await deleteMissingNegativeTargets(pool, profileId, [
         "amzn-negative-target-ad-group",
+        "amzn-negative-target-deleted",
       ]),
     ).toBe(1);
     const remaining = await pool.query<{ n: string }>(
       `select count(*)::text as n from negative_targets where campaign_id = $1`,
       [campaign.id],
     );
-    expect(remaining.rows[0]?.n).toBe("1");
+    expect(remaining.rows[0]?.n).toBe("2");
     await expect(listNegativeTargetRows(pool, campaign.id)).resolves.toEqual([
       expect.objectContaining({ id: "amzn-negative-target-ad-group" }),
     ]);
@@ -2053,6 +2073,25 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     );
     expect(recent).toHaveLength(1);
     expect(recent[0]!.targetId).toBe("454063756440621");
+  });
+
+  it("accepts the remove_negative_target action type", async () => {
+    const profileId = await seedProfile(pool);
+    const user = await pool.query<{ id: string }>(
+      `insert into users (email) values ('negative-removal@example.com') returning id`,
+    );
+    const set = await pool.query<{ id: string }>(
+      `insert into change_sets (profile_id, creator_user_id, status, fingerprint)
+       values ($1, $2, 'draft', 'fp-remove-negative-target') returning id`,
+      [profileId, user.rows[0]!.id],
+    );
+    const inserted = await pool.query<{ action_type: string }>(
+      `insert into change_actions (change_set_id, action_type, fingerprint, status, amazon_entity_id)
+       values ($1, 'remove_negative_target', 'afp-remove-negative-target', 'pending', '770123456')
+       returning action_type`,
+      [set.rows[0]!.id],
+    );
+    expect(inserted.rows[0]!.action_type).toBe("remove_negative_target");
   });
 
   it("values overview royalty per book and marketplace, not one rate per country", async () => {

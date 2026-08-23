@@ -33,7 +33,9 @@ import {
   buildTargetCreateBody,
   createNegativeTargets,
   createTargets,
+  deleteAdGroupNegativeTargets,
   deleteCampaignNegativeKeywords,
+  deleteNegativeTargets,
   disableOptimizationRules,
   updateCampaigns,
   updateKeywordBids,
@@ -706,6 +708,58 @@ describe("SP write request bodies", () => {
       actionId: "r1",
       status: "applied",
       amazonEntityId: "990123459",
+    });
+  });
+
+  it("deletes campaign negative targets with the v3 id filter", async () => {
+    const { http, calls } = makeHttp({
+      handler: () =>
+        jsonResponse(fixture("sp-campaignNegativeTargets-create-207.json"), {
+          status: 207,
+        }),
+    });
+    const results = await deleteNegativeTargets(http, TEST_CONTEXT, [
+      {
+        actionId: "rt1",
+        kind: "remove_negative_target",
+        negativeTargetId: "770123456",
+        scope: "campaign",
+      },
+    ]);
+    expect(calls[0].url).toContain("/sp/campaignNegativeTargets/delete");
+    expect(JSON.parse(calls[0].body as string)).toEqual({
+      campaignNegativeTargetIdFilter: { include: ["770123456"] },
+    });
+    expect(results[0]).toMatchObject({
+      actionId: "rt1",
+      status: "applied",
+      amazonEntityId: "770123456",
+    });
+  });
+
+  it("deletes ad-group negative targets with the v3 id filter", async () => {
+    const { http, calls } = makeHttp({
+      handler: () =>
+        jsonResponse(fixture("sp-negativeTargets-delete-207.json"), {
+          status: 207,
+        }),
+    });
+    const results = await deleteAdGroupNegativeTargets(http, TEST_CONTEXT, [
+      {
+        actionId: "rt2",
+        kind: "remove_negative_target",
+        negativeTargetId: "660123457",
+        scope: "ad_group",
+      },
+    ]);
+    expect(calls[0].url).toContain("/sp/negativeTargets/delete");
+    expect(JSON.parse(calls[0].body as string)).toEqual({
+      negativeTargetIdFilter: { include: ["660123457"] },
+    });
+    expect(results[0]).toMatchObject({
+      actionId: "rt2",
+      status: "applied",
+      amazonEntityId: "660123457",
     });
   });
 

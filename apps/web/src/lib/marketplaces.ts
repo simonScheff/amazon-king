@@ -73,11 +73,11 @@ export function resolveCountry(
 }
 
 /** The picker always offers these, even with no enabled profile using them. */
-const BASE_DISPLAY_CURRENCIES = ["USD", "EUR", "GBP"];
+const BASE_DISPLAY_CURRENCIES = ["USD", "EUR", "GBP", "ILS"];
 
 /**
  * Currencies offered by the display-currency picker: every currency present
- * among the enabled marketplaces plus USD/EUR/GBP, sorted.
+ * among the enabled marketplaces plus USD/EUR/GBP/ILS, sorted.
  */
 export function displayCurrencyOptions(
   options: readonly MarketplaceOption[],

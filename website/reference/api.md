@@ -630,6 +630,22 @@ screen, but campaign-scoped rather than finding-scoped.
 - Errors: `404 NOT_FOUND` (unknown campaign), `400 BAD_REQUEST` (no usable
   terms).
 
+### `POST /api/campaigns/:campaignId/negatives/removals`
+
+Re-includes a shopper term or product by removing a synced negative — the
+"Re-include" button on the campaign detail negatives tabs.
+
+- **Auth:** session + CSRF. **Rate:** WRITE. No recent-auth gate — drafting
+  sends nothing to Amazon; the apply in Change center keeps the gate.
+- Body: `{ "kind": "keyword" | "target", "negativeId": "990123459" }` —
+  `negativeId` is the Amazon negative keyword / negative target id shown in
+  the negatives tables.
+- Response `200`: the created draft ChangeSet with one
+  `remove_negative_exact` / `remove_negative_target` action carrying the
+  negative's scope (campaign or ad group). Re-submitting the same removal
+  replays the existing set.
+- Errors: `404 NOT_FOUND` (unknown campaign or negative id).
+
 ---
 
 ## Campaign Max CPC

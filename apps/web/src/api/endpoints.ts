@@ -44,6 +44,7 @@ import {
   type ChangeSetCreate,
   type LoginRequest,
   type MetricWindow,
+  type NegativeRemovalCreate,
   type ProfileUpdate,
   type RecommendationState,
   type RecommendationType,
@@ -649,6 +650,23 @@ export function useCreateCampaignNegatives(campaignId: string) {
   return useMutation({
     mutationFn: (body: CampaignNegativesCreate) =>
       apiFetch(`/api/campaigns/${campaignId}/negatives`, {
+        method: "POST",
+        body,
+        schema: changeSetSchema,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["change-sets"] }),
+  });
+}
+
+/**
+ * Re-include a shopper term or product: draft the removal of a synced
+ * negative (no apply — the draft is reviewed and applied in Change center).
+ */
+export function useRemoveNegative(campaignId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: NegativeRemovalCreate) =>
+      apiFetch(`/api/campaigns/${campaignId}/negatives/removals`, {
         method: "POST",
         body,
         schema: changeSetSchema,

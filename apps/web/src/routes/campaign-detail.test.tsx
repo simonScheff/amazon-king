@@ -39,6 +39,11 @@ vi.mock("../api/endpoints", () => ({
     isPending: false,
     error: null,
   }),
+  useRemoveNegative: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+    error: null,
+  }),
   useProfiles: () => ({
     isPending: false,
     error: null,

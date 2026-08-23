@@ -28,6 +28,8 @@ import {
   createTargets,
   deleteCampaignNegativeKeywords,
   deleteNegativeKeywords,
+  deleteAdGroupNegativeTargets,
+  deleteNegativeTargets,
   disableOptimizationRules,
   updateAdGroupDefaultBids,
   updateCampaignBidding,
@@ -252,6 +254,7 @@ export function createAmazonAdsGateway(
           "add_negative_exact",
           "remove_negative_exact",
           "add_negative_target",
+          "remove_negative_target",
         ],
       };
     },
@@ -303,6 +306,17 @@ export function createAmazonAdsGateway(
       const campaignNegativeRemovalActions = negativeRemovalActions.filter(
         (action) => action.scope === "campaign",
       );
+      const negativeTargetRemovalActions = changeSet.actions.filter(
+        (action) => action.kind === "remove_negative_target",
+      );
+      const adGroupNegativeTargetRemovalActions =
+        negativeTargetRemovalActions.filter(
+          (action) => action.scope === "ad_group",
+        );
+      const campaignNegativeTargetRemovalActions =
+        negativeTargetRemovalActions.filter(
+          (action) => action.scope === "campaign",
+        );
       const createCampaignActions = changeSet.actions.filter(
         (action) => action.kind === "create_campaign",
       );
@@ -528,6 +542,24 @@ export function createAmazonAdsGateway(
             http,
             context,
             campaignNegativeRemovalActions,
+          )),
+        );
+      }
+      if (adGroupNegativeTargetRemovalActions.length > 0) {
+        results.push(
+          ...(await deleteAdGroupNegativeTargets(
+            http,
+            context,
+            adGroupNegativeTargetRemovalActions,
+          )),
+        );
+      }
+      if (campaignNegativeTargetRemovalActions.length > 0) {
+        results.push(
+          ...(await deleteNegativeTargets(
+            http,
+            context,
+            campaignNegativeTargetRemovalActions,
           )),
         );
       }

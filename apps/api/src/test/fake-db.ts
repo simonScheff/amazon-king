@@ -1461,6 +1461,26 @@ export class FakeDb {
       },
 
       {
+        match: "and amazon_negative_keyword_id = $2",
+        handle: (p) => {
+          const row = t.negativeKeywords.find(
+            (n) =>
+              n.campaign_id === p[0] && n.amazon_negative_keyword_id === p[1],
+          );
+          return this.ok(row ? [row] : []);
+        },
+      },
+      {
+        match: "and amazon_negative_target_id = $2",
+        handle: (p) => {
+          const row = t.negativeTargets.find(
+            (n) =>
+              n.campaign_id === p[0] && n.amazon_negative_target_id === p[1],
+          );
+          return this.ok(row ? [row] : []);
+        },
+      },
+      {
         match: "from negative_keywords n",
         handle: (p) => {
           const rows = t.negativeKeywords

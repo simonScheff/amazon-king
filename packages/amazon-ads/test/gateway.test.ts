@@ -163,6 +163,7 @@ describe("gateway.previewCapabilities", () => {
         "add_negative_exact",
         "remove_negative_exact",
         "add_negative_target",
+        "remove_negative_target",
       ],
     });
   });
@@ -268,6 +269,69 @@ describe("gateway.applyActions", () => {
       actionId: "remove-1",
       status: "applied",
     });
+  });
+
+  it("routes negative target removals to the scoped delete resources", async () => {
+    const { gateway, calls } = makeGateway((request) => {
+      if (request.url.endsWith("/sp/campaignNegativeTargets/delete")) {
+        return jsonResponse(
+          {
+            campaignNegativeTargetingClauses: [
+              {
+                index: 0,
+                code: "SUCCESS",
+                campaignNegativeTargetingClauseId: "770123456",
+              },
+            ],
+          },
+          { status: 207 },
+        );
+      }
+      if (request.url.endsWith("/sp/negativeTargets/delete")) {
+        return jsonResponse(
+          {
+            negativeTargetingClauses: [
+              {
+                index: 0,
+                code: "SUCCESS",
+                negativeTargetingClauseId: "660123457",
+              },
+            ],
+          },
+          { status: 207 },
+        );
+      }
+      throw new Error(`unexpected call: ${request.url}`);
+    });
+    const results = await gateway.applyActions({
+      changeSetId: "reinclude-1",
+      profileId: "1111111111",
+      actions: [
+        {
+          actionId: "remove-t1",
+          kind: "remove_negative_target",
+          negativeTargetId: "770123456",
+          scope: "campaign",
+        },
+        {
+          actionId: "remove-t2",
+          kind: "remove_negative_target",
+          negativeTargetId: "660123457",
+          scope: "ad_group",
+        },
+      ],
+    });
+    expect(calls).toHaveLength(2);
+    expect(JSON.parse(calls[0].body as string)).toEqual({
+      negativeTargetIdFilter: { include: ["660123457"] },
+    });
+    expect(JSON.parse(calls[1].body as string)).toEqual({
+      campaignNegativeTargetIdFilter: { include: ["770123456"] },
+    });
+    expect(results.map((r) => [r.actionId, r.status])).toEqual([
+      ["remove-t2", "applied"],
+      ["remove-t1", "applied"],
+    ]);
   });
 });
 

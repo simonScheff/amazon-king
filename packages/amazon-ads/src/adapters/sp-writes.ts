@@ -11,6 +11,7 @@ import type {
   CreateProductAdAction,
   CreateTargetAction,
   RemoveNegativeExactAction,
+  RemoveNegativeTargetAction,
   UpdateAdGroupDefaultBidAction,
   UpdateBidAction,
   UpdateCampaignBiddingAction,
@@ -342,6 +343,9 @@ const targetWriteResponseSchema = z.looseObject({
 const negativeTargetWriteResponseSchema = z.looseObject({
   campaignNegativeTargetingClauses: writeResultCollectionSchema,
 });
+const adGroupNegativeTargetWriteResponseSchema = z.looseObject({
+  negativeTargetingClauses: writeResultCollectionSchema,
+});
 const adGroupWriteResponseSchema = z.looseObject({
   adGroups: writeResultCollectionSchema,
 });
@@ -418,6 +422,7 @@ export function mapWriteResults(
       item.negativeKeywordId ??
       item.campaignNegativeKeywordId ??
       item.campaignNegativeTargetingClauseId ??
+      item.negativeTargetingClauseId ??
       item.negativeTargetId ??
       item.targetId ??
       item.adId ??
@@ -857,4 +862,66 @@ export async function createNegativeTargets(
       flattenWriteResults(data.campaignNegativeTargetingClauses),
     );
   });
+}
+
+/** POST /sp/campaignNegativeTargets/delete — remove campaign-level negative ASIN targets. */
+export async function deleteNegativeTargets(
+  http: AdsHttpClient,
+  context: AdsRequestContext,
+  actions: RemoveNegativeTargetAction[],
+): Promise<ActionResult[]> {
+  if (actions.length === 0) {
+    return [];
+  }
+  const response = await http.request({
+    method: "POST",
+    path: "/sp/campaignNegativeTargets/delete",
+    context,
+    mediaType: SP_MEDIA_TYPES.campaignNegativeTargets,
+    body: {
+      campaignNegativeTargetIdFilter: {
+        include: actions.map((action) => asSpV3Id(action.negativeTargetId)),
+      },
+    },
+  });
+  const data = parseWith(
+    negativeTargetWriteResponseSchema,
+    response.data,
+    "POST /sp/campaignNegativeTargets/delete",
+  );
+  return mapWriteResults(
+    actions,
+    flattenWriteResults(data.campaignNegativeTargetingClauses),
+  );
+}
+
+/** POST /sp/negativeTargets/delete — remove ad-group-level negative ASIN targets. */
+export async function deleteAdGroupNegativeTargets(
+  http: AdsHttpClient,
+  context: AdsRequestContext,
+  actions: RemoveNegativeTargetAction[],
+): Promise<ActionResult[]> {
+  if (actions.length === 0) {
+    return [];
+  }
+  const response = await http.request({
+    method: "POST",
+    path: "/sp/negativeTargets/delete",
+    context,
+    mediaType: SP_MEDIA_TYPES.negativeTargets,
+    body: {
+      negativeTargetIdFilter: {
+        include: actions.map((action) => asSpV3Id(action.negativeTargetId)),
+      },
+    },
+  });
+  const data = parseWith(
+    adGroupNegativeTargetWriteResponseSchema,
+    response.data,
+    "POST /sp/negativeTargets/delete",
+  );
+  return mapWriteResults(
+    actions,
+    flattenWriteResults(data.negativeTargetingClauses),
+  );
 }

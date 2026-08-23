@@ -249,6 +249,7 @@ export const changeActionTypeSchema = z.enum([
   "create_keyword",
   "create_target",
   "add_negative_target",
+  "remove_negative_target",
   "update_campaign_state",
   "update_campaign_name",
 ]);

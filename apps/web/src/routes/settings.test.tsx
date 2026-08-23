@@ -135,7 +135,7 @@ describe("SettingsPage book mapping", () => {
     expect(screen.getByText("Workspace")).toBeInTheDocument();
     const picker = screen.getByLabelText("Display currency");
     expect(picker).toHaveValue("EUR");
-    // Enabled profile currencies plus the USD/EUR/GBP base set.
+    // Enabled profile currencies plus the USD/EUR/GBP/ILS base set.
     expect(screen.getByRole("option", { name: "AUD" })).toBeInTheDocument();
 
     fireEvent.change(picker, { target: { value: "GBP" } });

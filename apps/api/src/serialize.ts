@@ -171,21 +171,23 @@ export function toContractChangeAction(
           ? "No matching campaign negative ASIN target"
           : row.actionType === "remove_negative_exact"
             ? "Negative exact enabled"
-            : row.actionType === "update_campaign_bidding"
-              ? "Current strategy and bid adjustments"
-              : row.actionType === "update_optimization_rule"
-                ? "Rule enabled"
-                : row.actionType === "create_campaign"
-                  ? "No campaign"
-                  : row.actionType === "create_ad_group"
-                    ? "No ad group"
-                    : row.actionType === "create_product_ad"
-                      ? "No product ad"
-                      : row.actionType === "create_keyword"
-                        ? "No keyword"
-                        : row.actionType === "create_target"
-                          ? "No product target"
-                          : null,
+            : row.actionType === "remove_negative_target"
+              ? "Negative ASIN target enabled"
+              : row.actionType === "update_campaign_bidding"
+                ? "Current strategy and bid adjustments"
+                : row.actionType === "update_optimization_rule"
+                  ? "Rule enabled"
+                  : row.actionType === "create_campaign"
+                    ? "No campaign"
+                    : row.actionType === "create_ad_group"
+                      ? "No ad group"
+                      : row.actionType === "create_product_ad"
+                        ? "No product ad"
+                        : row.actionType === "create_keyword"
+                          ? "No keyword"
+                          : row.actionType === "create_target"
+                            ? "No product target"
+                            : null,
     afterDetail: CAMPAIGN_UPDATE_TYPES.has(row.actionType)
       ? campaignUpdateDetail(row.afterState)
       : row.actionType === "add_negative_exact"
@@ -194,24 +196,28 @@ export function toContractChangeAction(
           ? "Campaign-level negative ASIN target enabled"
           : row.actionType === "remove_negative_exact"
             ? "Negative exact removed"
-            : row.actionType === "update_campaign_bidding"
-              ? "Down only; placement and audience adjustments removed"
-              : row.actionType === "update_optimization_rule"
-                ? "Rule disabled"
-                : row.actionType === "create_campaign"
-                  ? "Campaign created"
-                  : row.actionType === "create_ad_group"
-                    ? "Ad group created"
-                    : row.actionType === "create_product_ad"
-                      ? "Product ad created"
-                      : row.actionType === "create_keyword"
-                        ? "Keyword created"
-                        : row.actionType === "create_target"
-                          ? "Product target created"
-                          : null,
+            : row.actionType === "remove_negative_target"
+              ? "Negative ASIN target removed"
+              : row.actionType === "update_campaign_bidding"
+                ? "Down only; placement and audience adjustments removed"
+                : row.actionType === "update_optimization_rule"
+                  ? "Rule disabled"
+                  : row.actionType === "create_campaign"
+                    ? "Campaign created"
+                    : row.actionType === "create_ad_group"
+                      ? "Ad group created"
+                      : row.actionType === "create_product_ad"
+                        ? "Product ad created"
+                        : row.actionType === "create_keyword"
+                          ? "Keyword created"
+                          : row.actionType === "create_target"
+                            ? "Product target created"
+                            : null,
     rollbackAvailable:
       (row.actionType === "update_bid" && row.beforeValue !== null) ||
       (row.actionType === "add_negative_exact" &&
+        row.amazonEntityId !== null) ||
+      (row.actionType === "add_negative_target" &&
         row.amazonEntityId !== null) ||
       CAMPAIGN_UPDATE_TYPES.has(row.actionType),
     status: row.status,

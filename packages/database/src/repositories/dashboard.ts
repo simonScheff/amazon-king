@@ -568,6 +568,7 @@ export async function listNegativeKeywordRows(
      from negative_keywords n
      left join ad_groups g on g.id = n.ad_group_id
      where n.campaign_id = $1
+       and lower(n.state) <> 'deleted'
        and (coalesce(cardinality($2::bigint[]), 0) = 0 or exists (
          select 1
          from ad_groups fg
@@ -622,6 +623,7 @@ export async function listNegativeTargetRows(
      from negative_targets n
      left join ad_groups g on g.id = n.ad_group_id
      where n.campaign_id = $1
+       and lower(n.state) <> 'deleted'
        and (coalesce(cardinality($2::bigint[]), 0) = 0 or exists (
          select 1
          from ad_groups fg

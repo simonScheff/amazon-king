@@ -269,6 +269,10 @@ function guardrailActionType(
       // A negative ASIN target excludes spend like a negative exact; the same
       // protected-term check applies.
       return "add_negative_exact";
+    case "remove_negative_target":
+      // Removing a negative ASIN target re-includes spend like removing a
+      // negative exact; protected-term checks apply only when creating.
+      return "remove_negative_exact";
     case "create_campaign":
       // A new campaign commits a daily budget, not a bid change.
       return "update_budget";
@@ -869,6 +873,15 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
     );
   }
 
+  /**
+   * Amazon never hard-deletes a negative: the delete endpoints mark it DELETED
+   * and list endpoints keep returning it. Only an ENABLED negative actually
+   * blocks (or still exists for removal purposes).
+   */
+  function negativeIsLive(state: string): boolean {
+    return state.trim().toLowerCase() === "enabled";
+  }
+
   function findNegative(
     snapshot: StructureSnapshot,
     amazonCampaignId: string,
@@ -882,7 +895,8 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
         (amazonAdGroupId === null
           ? nk.adGroupId === null
           : nk.adGroupId === amazonAdGroupId) &&
-        nk.keywordText.trim().toLowerCase() === term,
+        nk.keywordText.trim().toLowerCase() === term &&
+        negativeIsLive(nk.state),
     );
   }
 
@@ -899,6 +913,7 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
     return (snapshot.negativeTargets ?? []).find(
       (nt) =>
         nt.campaignId === amazonCampaignId &&
+        negativeIsLive(nt.state) &&
         nt.expression.some(
           (entry) =>
             entry.type === "ASIN_SAME_AS" &&
@@ -1196,19 +1211,24 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
             "Campaign no longer exists locally; re-sync before rolling back",
           );
         }
+        const adGroup = action.adGroupId
+          ? await structure.getAdGroup(db, action.adGroupId)
+          : null;
         const liveNegative = snapshot.negativeKeywords.find(
-          (item) => item.negativeKeywordId === action.amazonEntityId,
+          (item) =>
+            item.negativeKeywordId === action.amazonEntityId &&
+            negativeIsLive(item.state),
         );
         if (
           liveNegative &&
           (liveNegative.campaignId !== campaign.amazonCampaignId ||
-            liveNegative.adGroupId !== null ||
+            liveNegative.adGroupId !== (adGroup?.amazonAdGroupId ?? null) ||
             liveNegative.keywordText.trim().toLowerCase() !==
               action.searchTerm.trim().toLowerCase())
         ) {
           throw conflict(
             "STALE_BEFORE_STATE",
-            "The Amazon negative keyword no longer matches the action being rolled back",
+            "The Amazon negative keyword no longer matches the action being applied",
           );
         }
         translated.push({
@@ -1221,7 +1241,64 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
           },
           amazonTargetId: action.amazonEntityId,
           amazonCampaignId: campaign.amazonCampaignId,
-          amazonAdGroupId: null,
+          amazonAdGroupId: adGroup?.amazonAdGroupId ?? null,
+          preSatisfied: liveNegative === undefined,
+        });
+      } else if (action.actionType === "remove_negative_target") {
+        if (
+          !snapshot ||
+          !action.amazonEntityId ||
+          !action.campaignId ||
+          !action.searchTerm
+        ) {
+          throw new ApiError(
+            500,
+            "INTERNAL",
+            "Malformed remove_negative_target action",
+          );
+        }
+        const campaign = await structure.getCampaign(db, action.campaignId);
+        if (!campaign) {
+          throw conflict(
+            "STALE_BEFORE_STATE",
+            "Campaign no longer exists locally; re-sync before applying",
+          );
+        }
+        const adGroup = action.adGroupId
+          ? await structure.getAdGroup(db, action.adGroupId)
+          : null;
+        const asin = action.searchTerm.trim().toUpperCase();
+        const liveNegative = (snapshot.negativeTargets ?? []).find(
+          (item) =>
+            item.negativeTargetId === action.amazonEntityId &&
+            negativeIsLive(item.state),
+        );
+        if (
+          liveNegative &&
+          (liveNegative.campaignId !== campaign.amazonCampaignId ||
+            liveNegative.adGroupId !== (adGroup?.amazonAdGroupId ?? null) ||
+            !liveNegative.expression.some(
+              (entry) =>
+                entry.type === "ASIN_SAME_AS" &&
+                entry.value?.trim().toUpperCase() === asin,
+            ))
+        ) {
+          throw conflict(
+            "STALE_BEFORE_STATE",
+            "The Amazon negative target no longer matches the action being applied",
+          );
+        }
+        translated.push({
+          action,
+          gatewayAction: {
+            actionId: action.id,
+            kind: "remove_negative_target",
+            negativeTargetId: action.amazonEntityId,
+            scope: action.adGroupId ? "ad_group" : "campaign",
+          },
+          amazonTargetId: action.amazonEntityId,
+          amazonCampaignId: campaign.amazonCampaignId,
+          amazonAdGroupId: adGroup?.amazonAdGroupId ?? null,
           preSatisfied: liveNegative === undefined,
         });
       } else if (
@@ -1716,7 +1793,8 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
             status: "applied",
             amazonResponse: {
               code:
-                t.action.actionType === "remove_negative_exact"
+                t.action.actionType === "remove_negative_exact" ||
+                t.action.actionType === "remove_negative_target"
                   ? "ALREADY_ABSENT"
                   : "ALREADY_PRESENT",
             },
@@ -1863,7 +1941,19 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
           verification
         ) {
           verified = !verification.negativeKeywords.some(
-            (item) => item.negativeKeywordId === t.amazonTargetId,
+            (item) =>
+              item.negativeKeywordId === t.amazonTargetId &&
+              negativeIsLive(item.state),
+          );
+        } else if (
+          t.action.actionType === "remove_negative_target" &&
+          t.amazonTargetId &&
+          verification
+        ) {
+          verified = !(verification.negativeTargets ?? []).some(
+            (item) =>
+              item.negativeTargetId === t.amazonTargetId &&
+              negativeIsLive(item.state),
           );
         } else if (
           (t.action.actionType === "update_campaign_state" ||
@@ -2496,6 +2586,124 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
       return toResult(loaded.set, loaded.actions);
     },
 
+    async createNegativeRemovalChangeSet(auth, amazonCampaignId, input, meta) {
+      const campaign = await structure.findCampaignByAmazonId(
+        db,
+        auth.workspaceId,
+        amazonCampaignId,
+      );
+      if (!campaign) throw notFound("Unknown campaign");
+      let spec: changes.ChangeActionInsert;
+      if (input.kind === "keyword") {
+        const negative = await structure.findNegativeKeywordByAmazonId(
+          db,
+          campaign.id,
+          input.negativeId,
+        );
+        if (!negative) throw notFound("Unknown negative keyword");
+        const scope = negative.adGroupId ? "ad_group" : "campaign";
+        spec = {
+          recommendationId: null,
+          actionType: "remove_negative_exact",
+          campaignId: campaign.id,
+          adGroupId: negative.adGroupId,
+          targetId: null,
+          searchTerm: negative.keywordText,
+          beforeValue: null,
+          afterValue: null,
+          amazonEntityId: negative.amazonNegativeKeywordId,
+          entityName: campaign.name,
+          beforeState: {
+            scope,
+            matchType: negative.matchType,
+            present: true,
+          },
+          afterState: {
+            scope,
+            matchType: negative.matchType,
+            present: false,
+          },
+          fingerprint: "",
+        };
+      } else {
+        const negative = await structure.findNegativeTargetByAmazonId(
+          db,
+          campaign.id,
+          input.negativeId,
+        );
+        if (!negative) throw notFound("Unknown negative target");
+        const scope = negative.adGroupId ? "ad_group" : "campaign";
+        spec = {
+          recommendationId: null,
+          actionType: "remove_negative_target",
+          campaignId: campaign.id,
+          adGroupId: negative.adGroupId,
+          targetId: null,
+          searchTerm: negative.expressionAsin,
+          beforeValue: null,
+          afterValue: null,
+          amazonEntityId: negative.amazonNegativeTargetId,
+          entityName: campaign.name,
+          beforeState: { scope, targetType: "ASIN_SAME_AS", present: true },
+          afterState: { scope, targetType: "ASIN_SAME_AS", present: false },
+          fingerprint: "",
+        };
+      }
+      const setFingerprint = buildChangeSetFingerprint({
+        profileId: campaign.profileId,
+        creatorUserId: auth.userId,
+        actions: [
+          { kind: "negative_removal", campaignId: amazonCampaignId },
+          spec,
+        ],
+      });
+      const created = await changes.createChangeSet(pool, {
+        profileId: campaign.profileId,
+        creatorUserId: auth.userId,
+        fingerprint: setFingerprint,
+        kind: "recommendation",
+        metadata: {
+          strategy: "negative_removal",
+          amazonCampaignId,
+          campaignName: campaign.name,
+          negativeKind: input.kind,
+          negativeId: input.negativeId,
+        },
+        actions: [
+          {
+            ...spec,
+            fingerprint: buildChangeActionFingerprint({
+              changeSetId: setFingerprint,
+              actionType: spec.actionType,
+              targetId: spec.targetId,
+              campaignId: spec.campaignId,
+              adGroupId: spec.adGroupId,
+              searchTerm: spec.searchTerm,
+              beforeValue: spec.beforeValue,
+              afterValue: spec.afterValue,
+              amazonEntityId: spec.amazonEntityId,
+              beforeState: spec.beforeState,
+              afterState: spec.afterState,
+            }),
+          },
+        ],
+      });
+      await recordAudit(
+        auth,
+        meta,
+        "campaign.negatives.remove",
+        created.changeSet.id,
+        {
+          amazonCampaignId,
+          negativeKind: input.kind,
+          negativeId: input.negativeId,
+          replayed: !created.created,
+        },
+      );
+      const loaded = await loadSet(auth, created.changeSet.id);
+      return toResult(loaded.set, loaded.actions);
+    },
+
     async createSearchTermNegativesChangeSets(auth, detail, campaignIds, meta) {
       // Only campaigns the detail resolved for this market, still enabled.
       // Amazon states arrive uppercase ("ENABLED"); normalize like the other
@@ -2825,6 +3033,28 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
         spec = {
           recommendationId: null,
           actionType: "remove_negative_exact",
+          campaignId: original.campaignId,
+          adGroupId: null,
+          targetId: null,
+          searchTerm: original.searchTerm,
+          beforeValue: null,
+          afterValue: null,
+          rollbackOfId: original.id,
+          amazonEntityId: original.amazonEntityId,
+          entityName: original.entityName,
+          beforeState: original.afterState,
+          afterState: original.beforeState,
+          fingerprint: "",
+        };
+      } else if (
+        original.actionType === "add_negative_target" &&
+        original.amazonEntityId &&
+        original.campaignId &&
+        original.searchTerm
+      ) {
+        spec = {
+          recommendationId: null,
+          actionType: "remove_negative_target",
           campaignId: original.campaignId,
           adGroupId: null,
           targetId: null,

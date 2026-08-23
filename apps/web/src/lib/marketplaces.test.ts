@@ -66,7 +66,7 @@ describe("marketplace country choices", () => {
 });
 
 describe("displayCurrencyOptions", () => {
-  it("offers enabled-market currencies plus USD/EUR/GBP, sorted", () => {
+  it("offers enabled-market currencies plus USD/EUR/GBP/ILS, sorted", () => {
     const options = marketplaceOptions([
       profile("US", "USD"),
       profile("JP", "JPY"),
@@ -76,6 +76,7 @@ describe("displayCurrencyOptions", () => {
     expect(displayCurrencyOptions(options)).toEqual([
       "EUR",
       "GBP",
+      "ILS",
       "JPY",
       "USD",
     ]);

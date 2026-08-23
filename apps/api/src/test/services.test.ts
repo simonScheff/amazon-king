@@ -1178,6 +1178,550 @@ describe("cannibalization resolution", () => {
   });
 });
 
+describe("negative removal (re-include)", () => {
+  function setupRemoval() {
+    const db = new FakeDb();
+    db.seedWorkspace();
+    db.seedUser("owner@example.com");
+    const connection = db.seedConnection();
+    const profile = db.seedProfile({
+      connection_id: connection.id,
+      write_enabled: true,
+      currency_code: "GBP",
+      profile_id: "1665213640406890",
+    });
+    db.seedCampaign({
+      id: "10",
+      profile_id: profile.id,
+      amazon_campaign_id: "camp-1",
+      name: "Colouring book – exact",
+      targeting_type: "manual",
+    });
+    db.seedAdGroup({
+      id: "20",
+      profile_id: profile.id,
+      campaign_id: "10",
+      amazon_ad_group_id: "ag-1",
+    });
+    return { db, profile };
+  }
+
+  function removalGateway(
+    overrides: Record<string, unknown> = {},
+  ): Pick<
+    AmazonAdsGateway,
+    "syncCampaignStructure" | "getCampaignBidControls" | "applyActions"
+  > {
+    return {
+      syncCampaignStructure: vi.fn(async () => {
+        throw new Error("Unexpected structure read");
+      }),
+      getCampaignBidControls: vi.fn(async () => {
+        throw new Error("Unexpected Max CPC controls call");
+      }),
+      applyActions: vi.fn(async () => []),
+      ...overrides,
+    } as unknown as Pick<
+      AmazonAdsGateway,
+      "syncCampaignStructure" | "getCampaignBidControls" | "applyActions"
+    >;
+  }
+
+  function removalService(
+    db: FakeDb,
+    gateway: Pick<
+      AmazonAdsGateway,
+      "syncCampaignStructure" | "getCampaignBidControls" | "applyActions"
+    >,
+  ) {
+    return createChangeService({
+      db: db as never,
+      pool: db.asPool() as never,
+      config: testConfig(),
+      logger: fakeLogger(),
+      gateway,
+    });
+  }
+
+  function snapshotWithNegativeTarget(
+    present: boolean,
+    asin = "B0BLOCKED1",
+  ): StructureSnapshot {
+    return {
+      profileId: "amz-profile-1",
+      retrievedAt: "2026-08-13T10:00:00.000Z",
+      campaigns: [],
+      adGroups: [],
+      ads: [],
+      keywords: [],
+      targets: [],
+      negativeKeywords: [],
+      negativeTargets: present
+        ? [
+            {
+              negativeTargetId: "neg-target-1",
+              campaignId: "camp-1",
+              adGroupId: null,
+              state: "ENABLED",
+              expression: [{ type: "ASIN_SAME_AS", value: asin }],
+              raw: {},
+            },
+          ]
+        : [],
+    };
+  }
+
+  function snapshotWithAdGroupNegative(present: boolean): StructureSnapshot {
+    return {
+      profileId: "amz-profile-1",
+      retrievedAt: "2026-08-13T10:00:00.000Z",
+      campaigns: [],
+      adGroups: [],
+      ads: [],
+      keywords: [],
+      targets: [],
+      negativeKeywords: present
+        ? [
+            {
+              negativeKeywordId: "neg-ag-1",
+              campaignId: "camp-1",
+              adGroupId: "ag-1",
+              keywordText: "blocked term",
+              matchType: "NEGATIVE_EXACT",
+              state: "ENABLED",
+              raw: {},
+            },
+          ]
+        : [],
+    };
+  }
+
+  it("drafts a removal change set for a synced negative keyword", async () => {
+    const { db, profile } = setupRemoval();
+    db.seedNegativeKeyword({
+      profile_id: profile.id,
+      campaign_id: "10",
+      amazon_negative_keyword_id: "neg-1",
+      keyword_text: "tractor colouring book",
+    });
+    const gateway = removalGateway();
+    const service = removalService(db, gateway);
+
+    const result = await service.createNegativeRemovalChangeSet(
+      authFixture(),
+      "camp-1",
+      { kind: "keyword", negativeId: "neg-1" },
+      META,
+    );
+
+    expect(result.changeSet.status).toBe("draft");
+    expect(db.tables.changeActions).toHaveLength(1);
+    expect(db.tables.changeActions[0]).toMatchObject({
+      action_type: "remove_negative_exact",
+      campaign_id: "10",
+      ad_group_id: null,
+      search_term: "tractor colouring book",
+      amazon_entity_id: "neg-1",
+      before_state: {
+        scope: "campaign",
+        matchType: "NEGATIVE_EXACT",
+        present: true,
+      },
+      after_state: {
+        scope: "campaign",
+        matchType: "NEGATIVE_EXACT",
+        present: false,
+      },
+    });
+    expect(db.tables.changeSets[0]!.metadata).toMatchObject({
+      strategy: "negative_removal",
+      amazonCampaignId: "camp-1",
+    });
+    expect(gateway.applyActions).not.toHaveBeenCalled();
+  });
+
+  it("drafts a removal change set for a synced negative ASIN target", async () => {
+    const { db, profile } = setupRemoval();
+    db.seedNegativeTarget({
+      profile_id: profile.id,
+      campaign_id: "10",
+      amazon_negative_target_id: "neg-target-1",
+      expression_asin: "B0BLOCKED1",
+    });
+    const gateway = removalGateway();
+    const service = removalService(db, gateway);
+
+    const result = await service.createNegativeRemovalChangeSet(
+      authFixture(),
+      "camp-1",
+      { kind: "target", negativeId: "neg-target-1" },
+      META,
+    );
+
+    expect(result.changeSet.status).toBe("draft");
+    expect(db.tables.changeActions[0]).toMatchObject({
+      action_type: "remove_negative_target",
+      campaign_id: "10",
+      ad_group_id: null,
+      search_term: "B0BLOCKED1",
+      amazon_entity_id: "neg-target-1",
+      before_state: {
+        scope: "campaign",
+        targetType: "ASIN_SAME_AS",
+        present: true,
+      },
+      after_state: {
+        scope: "campaign",
+        targetType: "ASIN_SAME_AS",
+        present: false,
+      },
+    });
+    expect(gateway.applyActions).not.toHaveBeenCalled();
+  });
+
+  it("replays an identical removal submission instead of duplicating it", async () => {
+    const { db, profile } = setupRemoval();
+    db.seedNegativeKeyword({
+      profile_id: profile.id,
+      campaign_id: "10",
+      amazon_negative_keyword_id: "neg-1",
+    });
+    const service = removalService(db, removalGateway());
+
+    const first = await service.createNegativeRemovalChangeSet(
+      authFixture(),
+      "camp-1",
+      { kind: "keyword", negativeId: "neg-1" },
+      META,
+    );
+    const second = await service.createNegativeRemovalChangeSet(
+      authFixture(),
+      "camp-1",
+      { kind: "keyword", negativeId: "neg-1" },
+      META,
+    );
+
+    expect(second.changeSet.id).toBe(first.changeSet.id);
+    expect(db.tables.changeSets).toHaveLength(1);
+    expect(db.tables.changeActions).toHaveLength(1);
+  });
+
+  it("rejects a removal for an unknown negative id", async () => {
+    const { db } = setupRemoval();
+    const service = removalService(db, removalGateway());
+
+    await expect(
+      service.createNegativeRemovalChangeSet(
+        authFixture(),
+        "camp-1",
+        { kind: "keyword", negativeId: "nope" },
+        META,
+      ),
+    ).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  it("applies a negative target removal and verifies by absence", async () => {
+    const { db, profile } = setupRemoval();
+    const set = db.seedChangeSet({
+      profile_id: profile.id,
+      status: "previewed",
+    });
+    db.seedChangeAction({
+      change_set_id: set.id,
+      action_type: "remove_negative_target",
+      campaign_id: "10",
+      ad_group_id: null,
+      target_id: null,
+      search_term: "B0BLOCKED1",
+      before_value: null,
+      after_value: null,
+      amazon_entity_id: "neg-target-1",
+      before_state: {
+        scope: "campaign",
+        targetType: "ASIN_SAME_AS",
+        present: true,
+      },
+      after_state: {
+        scope: "campaign",
+        targetType: "ASIN_SAME_AS",
+        present: false,
+      },
+    });
+    const gateway = removalGateway({
+      syncCampaignStructure: vi
+        .fn()
+        .mockResolvedValueOnce(snapshotWithNegativeTarget(true))
+        .mockResolvedValueOnce(snapshotWithNegativeTarget(false)),
+      applyActions: vi.fn(
+        async (changeSet: {
+          actions: Array<{ actionId: string; kind: string }>;
+        }) =>
+          changeSet.actions.map((item) => ({
+            actionId: item.actionId,
+            status: "applied" as const,
+            code: "SUCCESS",
+          })),
+      ),
+    });
+    const service = removalService(db, gateway);
+
+    const applied = await service.applyChangeSet(
+      authFixture(),
+      set.id as string,
+      META,
+    );
+
+    expect(applied.actions[0]).toMatchObject({ status: "applied" });
+    expect(gateway.applyActions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actions: [
+          expect.objectContaining({
+            kind: "remove_negative_target",
+            negativeTargetId: "neg-target-1",
+            scope: "campaign",
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("blocks the apply when the live negative target no longer matches", async () => {
+    const { db, profile } = setupRemoval();
+    const set = db.seedChangeSet({
+      profile_id: profile.id,
+      status: "previewed",
+    });
+    db.seedChangeAction({
+      change_set_id: set.id,
+      action_type: "remove_negative_target",
+      campaign_id: "10",
+      ad_group_id: null,
+      target_id: null,
+      search_term: "B0BLOCKED1",
+      before_value: null,
+      after_value: null,
+      amazon_entity_id: "neg-target-1",
+    });
+    const gateway = removalGateway({
+      // The id still exists on Amazon but now blocks a different ASIN.
+      syncCampaignStructure: vi.fn(async () =>
+        snapshotWithNegativeTarget(true, "B0OTHERASIN"),
+      ),
+    });
+    const service = removalService(db, gateway);
+
+    await expect(
+      service.applyChangeSet(authFixture(), set.id as string, META),
+    ).rejects.toMatchObject({ statusCode: 409, code: "STALE_BEFORE_STATE" });
+    expect(gateway.applyActions).not.toHaveBeenCalled();
+  });
+
+  it("removes an ad-group-level negative keyword at the right scope", async () => {
+    const { db, profile } = setupRemoval();
+    const set = db.seedChangeSet({
+      profile_id: profile.id,
+      status: "previewed",
+    });
+    db.seedChangeAction({
+      change_set_id: set.id,
+      action_type: "remove_negative_exact",
+      campaign_id: "10",
+      ad_group_id: "20",
+      target_id: null,
+      search_term: "blocked term",
+      before_value: null,
+      after_value: null,
+      amazon_entity_id: "neg-ag-1",
+    });
+    const gateway = removalGateway({
+      syncCampaignStructure: vi
+        .fn()
+        .mockResolvedValueOnce(snapshotWithAdGroupNegative(true))
+        .mockResolvedValueOnce(snapshotWithAdGroupNegative(false)),
+      applyActions: vi.fn(
+        async (changeSet: {
+          actions: Array<{ actionId: string; kind: string }>;
+        }) =>
+          changeSet.actions.map((item) => ({
+            actionId: item.actionId,
+            status: "applied" as const,
+            code: "SUCCESS",
+          })),
+      ),
+    });
+    const service = removalService(db, gateway);
+
+    const applied = await service.applyChangeSet(
+      authFixture(),
+      set.id as string,
+      META,
+    );
+
+    expect(applied.actions[0]).toMatchObject({ status: "applied" });
+    expect(gateway.applyActions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actions: [
+          expect.objectContaining({
+            kind: "remove_negative_exact",
+            negativeKeywordId: "neg-ag-1",
+            scope: "ad_group",
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("verifies a removal when Amazon still lists the negative as DELETED", async () => {
+    const { db, profile } = setupRemoval();
+    const set = db.seedChangeSet({
+      profile_id: profile.id,
+      status: "previewed",
+    });
+    db.seedChangeAction({
+      change_set_id: set.id,
+      action_type: "remove_negative_exact",
+      campaign_id: "10",
+      ad_group_id: null,
+      target_id: null,
+      search_term: "farming coloring book",
+      before_value: null,
+      after_value: null,
+      amazon_entity_id: "neg-1",
+    });
+    // Amazon's delete marks a negative DELETED instead of purging it, and the
+    // list endpoints keep returning it — the verification read must treat that
+    // as removed.
+    const snapshotWithState = (state: string): StructureSnapshot => ({
+      profileId: "amz-profile-1",
+      retrievedAt: "2026-08-13T10:00:00.000Z",
+      campaigns: [],
+      adGroups: [],
+      ads: [],
+      keywords: [],
+      targets: [],
+      negativeKeywords: [
+        {
+          negativeKeywordId: "neg-1",
+          campaignId: "camp-1",
+          adGroupId: null,
+          keywordText: "farming coloring book",
+          matchType: "NEGATIVE_EXACT",
+          state,
+          raw: {},
+        },
+      ],
+    });
+    const gateway = removalGateway({
+      syncCampaignStructure: vi
+        .fn()
+        .mockResolvedValueOnce(snapshotWithState("ENABLED"))
+        .mockResolvedValueOnce(snapshotWithState("DELETED")),
+      applyActions: vi.fn(
+        async (changeSet: {
+          actions: Array<{ actionId: string; kind: string }>;
+        }) =>
+          changeSet.actions.map((item) => ({
+            actionId: item.actionId,
+            status: "applied" as const,
+            code: "SUCCESS",
+          })),
+      ),
+    });
+    const service = removalService(db, gateway);
+
+    const applied = await service.applyChangeSet(
+      authFixture(),
+      set.id as string,
+      META,
+    );
+
+    expect(applied.actions[0]).toMatchObject({ status: "applied" });
+  });
+
+  it("rolls a verified negative ASIN target back by deleting its Amazon entity", async () => {
+    const { db, profile } = setupRemoval();
+    const set = db.seedChangeSet({
+      profile_id: profile.id,
+      status: "previewed",
+    });
+    const action = db.seedChangeAction({
+      change_set_id: set.id,
+      recommendation_id: null,
+      action_type: "add_negative_target",
+      campaign_id: "10",
+      ad_group_id: null,
+      target_id: null,
+      search_term: "B0BLOCKED1",
+      before_value: null,
+      after_value: null,
+      entity_name: "Colouring book – exact",
+      before_state: {
+        scope: "campaign",
+        targetType: "ASIN_SAME_AS",
+        present: false,
+      },
+      after_state: {
+        scope: "campaign",
+        targetType: "ASIN_SAME_AS",
+        present: true,
+      },
+    });
+    const gateway = removalGateway({
+      syncCampaignStructure: vi
+        .fn()
+        // Apply: absent before, present after. Rollback: present, then absent.
+        .mockResolvedValueOnce(snapshotWithNegativeTarget(false))
+        .mockResolvedValueOnce(snapshotWithNegativeTarget(true))
+        .mockResolvedValueOnce(snapshotWithNegativeTarget(true))
+        .mockResolvedValueOnce(snapshotWithNegativeTarget(false)),
+      applyActions: vi.fn(
+        async (changeSet: {
+          actions: Array<{ actionId: string; kind: string }>;
+        }) =>
+          changeSet.actions.map((item) => ({
+            actionId: item.actionId,
+            status: "applied" as const,
+            code: "SUCCESS",
+            ...(item.kind === "add_negative_target"
+              ? { amazonEntityId: "neg-target-1" }
+              : {}),
+          })),
+      ),
+    });
+    const service = removalService(db, gateway);
+
+    const applied = await service.applyChangeSet(
+      authFixture(),
+      set.id as string,
+      META,
+    );
+    expect(applied.actions[0]).toMatchObject({ status: "applied" });
+    expect(db.tables.changeActions[0]!.amazon_entity_id).toBe("neg-target-1");
+
+    const rollback = await service.rollbackAction(
+      authFixture(),
+      action.id as string,
+      META,
+    );
+    expect(rollback.changeSet.status).toBe("applied");
+    expect(rollback.actions[0]).toMatchObject({
+      actionType: "remove_negative_target",
+      status: "applied",
+    });
+    expect(db.tables.changeActions[0]!.status).toBe("rolled_back");
+    expect(gateway.applyActions).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        actions: [
+          expect.objectContaining({
+            kind: "remove_negative_target",
+            negativeTargetId: "neg-target-1",
+          }),
+        ],
+      }),
+    );
+  });
+});
+
 describe("conversion finding resolution", () => {
   function setupConversion(options: { mapBook?: boolean } = {}) {
     const db = new FakeDb();

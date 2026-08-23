@@ -299,6 +299,14 @@ export interface AddNegativeTargetAction {
   expressionAsin: string;
 }
 
+/** Delete a synced negative ASIN target, re-including the product. */
+export interface RemoveNegativeTargetAction {
+  actionId: string;
+  kind: "remove_negative_target";
+  negativeTargetId: string;
+  scope: "campaign" | "ad_group";
+}
+
 /** Create a new Sponsored Products campaign (human-approved creation). */
 export interface CreateCampaignAction {
   actionId: string;
@@ -395,6 +403,7 @@ export type ChangeAction =
   | AddNegativeExactAction
   | RemoveNegativeExactAction
   | AddNegativeTargetAction
+  | RemoveNegativeTargetAction
   | CreateCampaignAction
   | CreateAdGroupAction
   | CreateProductAdAction
