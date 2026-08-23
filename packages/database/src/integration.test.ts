@@ -70,6 +70,13 @@ import {
   buildChangeSetFingerprint,
   buildChangeActionFingerprint,
 } from "./fingerprint.js";
+import {
+  createApiToken,
+  findActiveApiTokenByHash,
+  listApiTokens,
+  revokeApiToken,
+  touchApiToken,
+} from "./repositories/api-tokens.js";
 
 /**
  * Integration tests against a real PostgreSQL database.
@@ -128,6 +135,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       "0014",
       "0015",
       "0016",
+      "0017",
     ]);
     const again = await migrate(pool);
     expect(again).toEqual([]);
@@ -2360,5 +2368,42 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         economicsMissing: false,
       },
     ]);
+  });
+
+  it("stores api tokens hash-only and revokes them per workspace", async () => {
+    const workspace = await pool.query<{ id: string }>(
+      `insert into workspaces (name) values ('token workspace') returning id`,
+    );
+    const workspaceId = workspace.rows[0]!.id;
+
+    const created = await createApiToken(pool, {
+      workspaceId,
+      label: "ci-agent",
+      tokenHash: "a".repeat(64),
+    });
+    expect(created.scopes).toEqual(["mcp:read"]);
+    expect(created.revokedAt).toBeNull();
+
+    // The hash is unique; a duplicate presentation converges to an error.
+    await expect(
+      createApiToken(pool, {
+        workspaceId,
+        label: "duplicate",
+        tokenHash: "a".repeat(64),
+      }),
+    ).rejects.toThrow();
+
+    const found = await findActiveApiTokenByHash(pool, "a".repeat(64));
+    expect(found?.id).toBe(created.id);
+    expect(await findActiveApiTokenByHash(pool, "b".repeat(64))).toBeNull();
+
+    await touchApiToken(pool, created.id);
+    const listed = await listApiTokens(pool, workspaceId);
+    expect(listed[0]?.lastUsedAt).not.toBeNull();
+
+    // Tokens are workspace-scoped: a foreign workspace cannot revoke them.
+    expect(await revokeApiToken(pool, "999999", created.id)).toBe(false);
+    expect(await revokeApiToken(pool, workspaceId, created.id)).toBe(true);
+    expect(await findActiveApiTokenByHash(pool, "a".repeat(64))).toBeNull();
   });
 });

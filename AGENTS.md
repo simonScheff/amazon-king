@@ -13,13 +13,15 @@ This file holds only what applies to every task. Detail lives next to the code.
 | `apps/web`            | Dashboard, PWA install gate, product filter, campaign wizard   |
 | `apps/api`            | Routes, guarded write flow, auth, the `books` filter           |
 | `apps/worker`         | Job loop, `metrics_sync` orchestration, recommendation runs    |
+| `apps/mcp`            | MCP server for AI agents, tool surface, machine tokens         |
 | `packages/database`   | Migrations, repositories, job queue, schema decisions          |
 | `packages/optimizer`  | Purity contract, the nine rules, negatives and copy accounting |
 | `packages/amazon-ads` | Gateway boundary, token manager, entity creation chain         |
 
 `packages/contracts` (shared validated request/response types),
-`packages/crypto`, and `packages/observability` are small enough to read
-directly.
+`packages/read-service` (the read-side service shared by `apps/api` and
+`apps/mcp`), `packages/crypto`, and `packages/observability` are small enough
+to read directly.
 
 **Procedural workflows are skills in `.agents/skills/`:**
 
@@ -87,11 +89,13 @@ apps/
   web/                 dashboard
   api/                 browser-facing backend and OAuth callback
   worker/              imports, reports, analysis, and scheduled jobs
+  mcp/                 read-only MCP server for external AI agents
 packages/
   amazon-ads/          OAuth client, regional routing, API adapters (gateway)
   optimizer/           calculations and deterministic rules
   database/            migrations, queries, and repositories
   contracts/           shared validated request/response types
+  read-service/        read-side service shared by api and mcp
   observability/       logging, metrics, and error reporting
 ```
 
@@ -161,6 +165,12 @@ These are binding design constraints; code must follow them.
   result handling, post-write re-read verification, and audit logging. Rollback
   is a compensating API action, not a DB undo. A global kill switch disables all
   writes immediately.
+- **MCP server is read-only.** `apps/mcp` exposes workspace data to external AI
+  agents over stdio (local) or Streamable HTTP (remote). It never touches the
+  guarded-write path — applying a change always requires the owner's dashboard
+  session. HTTP access uses owner-issued machine tokens (`api_tokens` table,
+  SHA-256 hashes only, scope `mcp:read`, 120 req/min per token, localhost bind
+  by default) and every tool call is audit-logged. Never add a write tool.
 
 ## Data model conventions
 

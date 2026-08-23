@@ -17,7 +17,7 @@ import { createSmtpMagicLinkSender } from "./email.js";
 import { buildServer } from "./server.js";
 import { createAmazonService } from "./services/amazon.js";
 import { createChangeService } from "./services/changes.js";
-import { createReadService } from "./services/read.js";
+import { createReadService } from "@amazon-king/read-service";
 import { createSessionService } from "./services/session.js";
 
 /**

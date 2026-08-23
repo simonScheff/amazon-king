@@ -72,6 +72,21 @@ links are printed to the API log. SMTP is mandatory in production.
 Keep `KILL_SWITCH=true` while developing. Profiles also remain read-only until
 write access is explicitly enabled for each profile.
 
+### MCP server for AI agents
+
+The repo ships an MCP server so AI agents (Claude, Kimi, Cursor, …) can query
+campaign metrics, search-term research, recommendations, and sync status. It
+is read-only: applying changes always stays in the dashboard.
+
+```sh
+make mcp   # stdio transport, for locally registered agent clients
+```
+
+For remote agents, set `MCP_TRANSPORT=http`, issue a machine token with
+`pnpm exec tsx scripts/mcp-token.ts issue <label>`, and point the client at
+`http://127.0.0.1:3100/mcp` with `Authorization: Bearer <token>`. See
+[docs/mcp-server-plan.md](docs/mcp-server-plan.md).
+
 ## Self-hosting
 
 The included production Compose stack runs PostgreSQL, migrations, the API,
@@ -103,6 +118,7 @@ apps/
   web/          React dashboard
   api/          Fastify browser API, sessions, OAuth, guarded writes
   worker/       report pipeline, sync jobs, recommendation runs
+  mcp/          MCP server exposing read-only data to AI agents
 packages/
   amazon-ads/   OAuth, token manager, regional gateway, API adapters
   contracts/    shared Zod boundary schemas
@@ -110,6 +126,7 @@ packages/
   database/     migrations, repositories, PostgreSQL job queue
   observability/ structured logging and secret redaction
   optimizer/    pure deterministic recommendation rules and guardrails
+  read-service/ read-side service shared by the API and MCP server
 deploy/         production web proxy configuration
 docs/           product plan and operator documentation
 ```

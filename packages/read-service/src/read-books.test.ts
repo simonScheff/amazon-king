@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import type { FastifyBaseLogger as Logger } from "fastify";
-import type { ApiConfig } from "../config.js";
+import type { ReadServiceLogger as Logger } from "./types.js";
+import type { ReadServiceConfig as ApiConfig } from "./types.js";
 import type { AuthContext } from "./types.js";
 import { createReadService } from "./read.js";
-import { FakeDb } from "../test/fake-db.js";
+import { FakeDb } from "@amazon-king/database/testing";
 
 const auth: AuthContext = {
   sessionId: "session-1",

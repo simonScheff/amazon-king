@@ -10,13 +10,12 @@ import type {
 } from "@amazon-king/amazon-ads";
 import type { ApiConfig } from "../config.js";
 import type { SearchTermDetail } from "@amazon-king/contracts";
-import { ApiError } from "../errors.js";
+import { ApiError, createReadService } from "@amazon-king/read-service";
 import { createSessionService } from "../services/session.js";
 import { createAmazonService } from "../services/amazon.js";
 import { createChangeService } from "../services/changes.js";
-import { createReadService } from "../services/read.js";
 import type { AuthContext, RequestMeta } from "../services/types.js";
-import { FakeDb } from "./fake-db.js";
+import { FakeDb } from "@amazon-king/database/testing";
 
 // -- shared fixtures ---------------------------------------------------------
 

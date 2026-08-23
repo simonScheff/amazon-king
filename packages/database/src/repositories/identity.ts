@@ -91,6 +91,18 @@ export async function findOrProvisionOwner(
   return { user, workspaceId };
 }
 
+/**
+ * The single workspace of this single-owner deployment, for machine readers
+ * (the MCP server) that have no session to derive it from. Null when the
+ * owner has not signed in yet.
+ */
+export async function getSingleWorkspaceId(db: Db): Promise<string | null> {
+  const result = await db.query<{ id: string }>(
+    `select id from workspaces order by created_at asc limit 1`,
+  );
+  return result.rows[0]?.id ?? null;
+}
+
 export interface Membership {
   workspaceId: string;
   userId: string;

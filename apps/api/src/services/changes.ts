@@ -42,12 +42,15 @@ import {
 import type { FastifyBaseLogger as Logger } from "fastify";
 import { z } from "zod";
 import type { ApiConfig } from "../config.js";
-import { ApiError, conflict, forbidden, notFound } from "../errors.js";
 import {
+  ApiError,
+  conflict,
+  forbidden,
+  notFound,
   isoDate,
   toContractChangeAction,
   toContractChangeSet,
-} from "../serialize.js";
+} from "@amazon-king/read-service";
 import type {
   AuthContext,
   ChangeService,

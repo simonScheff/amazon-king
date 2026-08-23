@@ -100,6 +100,7 @@ export default withMermaid(
           text: "Reference",
           items: [
             { text: "HTTP API", link: "/reference/api" },
+            { text: "MCP server", link: "/reference/mcp-server" },
             { text: "Environment variables", link: "/reference/environment-variables" },
             { text: "Optimization rules", link: "/reference/optimization-rules" },
             { text: "Error codes", link: "/reference/errors" },

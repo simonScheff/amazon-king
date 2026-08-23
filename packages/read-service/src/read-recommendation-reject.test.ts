@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { FastifyBaseLogger as Logger } from "fastify";
+import type { ReadServiceLogger as Logger } from "./types.js";
 import { recommendations } from "@amazon-king/database";
-import type { ApiConfig } from "../config.js";
+import type { ReadServiceConfig as ApiConfig } from "./types.js";
 import { createReadService } from "./read.js";
 import type { AuthContext, RequestMeta } from "./types.js";
-import { FakeDb } from "../test/fake-db.js";
+import { FakeDb } from "@amazon-king/database/testing";
 
 const META: RequestMeta = { ip: "127.0.0.1", userAgent: "vitest" };
 const NOW = new Date("2026-08-18T12:00:00.000Z");

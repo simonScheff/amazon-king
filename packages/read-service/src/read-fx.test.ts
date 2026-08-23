@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { ApiConfig } from "../config.js";
+import type { ReadServiceConfig as ApiConfig } from "./types.js";
 import { createReadService } from "./read.js";
-import { FakeDb } from "../test/fake-db.js";
+import { FakeDb } from "@amazon-king/database/testing";
 
 /**
  * All-market dashboard view (docs/fx-rates-all-market-plan.md §4): summary

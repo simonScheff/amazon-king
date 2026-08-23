@@ -35,10 +35,8 @@ import {
   structure,
   type Db,
 } from "@amazon-king/database";
-import type { FastifyBaseLogger as Logger } from "fastify";
 import { z } from "zod";
-import type { ApiConfig } from "../config.js";
-import { ApiError, conflict, notFound } from "../errors.js";
+import { ApiError, conflict, notFound } from "./errors.js";
 import {
   amazonConsoleUrl,
   isoDate,
@@ -49,15 +47,21 @@ import {
   toContractRecommendation,
   toContractSyncRun,
   toContractSyncRunSummary,
-} from "../serialize.js";
-import type { AuthContext, ReadService, RequestMeta } from "./types.js";
+} from "./serialize.js";
+import type {
+  AuthContext,
+  ReadService,
+  ReadServiceConfig,
+  ReadServiceLogger,
+  RequestMeta,
+} from "./types.js";
 
 /** Read-side service: dashboard, profiles, campaigns, books, recommendations. */
 
 export interface ReadServiceDeps {
   db: Db;
-  config: ApiConfig;
-  logger: Logger;
+  config: ReadServiceConfig;
+  logger: ReadServiceLogger;
   now?: () => Date;
 }
 

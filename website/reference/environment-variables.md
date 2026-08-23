@@ -73,6 +73,19 @@ with a `missing_lwa_credentials` auth error until they are set.
 | `SCHEDULE_TICK_MS`               | `900000` (15 min)  | `schedule_tick` self-rescheduling interval. |
 | `FX_RATES_BASE_URL`              | `https://api.frankfurter.dev` | Base URL of the Frankfurter-compatible FX API the daily `fx_sync` job fetches (`GET {base}/v2/rates?base=USD&from=…`). Keyless and quota-free; point at a self-hosted Frankfurter container to avoid the public instance. |
 
+## MCP server (`apps/mcp`)
+
+Read-only MCP server for external AI agents. Parsed by a zod schema at boot;
+only `DATABASE_URL` is required.
+
+| Variable        | Default  | Notes |
+| --------------- | -------- | ----- |
+| `DATABASE_URL`  | — (**required**) | PostgreSQL connection URL. |
+| `KILL_SWITCH`   | `true`   | Same semantics as the API; reported in status payloads. The MCP server never writes regardless. |
+| `MCP_TRANSPORT` | `stdio`  | `stdio` for local agent clients; `http` serves remote agents over Streamable HTTP (requires machine tokens — see [MCP server](./mcp-server)). |
+| `MCP_HOST`      | `127.0.0.1` | HTTP bind address. Expose beyond localhost only behind your own TLS-terminating proxy. |
+| `MCP_PORT`      | `3100`   | HTTP port. |
+
 ## Token encryption (`packages/crypto`)
 
 Used by both the API (writing tokens) and the worker (refreshing them).

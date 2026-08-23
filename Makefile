@@ -6,7 +6,7 @@ include .env
 export
 endif
 
-.PHONY: help install setup preflight db-up db-wait migrate run dev test typecheck lint build check prod-config prod-preflight prod-up prod-logs prod-stop stop clean
+.PHONY: help install setup preflight db-up db-wait migrate mcp mcp-token run dev test typecheck lint build check prod-config prod-preflight prod-up prod-logs prod-stop stop clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -35,6 +35,14 @@ db-up: ## Start local PostgreSQL (docker compose)
 migrate: ## Apply database migrations
 	@set -a; [ ! -f .env ] || . ./.env; set +a; \
 	pnpm exec tsx scripts/migrate.ts
+
+mcp: ## Start the MCP server (stdio; set MCP_TRANSPORT=http for remote agents)
+	@set -a; [ ! -f .env ] || . ./.env; set +a; \
+	pnpm exec tsx apps/mcp/src/index.ts
+
+mcp-token: ## Manage MCP machine tokens: make mcp-token ARGS="issue <label>"
+	@set -a; [ ! -f .env ] || . ./.env; set +a; \
+	pnpm exec tsx scripts/mcp-token.ts $(ARGS)
 
 run: setup preflight db-up migrate ## Run the entire application (db + api + worker + web)
 	@echo "Starting api (http://localhost:3000), worker, and web (http://localhost:5173) — Ctrl-C stops all"

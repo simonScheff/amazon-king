@@ -30,7 +30,7 @@ vi.mock("@amazon-king/database", () => ({
 }));
 
 import { books, dashboard, fx, metrics, profiles } from "@amazon-king/database";
-import type { ApiConfig } from "../config.js";
+import type { ReadServiceConfig as ApiConfig } from "./types.js";
 import { createReadService } from "./read.js";
 
 const US_PROFILE = {

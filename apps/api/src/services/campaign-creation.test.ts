@@ -7,10 +7,10 @@ import type {
 } from "@amazon-king/amazon-ads";
 import type { CampaignCreationCreate } from "@amazon-king/contracts";
 import type { ApiConfig } from "../config.js";
-import { ApiError } from "../errors.js";
+import { ApiError } from "@amazon-king/read-service";
 import { createChangeService } from "./changes.js";
 import type { AuthContext, RequestMeta } from "./types.js";
-import { FakeDb } from "../test/fake-db.js";
+import { FakeDb } from "@amazon-king/database/testing";
 
 // -- shared fixtures ---------------------------------------------------------
 

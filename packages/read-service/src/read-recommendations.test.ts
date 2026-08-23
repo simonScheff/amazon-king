@@ -21,7 +21,7 @@ vi.mock("@amazon-king/database", () => ({
 }));
 
 import { books, recommendations } from "@amazon-king/database";
-import type { ApiConfig } from "../config.js";
+import type { ReadServiceConfig as ApiConfig } from "./types.js";
 import { createReadService } from "./read.js";
 
 const RECOMMENDATION_ROW = {

@@ -40,7 +40,7 @@ import {
   notFound,
   unauthorized,
   validationError,
-} from "./errors.js";
+} from "@amazon-king/read-service";
 import type {
   AuthContext,
   ApiServices,

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { createLogger } from "@amazon-king/observability";
 import type { ApiConfig } from "./config.js";
-import { unauthorized } from "./errors.js";
+import { unauthorized } from "@amazon-king/read-service";
 import { buildServer } from "./server.js";
 import type {
   AuthContext,
