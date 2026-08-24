@@ -131,7 +131,8 @@ the finding does not have.
 `POST /api/campaigns/:campaignId/negatives` takes `{ searchTerms }` and drafts
 one `recommendation`-kind change set adding a campaign-level negative exact per
 term (a negative ASIN target when the term is an ASIN, via the shared
-`campaignNegativeSpec` the cannibalization flow also uses). Terms are deduped
+`campaignNegativeSpec` in `@amazon-king/database`'s `change-drafts.ts`, which
+the cannibalization and exclusion flows also use). Terms are deduped
 case-insensitively because Amazon matches negatives that way. Drafting writes
 nothing to Amazon, so it is not recent-auth gated; the apply in Change center
 keeps the gate.
@@ -143,6 +144,29 @@ params), and drafts one negatives change set per requested campaign that runs
 the term and is enabled, via `createCampaignNegativesChangeSet`. Unknown or
 non-enabled ids come back in `skippedCampaignIds` — never an error. Same
 guard posture: CSRF + WRITE rate limit, no recent-auth gate.
+
+`POST /api/search-terms/:term/exclusion` is the persistent, all-market
+variant. `createSearchTermExclusion` normalizes the term (trimmed +
+lowercased), upserts it into `search_term_exclusions`, then drafts one
+negatives change set per enabled profile covering the campaigns that
+actually served the term — resolved from search-term facts over the trailing
+30 days via `dashboard.listSearchTermServingCampaigns`, the same serving
+resolution the bulk-negatives route gets through the search-term detail —
+and are enabled and not already blocking it. Campaigns that never served the
+term get no action and are not counted in `skippedCampaigns` (that counts
+only serving campaigns needing no action); campaigns that start serving it
+later are covered by the worker's enforcement pass. Drafting goes through
+`createSearchTermExclusionSet` in `@amazon-king/database`'s
+`change-drafts.ts` (`metadata.strategy: "search_term_exclusion"`,
+fingerprint-idempotent) and audits `search_term.exclusion.create`.
+`DELETE /api/search-terms/:term/exclusion` removes only the list entry —
+negatives already applied on Amazon stay (the per-campaign removal flow
+re-includes them) and open drafts are unaffected.
+`GET /api/search-terms/exclusions` lists the workspace's exclusions through
+the read service (`listSearchTermExclusions`). All three sit next to the
+bulk-negatives route with the same guard posture (CSRF + WRITE rate, no
+recent-auth) because they only draft; applying the sets still goes through
+the guarded apply flow.
 
 `POST /api/recommendations/:id/reject` accepts an optional
 `{ snoozeDays: 1–365 }`, which shortens the default 60-day dismissal

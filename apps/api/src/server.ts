@@ -751,6 +751,46 @@ export async function buildServer(
     },
   );
 
+  // Persistent all-market exclusion: records the term in the workspace
+  // exclusion list and drafts one negatives change set per enabled profile
+  // covering the enabled campaigns that served the term and are not already
+  // blocking it. The drafts stay approval-gated in Change center, so like the
+  // other draft-creating routes there is no recent-auth gate here.
+  app.post(
+    "/api/search-terms/:term/exclusion",
+    { config: { rateLimit: WRITE_RATE } },
+    async (request) => {
+      const auth = await authenticate(request);
+      const { term } = request.params as { term: string };
+      return services.changes.createSearchTermExclusion(
+        auth,
+        term,
+        meta(request),
+      );
+    },
+  );
+
+  // Removes only the exclusion-list entry — negatives already applied on
+  // Amazon stay (re-including them is the per-campaign removal flow above).
+  app.delete(
+    "/api/search-terms/:term/exclusion",
+    { config: { rateLimit: WRITE_RATE } },
+    async (request) => {
+      const auth = await authenticate(request);
+      const { term } = request.params as { term: string };
+      return services.changes.removeSearchTermExclusion(
+        auth,
+        term,
+        meta(request),
+      );
+    },
+  );
+
+  app.get("/api/search-terms/exclusions", async (request) => {
+    const auth = await authenticate(request);
+    return services.read.listSearchTermExclusions(auth.workspaceId);
+  });
+
   // One-click guarded campaign updates (pause/enable, rename).
   app.post(
     "/api/campaigns/:campaignId/state",

@@ -13,7 +13,7 @@ import { SearchTermDetailPage } from "./search-term-detail";
 const mocks = vi.hoisted(() => ({
   useSearchTerm: vi.fn(),
   useProfiles: vi.fn(),
-  useCreateSearchTermNegatives: vi.fn(),
+  useSearchTermExclusions: vi.fn(),
   useSearch: vi.fn(),
   navigate: vi.fn(),
 }));
@@ -28,7 +28,9 @@ vi.mock("@tanstack/react-router", () => ({
 vi.mock("../api/endpoints", () => ({
   useSearchTerm: mocks.useSearchTerm,
   useProfiles: mocks.useProfiles,
-  useCreateSearchTermNegatives: mocks.useCreateSearchTermNegatives,
+  useSearchTermExclusions: mocks.useSearchTermExclusions,
+  useCreateSearchTermExclusion: () => ({ isPending: false, mutate: vi.fn() }),
+  useDeleteSearchTermExclusion: () => ({ isPending: false, mutate: vi.fn() }),
   useCountrySpend: () => ({ data: undefined }),
 }));
 
@@ -109,10 +111,11 @@ describe("SearchTermDetailPage", () => {
     mocks.useProfiles.mockReturnValue({ isPending: false, data: [] });
     mocks.useSearch.mockReset();
     mocks.useSearch.mockReturnValue({ days: 7 });
-    mocks.useCreateSearchTermNegatives.mockReset();
-    mocks.useCreateSearchTermNegatives.mockReturnValue({
-      mutate: vi.fn(),
+    mocks.useSearchTermExclusions.mockReset();
+    mocks.useSearchTermExclusions.mockReturnValue({
       isPending: false,
+      error: null,
+      data: { exclusions: [] },
     });
     mocks.navigate.mockReset();
     mocks.useSearchTerm.mockReturnValue({
@@ -274,6 +277,34 @@ describe("SearchTermDetailPage", () => {
 
     expect(
       screen.queryByRole("combobox", { name: "Copy to market" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers the persistent all-market exclude action in the header", () => {
+    render(<SearchTermDetailPage />);
+
+    expect(
+      screen.getByRole("button", { name: "Exclude everywhere" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the excluded state when the term is on the exclusion list", () => {
+    mocks.useSearchTermExclusions.mockReturnValue({
+      isPending: false,
+      error: null,
+      data: {
+        exclusions: [
+          { term: "fantasy books", createdAt: "2026-08-20T10:00:00.000Z" },
+        ],
+      },
+    });
+    render(<SearchTermDetailPage />);
+
+    expect(
+      screen.getByRole("button", { name: "Excluded everywhere" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Exclude everywhere" }),
     ).not.toBeInTheDocument();
   });
 

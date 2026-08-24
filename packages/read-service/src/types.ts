@@ -22,6 +22,7 @@ import type {
   RecommendationState,
   RecommendationType,
   SearchTermDetail,
+  SearchTermExclusionList,
   SearchTermListRow,
   SyncRun,
   SyncRunSummary,
@@ -204,6 +205,10 @@ export interface ReadService {
   ): Promise<Recommendation | null>;
   listChangeSets(workspaceId: string): Promise<ChangeSet[]>;
   listAuditEvents(workspaceId: string): Promise<AuditEvent[]>;
+  /** The workspace's persistent search-term exclusion list, alphabetically. */
+  listSearchTermExclusions(
+    workspaceId: string,
+  ): Promise<SearchTermExclusionList>;
   /** Per-profile freshness plus the workspace-level FX sync health. */
   dataFreshness(workspaceId: string): Promise<DataFreshnessResponse>;
   /**

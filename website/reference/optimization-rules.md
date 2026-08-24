@@ -200,7 +200,7 @@ at apply time. Defaults from `DEFAULT_GUARDRAIL_CONFIG`:
 | `maxActionsPerChangeSet` | 20      | Max actions in one change set. |
 | `maxExposureMicros`      | null    | Max summed monetary exposure per change set; null disables. Exposure = Σ \|bid deltas\| + budget increases. |
 | `stalenessDays`          | 3       | Evidence older than this refuses the write. |
-| `protectedSearchTerms`   | []      | Lower-cased terms that may never receive a negative. |
+| `protectedSearchTerms`   | []      | Lower-cased terms that may never receive a negative. Each run the worker feeds the workspace's [excluded search terms](/guide/campaign-tools#excluding-a-search-term-everywhere) in here. |
 | `protectedCampaignIds`   | []      | Campaigns that may never be modified. |
 
 Violation codes: `KILL_SWITCH_ENABLED`, `PROFILE_READ_ONLY`,

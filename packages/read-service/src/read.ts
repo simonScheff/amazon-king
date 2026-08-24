@@ -9,6 +9,7 @@ import type {
   FxSyncResult,
   MetricWindow,
   SearchTermDetail,
+  SearchTermExclusionList,
   SearchTermListRow,
   WorkspaceSettings,
 } from "@amazon-king/contracts";
@@ -26,6 +27,7 @@ import {
   dashboard,
   enqueue,
   enqueueIfNotQueued,
+  exclusions,
   fx,
   identity,
   metrics,
@@ -2117,6 +2119,16 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
     async listAuditEvents(workspaceId) {
       const rows = await audit.listAuditEvents(db, workspaceId, { limit: 100 });
       return rows.map(toContractAuditEvent);
+    },
+
+    async listSearchTermExclusions(workspaceId) {
+      const rows = await exclusions.listExclusions(db, workspaceId);
+      return {
+        exclusions: rows.map((row) => ({
+          term: row.searchTerm,
+          createdAt: isoDateTime(row.createdAt),
+        })),
+      };
     },
 
     async dataFreshness(workspaceId) {

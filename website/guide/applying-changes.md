@@ -18,7 +18,7 @@ A change set is an **immutable, human-approved unit of work**: a set of
 actions (bid updates, negative keywords, campaign creations) plus the
 before-state they were approved against. Approving a recommendation creates
 one; so do the [campaign tools](/guide/campaign-tools) (Max CPC, campaign
-creation, cannibalization negatives) and rollback.
+creation, cannibalization and search-term-exclusion negatives) and rollback.
 
 ### Status lifecycle
 

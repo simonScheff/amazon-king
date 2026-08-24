@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   useSearchTerms: vi.fn(),
   useProfiles: vi.fn(),
   useBooks: vi.fn(),
+  useSearchTermExclusions: vi.fn(),
   useSearch: vi.fn(
     () => ({}) as { days?: number | "mtd"; books?: string[]; country?: string },
   ),
@@ -30,6 +31,9 @@ vi.mock("../api/endpoints", () => ({
   useSearchTerms: mocks.useSearchTerms,
   useProfiles: mocks.useProfiles,
   useBooks: mocks.useBooks,
+  useSearchTermExclusions: mocks.useSearchTermExclusions,
+  useCreateSearchTermExclusion: () => ({ isPending: false, mutate: vi.fn() }),
+  useDeleteSearchTermExclusion: () => ({ isPending: false, mutate: vi.fn() }),
   useCountrySpend: () => ({ data: undefined }),
 }));
 
@@ -100,6 +104,11 @@ describe("SearchTermsPage", () => {
     mocks.useSearch.mockReturnValue({});
     mocks.useProfiles.mockReturnValue({ data: PROFILES, isPending: false });
     mocks.useBooks.mockReturnValue({ data: [], isPending: false });
+    mocks.useSearchTermExclusions.mockReturnValue({
+      isPending: false,
+      error: null,
+      data: { exclusions: [] },
+    });
     mocks.useSearchTerms.mockReturnValue({
       isPending: false,
       error: null,
@@ -392,5 +401,32 @@ describe("SearchTermsPage", () => {
     expect(
       screen.getByRole("img", { name: "Dragon Tales cover" }),
     ).toHaveAttribute("src", "https://example.com/dragons.jpg");
+  });
+
+  it("offers the exclude action per row and marks excluded terms instead", () => {
+    mocks.useSearchTermExclusions.mockReturnValue({
+      isPending: false,
+      error: null,
+      data: {
+        exclusions: [
+          // The API stores terms normalized (trimmed + lowercased); the row
+          // comparison must match regardless of the report's casing.
+          { term: "dragons", createdAt: "2026-08-20T10:00:00.000Z" },
+        ],
+      },
+    });
+    mocks.useSearchTerms.mockReturnValue({
+      isPending: false,
+      error: null,
+      data: [searchTerm("Dragons"), searchTerm("fantasy books")],
+    });
+    render(<SearchTermsPage />);
+
+    expect(
+      screen.getByRole("button", { name: "Excluded everywhere" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "Exclude everywhere" }),
+    ).toHaveLength(1);
   });
 });

@@ -80,6 +80,9 @@ Suppression rules that must hold:
 - Suppress profit rules when KDP economics are missing. Never guess economics.
 - Skip any identity with an active row in `recommendation_dismissals`, so a
   rejected finding is not raised again.
+- Load the workspace's `search_term_exclusions` once per run and feed them to
+  the optimizer as `protectedSearchTerms`, so `wasteful_search_term` never
+  proposes an excluded term — the exclusion mechanism owns those.
 - Expire pending or approved `cannibalization_conflict` findings whose term a
   negative keyword or negative ASIN target now blocks.
 - Expire pending or approved `wasteful_search_term` findings whose campaign a
@@ -87,6 +90,20 @@ Suppression rules that must hold:
 - Expire pending or approved `high_ctr_poor_conversion` findings when the
   campaign's remaining unblocked search-term traffic would no longer trigger
   the rule.
+
+After the per-profile loop, `src/jobs/exclusion-enforcement.ts` runs the
+exclusion enforcement pass: for each excluded term, any enabled campaign
+whose freshly loaded search-term facts (the run's 60-day evidence window)
+show it actually served the term and that does not already block it gets an
+approval-gated draft change set (`metadata.strategy: "search_term_exclusion"`)
+through the shared drafting core (`createSearchTermExclusionSet`) in
+`@amazon-king/database`. This is how campaigns created after the exclusion —
+via the wizard or directly on Amazon — get covered: when they start serving
+the term, not preemptively at creation; campaigns that never serve the term
+get nothing. A campaign+term already covered by an open
+(`draft`/`previewed`/`applying`) exclusion set is skipped; the change-set
+fingerprint is the backstop. The pass only drafts — it never writes to
+Amazon.
 
 ## Tokens
 

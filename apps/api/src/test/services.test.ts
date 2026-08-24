@@ -2163,3 +2163,329 @@ describe("conversion finding resolution", () => {
     expect(db.tables.changeActions).toHaveLength(2);
   });
 });
+
+// -- persistent search term exclusion (all markets) ---------------------------
+
+describe("search term exclusion", () => {
+  function setupExclusion() {
+    const db = new FakeDb();
+    db.seedWorkspace();
+    db.seedUser("owner@example.com");
+    const connection = db.seedConnection();
+    const profileUs = db.seedProfile({
+      connection_id: connection.id,
+      profile_id: "amz-profile-us",
+      country_code: "US",
+    });
+    const profileDe = db.seedProfile({
+      connection_id: connection.id,
+      profile_id: "amz-profile-de",
+      country_code: "DE",
+      currency_code: "EUR",
+    });
+    db.seedCampaign({
+      id: "10",
+      profile_id: profileUs.id,
+      amazon_campaign_id: "camp-us-1",
+      name: "US exact",
+      // Amazon states arrive uppercase; the filter must normalize case.
+      state: "ENABLED",
+    });
+    db.seedCampaign({
+      id: "11",
+      profile_id: profileUs.id,
+      amazon_campaign_id: "camp-us-2",
+      name: "US auto",
+      state: "enabled",
+    });
+    db.seedCampaign({
+      id: "12",
+      profile_id: profileUs.id,
+      amazon_campaign_id: "camp-us-3",
+      name: "US paused",
+      state: "PAUSED",
+    });
+    db.seedCampaign({
+      id: "20",
+      profile_id: profileDe.id,
+      amazon_campaign_id: "camp-de-1",
+      name: "DE exact",
+      state: "enabled",
+    });
+    // Enabled and unblocked, but never served the term: no facts, no action.
+    db.seedCampaign({
+      id: "13",
+      profile_id: profileUs.id,
+      amazon_campaign_id: "camp-us-4",
+      name: "US never served",
+      state: "enabled",
+    });
+    // Serving facts for the campaigns that ran the term, inside the trailing
+    // 30-day lookback (yesterday). The mixed casing proves the match is
+    // case-insensitive against the normalized exclusion term.
+    const yesterday = new Date(Date.now() - 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    const serving: Array<[string, string]> = [
+      [profileUs.id as string, "camp-us-1"],
+      [profileUs.id as string, "camp-us-2"],
+      [profileUs.id as string, "camp-us-3"],
+      [profileDe.id as string, "camp-de-1"],
+    ];
+    for (const [profileId, campaignId] of serving) {
+      db.seedSearchTermMetric({
+        profile_id: profileId,
+        campaign_id: campaignId,
+        search_term: "Tractor Colouring Book",
+        metric_date: yesterday,
+      });
+      db.seedSearchTermMetric({
+        profile_id: profileId,
+        campaign_id: campaignId,
+        search_term: "B0RIVAL123",
+        metric_date: yesterday,
+      });
+    }
+    const service = createChangeService({
+      db: db as never,
+      pool: db.asPool() as never,
+      config: testConfig(),
+      logger: fakeLogger(),
+      gateway: {
+        applyActions: vi.fn(async () => []),
+      } as unknown as Pick<
+        AmazonAdsGateway,
+        "syncCampaignStructure" | "getCampaignBidControls" | "applyActions"
+      >,
+    });
+    return { db, service, profileUs, profileDe };
+  }
+
+  it("records the term and drafts one set per enabled profile, skipping blocked and paused campaigns", async () => {
+    const { db, service } = setupExclusion();
+    // camp-us-2 already blocks the term at campaign level.
+    db.seedNegativeKeyword({
+      profile_id: db.tables.campaigns.find((c) => c.id === "11")!.profile_id,
+      campaign_id: "11",
+      keyword_text: "tractor colouring book",
+      match_type: "NEGATIVE_EXACT",
+      state: "ENABLED",
+    });
+
+    const result = await service.createSearchTermExclusion(
+      authFixture(),
+      "  Tractor Colouring Book ",
+      META,
+    );
+
+    expect(result).toMatchObject({
+      term: "tractor colouring book",
+      created: true,
+      // camp-us-2 already blocks, camp-us-3 is paused.
+      skippedCampaigns: 2,
+    });
+    expect(result.changeSets).toHaveLength(2);
+    const byProfile = new Map(
+      result.changeSets.map((entry) => [entry.profileId, entry]),
+    );
+    expect(byProfile.get("amz-profile-us")?.campaignCount).toBe(1);
+    expect(byProfile.get("amz-profile-de")?.campaignCount).toBe(1);
+
+    expect(db.tables.searchTermExclusions).toHaveLength(1);
+    expect(db.tables.searchTermExclusions[0]).toMatchObject({
+      workspace_id: "1",
+      search_term: "tractor colouring book",
+    });
+    expect(db.tables.changeSets).toHaveLength(2);
+    for (const set of db.tables.changeSets) {
+      expect(set.kind).toBe("recommendation");
+      expect(set.status).toBe("draft");
+      expect(set.metadata).toMatchObject({
+        strategy: "search_term_exclusion",
+        searchTerm: "tractor colouring book",
+      });
+    }
+    expect(db.tables.changeActions).toMatchObject([
+      {
+        action_type: "add_negative_exact",
+        campaign_id: "10",
+        search_term: "tractor colouring book",
+      },
+      {
+        action_type: "add_negative_exact",
+        campaign_id: "20",
+        search_term: "tractor colouring book",
+      },
+    ]);
+    // camp-us-4 (id 13) is enabled and unblocked but never served the term.
+    expect(
+      db.tables.changeActions.some((action) => action.campaign_id === "13"),
+    ).toBe(false);
+    expect(db.tables.auditEvents.map((row) => row.event)).toContain(
+      "search_term.exclusion.create",
+    );
+  });
+
+  it("records the exclusion without drafting when no campaign served the term", async () => {
+    const { db, service } = setupExclusion();
+
+    const result = await service.createSearchTermExclusion(
+      authFixture(),
+      "unserved term",
+      META,
+    );
+
+    expect(result).toMatchObject({
+      term: "unserved term",
+      created: true,
+      changeSets: [],
+      skippedCampaigns: 0,
+    });
+    expect(db.tables.searchTermExclusions).toHaveLength(1);
+    expect(db.tables.changeSets).toHaveLength(0);
+    expect(db.tables.changeActions).toHaveLength(0);
+  });
+
+  it("ignores campaigns whose serving facts fell out of the lookback window", async () => {
+    const { db, service, profileUs } = setupExclusion();
+    // camp-us-4 served the term, but 40 days ago — outside the 30-day window.
+    db.seedSearchTermMetric({
+      profile_id: profileUs.id,
+      campaign_id: "camp-us-4",
+      search_term: "tractor colouring book",
+      metric_date: new Date(Date.now() - 40 * 86_400_000)
+        .toISOString()
+        .slice(0, 10),
+    });
+
+    const result = await service.createSearchTermExclusion(
+      authFixture(),
+      "tractor colouring book",
+      META,
+    );
+
+    expect(
+      db.tables.changeActions.some((action) => action.campaign_id === "13"),
+    ).toBe(false);
+    // The fresh serving campaigns 10, 11, 20 are drafted for; of the serving
+    // campaigns only the paused camp-us-3 is skipped.
+    expect(
+      db.tables.changeActions.map((action) => action.campaign_id).sort(),
+    ).toEqual(["10", "11", "20"]);
+    expect(result.skippedCampaigns).toBe(1);
+  });
+
+  it("drafts negative ASIN targets when the term is an ASIN", async () => {
+    const { db, service } = setupExclusion();
+
+    const result = await service.createSearchTermExclusion(
+      authFixture(),
+      "B0RIVAL123",
+      META,
+    );
+
+    // The stored term is lowercased like every exclusion; ASIN detection is
+    // case-insensitive, and the apply path uppercases the expression again.
+    expect(result.term).toBe("b0rival123");
+    // Two enabled campaigns in US + one in DE.
+    expect(result.changeSets).toHaveLength(2);
+    expect(db.tables.changeActions).toHaveLength(3);
+    for (const action of db.tables.changeActions) {
+      expect(action.action_type).toBe("add_negative_target");
+      expect(action.search_term).toBe("b0rival123");
+    }
+  });
+
+  it("replays the same sets when the term is excluded twice", async () => {
+    const { db, service } = setupExclusion();
+
+    const first = await service.createSearchTermExclusion(
+      authFixture(),
+      "tractor colouring book",
+      META,
+    );
+    const second = await service.createSearchTermExclusion(
+      authFixture(),
+      "Tractor Colouring Book",
+      META,
+    );
+
+    expect(second.created).toBe(false);
+    expect(second.changeSets).toEqual(first.changeSets);
+    expect(db.tables.searchTermExclusions).toHaveLength(1);
+    expect(db.tables.changeSets).toHaveLength(2);
+    expect(db.tables.changeActions).toHaveLength(3);
+  });
+
+  it("does not draft for disabled profiles", async () => {
+    const { db, service, profileDe } = setupExclusion();
+    const deProfile = db.tables.amazonProfiles.find(
+      (row) => row.id === profileDe.id,
+    )!;
+    deProfile.enabled = false;
+
+    const result = await service.createSearchTermExclusion(
+      authFixture(),
+      "tractor colouring book",
+      META,
+    );
+
+    expect(result.changeSets).toHaveLength(1);
+    expect(result.changeSets[0]!.profileId).toBe("amz-profile-us");
+    expect(
+      db.tables.changeSets.every((set) => set.profile_id !== profileDe.id),
+    ).toBe(true);
+  });
+
+  it("removes only the list entry, never the drafted negatives", async () => {
+    const { db, service } = setupExclusion();
+    await service.createSearchTermExclusion(
+      authFixture(),
+      "tractor colouring book",
+      META,
+    );
+    const setsBefore = db.tables.changeSets.length;
+    const actionsBefore = db.tables.changeActions.length;
+
+    const removed = await service.removeSearchTermExclusion(
+      authFixture(),
+      " Tractor Colouring Book ",
+      META,
+    );
+
+    expect(removed).toEqual({ removed: true });
+    expect(db.tables.searchTermExclusions).toHaveLength(0);
+    expect(db.tables.changeSets).toHaveLength(setsBefore);
+    expect(db.tables.changeActions).toHaveLength(actionsBefore);
+    expect(db.tables.auditEvents.map((row) => row.event)).toContain(
+      "search_term.exclusion.remove",
+    );
+
+    const again = await service.removeSearchTermExclusion(
+      authFixture(),
+      "tractor colouring book",
+      META,
+    );
+    expect(again).toEqual({ removed: false });
+  });
+
+  it("lists the exclusions through the read service", async () => {
+    const { db, service } = setupExclusion();
+    await service.createSearchTermExclusion(
+      authFixture(),
+      "tractor colouring book",
+      META,
+    );
+    const read = createReadService({
+      db: db as never,
+      config: testConfig(),
+      logger: fakeLogger(),
+    });
+
+    const result = await read.listSearchTermExclusions("1");
+
+    expect(result.exclusions).toHaveLength(1);
+    expect(result.exclusions[0]!.term).toBe("tractor colouring book");
+    expect(typeof result.exclusions[0]!.createdAt).toBe("string");
+  });
+});

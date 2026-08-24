@@ -14,6 +14,9 @@ import {
   recommendationSchema,
   rejectRecommendationSchema,
   renameCampaignSchema,
+  searchTermExclusionListSchema,
+  searchTermExclusionRemovalSchema,
+  searchTermExclusionResultSchema,
   sessionInfoSchema,
   setCampaignMaxCpcSchema,
   updateCampaignStateSchema,
@@ -210,6 +213,32 @@ describe("contracts smoke test", () => {
     expect(() =>
       campaignNegativesCreateSchema.parse({ searchTerms: [] }),
     ).toThrow();
+  });
+
+  it("round-trips the search term exclusion payloads", () => {
+    expect(
+      searchTermExclusionResultSchema.parse({
+        term: "tractor colouring book",
+        created: true,
+        changeSets: [
+          { changeSetId: "9", profileId: "amz-profile-1", campaignCount: 3 },
+        ],
+        skippedCampaigns: 1,
+      }),
+    ).toMatchObject({ term: "tractor colouring book", created: true });
+    expect(
+      searchTermExclusionListSchema.parse({
+        exclusions: [
+          {
+            term: "tractor colouring book",
+            createdAt: "2026-08-20T10:00:00.000Z",
+          },
+        ],
+      }).exclusions,
+    ).toHaveLength(1);
+    expect(
+      searchTermExclusionRemovalSchema.parse({ removed: false }).removed,
+    ).toBe(false);
   });
 
   it("rejects a float-style money payload with too many decimals", () => {

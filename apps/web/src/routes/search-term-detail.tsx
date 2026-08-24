@@ -6,7 +6,7 @@ import {
   useSearch,
 } from "@tanstack/react-router";
 import type { SearchTermCampaignRow } from "@amazon-king/contracts";
-import { useSearchTerm } from "../api/endpoints";
+import { useSearchTerm, useSearchTermExclusions } from "../api/endpoints";
 import { useSpendSortedMarketplaces } from "../lib/use-spend-sorted-marketplaces";
 import { KpiCard } from "../components/kpi-card";
 import { AmazonProductLink } from "../components/amazon-product-link";
@@ -24,7 +24,7 @@ import {
 } from "../components/ui/sortable-th";
 import { Table, Td, Th } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
-import { ExcludeSearchTermEverywhere } from "../components/exclude-search-term-everywhere";
+import { ExcludeSearchTermGlobal } from "../components/exclude-search-term-global";
 import {
   getCampaignProfitStatus,
   hasCampaignActivity,
@@ -105,6 +105,7 @@ export function SearchTermDetailPage() {
   const days = resolveTimeframe(search.days, 7);
   const navigate = useNavigate();
   const detail = useSearchTerm(term, days, search.books, search.country);
+  const exclusions = useSearchTermExclusions();
   const marketplaces = useSpendSortedMarketplaces(days, search.books);
   const [sort, setSort] = useState<Sort<SortKey>>({
     key: "cost",
@@ -210,13 +211,11 @@ export function SearchTermDetailPage() {
               </Select>
             </label>
           ) : null}
-          <ExcludeSearchTermEverywhere
+          <ExcludeSearchTermGlobal
             term={data.searchTerm}
-            campaigns={data.campaigns}
-            currency={currency}
-            countryCode={data.countryCode}
-            days={days}
-            bookIds={search.books}
+            excluded={(exclusions.data?.exclusions ?? []).some(
+              (entry) => entry.term === data.searchTerm.trim().toLowerCase(),
+            )}
           />
           <div className="flex items-center gap-3">
             <span className="text-sm text-zinc-400">Date range</span>

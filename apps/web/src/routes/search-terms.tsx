@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import type { SearchTermListRow } from "@amazon-king/contracts";
-import { useBooks, useProfiles, useSearchTerms } from "../api/endpoints";
+import {
+  useBooks,
+  useProfiles,
+  useSearchTermExclusions,
+  useSearchTerms,
+} from "../api/endpoints";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import {
@@ -16,6 +21,7 @@ import { CountrySelect } from "../components/country-select";
 import { AmazonProductLink } from "../components/amazon-product-link";
 import { BookCoverStack } from "../components/book-covers";
 import { ProfitabilityResult } from "../components/profitability-result";
+import { ExcludeSearchTermGlobal } from "../components/exclude-search-term-global";
 import {
   getCampaignProfitStatus,
   hasCampaignActivity,
@@ -89,6 +95,7 @@ export function SearchTermsPage() {
   const profiles = useProfiles();
   const books = useBooks();
   const searchTerms = useSearchTerms(days, search.books, country);
+  const exclusions = useSearchTermExclusions();
   const marketplaces = useSpendSortedMarketplaces(days, search.books);
   const [sort, setSort] = useState<Sort<SortKey>>({
     key: "cost",
@@ -126,6 +133,12 @@ export function SearchTermsPage() {
         ),
       )
     : [];
+
+  // Exclusion-list terms arrive normalized (trimmed + lowercased); compare
+  // row terms the same way the API stores them.
+  const excludedTerms = new Set(
+    (exclusions.data?.exclusions ?? []).map((entry) => entry.term),
+  );
 
   return (
     <div className="flex max-w-6xl flex-col gap-4">
@@ -263,6 +276,9 @@ export function SearchTermsPage() {
                   onSort={onSort}
                   className="text-right"
                 />
+                <Th>
+                  <span className="sr-only">Actions</span>
+                </Th>
               </tr>
             </thead>
             <tbody>
@@ -372,6 +388,14 @@ export function SearchTermsPage() {
                     </Td>
                     <Td className="text-right">
                       {formatAcos(term.totals.acos)}
+                    </Td>
+                    <Td className="whitespace-nowrap text-right">
+                      <ExcludeSearchTermGlobal
+                        term={term.searchTerm}
+                        excluded={excludedTerms.has(
+                          term.searchTerm.trim().toLowerCase(),
+                        )}
+                      />
                     </Td>
                   </tr>
                 );

@@ -227,6 +227,20 @@ reviewable recommendations:
    `expires_at = now + 3 days` (`stalenessDays`); the exact rule inputs go to
    `recommendation_evidence.inputs` (jsonb, immutable) so every
    recommendation is reproducible.
+7. **Enforce exclusions.** An enforcement pass
+   (`apps/worker/src/jobs/exclusion-enforcement.ts`) runs after the
+   recommendation loop, reading the workspace's persistent
+   `search_term_exclusions`. Those terms were also fed to the rules as
+   protected search terms (step 3), so an excluded term no longer raises
+   `wasteful_search_term`. For each excluded term, any enabled campaign
+   whose search-term facts show it actually served the term and that does
+   not already block it — including campaigns created since the exclusion,
+   via the wizard or directly on Amazon, once they start serving the term —
+   gets an approval-gated draft change set
+   (`metadata.strategy: "search_term_exclusion"`), deduped against open
+   exclusion drafts with the change-set fingerprint as backstop. Campaigns
+   that never served the term get nothing. The pass only drafts; nothing
+   writes to Amazon without the owner's apply in Change center.
 
 Rule thresholds and formulas are documented in
 [Optimization rules](/reference/optimization-rules); the review workflow in

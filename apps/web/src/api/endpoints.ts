@@ -28,6 +28,9 @@ import {
   maxCpcChangeSetResultSchema,
   recommendationSchema,
   searchTermDetailSchema,
+  searchTermExclusionListSchema,
+  searchTermExclusionRemovalSchema,
+  searchTermExclusionResultSchema,
   searchTermListRowSchema,
   searchTermNegativesResultSchema,
   sessionInfoSchema,
@@ -570,6 +573,73 @@ export function useSearchTerm(
         query: { days, books, country },
         schema: searchTermDetailSchema,
       }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Search-term exclusions (persistent, all markets)
+// ---------------------------------------------------------------------------
+
+/**
+ * The workspace exclusion list: terms blocked wherever they serve, in every
+ * market, with the worker drafting an approval-gated negative once a future
+ * campaign starts serving an excluded term. The search-terms list and detail
+ * pages read it to render the "Excluded everywhere" state.
+ */
+export function useSearchTermExclusions() {
+  return useQuery({
+    queryKey: ["search-term-exclusions"],
+    queryFn: () =>
+      apiFetch("/api/search-terms/exclusions", {
+        schema: searchTermExclusionListSchema,
+      }),
+  });
+}
+
+/**
+ * Exclude a term everywhere: records it in the exclusion list and drafts one
+ * negatives change set per profile covering the campaigns that served the
+ * term recently and do not already block it. Drafts stay approval-gated in
+ * Change center.
+ */
+export function useCreateSearchTermExclusion(term: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch(`/api/search-terms/${encodeURIComponent(term)}/exclusion`, {
+        method: "POST",
+        schema: searchTermExclusionResultSchema,
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["search-term-exclusions"] }),
+        qc.invalidateQueries({ queryKey: ["search-terms"] }),
+        qc.invalidateQueries({ queryKey: ["search-term"] }),
+        qc.invalidateQueries({ queryKey: ["change-sets"] }),
+      ]);
+    },
+  });
+}
+
+/**
+ * Remove a term from the exclusion list. Negatives already applied on Amazon
+ * stay — re-including those is the per-campaign removal flow.
+ */
+export function useDeleteSearchTermExclusion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (term: string) =>
+      apiFetch(`/api/search-terms/${encodeURIComponent(term)}/exclusion`, {
+        method: "DELETE",
+        schema: searchTermExclusionRemovalSchema,
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["search-term-exclusions"] }),
+        qc.invalidateQueries({ queryKey: ["search-terms"] }),
+        qc.invalidateQueries({ queryKey: ["search-term"] }),
+      ]);
+    },
   });
 }
 

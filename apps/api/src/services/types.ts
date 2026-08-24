@@ -9,6 +9,8 @@ import type {
   MaxCpcChangeSetResult,
   NegativeRemovalCreate,
   SearchTermDetail,
+  SearchTermExclusionRemoval,
+  SearchTermExclusionResult,
   SearchTermNegativesResult,
 } from "@amazon-king/contracts";
 import type {
@@ -184,6 +186,31 @@ export interface ChangeService {
     campaignIds: string[],
     meta: RequestMeta,
   ): Promise<SearchTermNegativesResult>;
+  /**
+   * Persistently exclude a shopper term workspace-wide: records the term in
+   * the workspace exclusion list (idempotent — `created` reports whether the
+   * entry is new) and drafts one `search_term_exclusion` negatives change set
+   * per enabled profile covering every enabled campaign that served the term
+   * within the lookback window and does not already block it. Drafts stay
+   * approval-gated in Change center; the worker's enforcement pass covers
+   * campaigns that start serving the term later.
+   */
+  createSearchTermExclusion(
+    auth: AuthContext,
+    term: string,
+    meta: RequestMeta,
+  ): Promise<SearchTermExclusionResult>;
+  /**
+   * Remove a term from the workspace exclusion list. Only the list entry
+   * goes — negatives already applied on Amazon stay (re-including them is the
+   * existing negative-removal flow), and open draft change sets are
+   * unaffected.
+   */
+  removeSearchTermExclusion(
+    auth: AuthContext,
+    term: string,
+    meta: RequestMeta,
+  ): Promise<SearchTermExclusionRemoval>;
   /** Route one conflicted shopper term with campaign-level negative exacts. */
   createCannibalizationChangeSet(
     auth: AuthContext,

@@ -507,6 +507,72 @@ export async function findNegativeTargetByAmazonId(
     : null;
 }
 
+/** Every synced negative keyword of a profile, for blocked-campaign checks. */
+export async function listNegativeKeywordsByProfile(
+  db: Db,
+  profilePk: string,
+): Promise<NegativeKeywordRow[]> {
+  const result = await db.query<{
+    id: string;
+    profile_id: string;
+    campaign_id: string;
+    ad_group_id: string | null;
+    amazon_negative_keyword_id: string;
+    keyword_text: string;
+    match_type: string;
+    state: string;
+  }>(
+    `select id, profile_id, campaign_id, ad_group_id,
+            amazon_negative_keyword_id, keyword_text, match_type, state
+     from negative_keywords
+     where profile_id = $1
+     order by id`,
+    [profilePk],
+  );
+  return result.rows.map((row) => ({
+    id: row.id,
+    profileId: row.profile_id,
+    campaignId: row.campaign_id,
+    adGroupId: row.ad_group_id,
+    amazonNegativeKeywordId: row.amazon_negative_keyword_id,
+    keywordText: row.keyword_text,
+    matchType: row.match_type,
+    state: row.state,
+  }));
+}
+
+/** Every synced negative ASIN target of a profile, for blocked-campaign checks. */
+export async function listNegativeTargetsByProfile(
+  db: Db,
+  profilePk: string,
+): Promise<NegativeTargetRow[]> {
+  const result = await db.query<{
+    id: string;
+    profile_id: string;
+    campaign_id: string;
+    ad_group_id: string | null;
+    amazon_negative_target_id: string;
+    expression_asin: string;
+    state: string;
+  }>(
+    `select id, profile_id, campaign_id, ad_group_id,
+            amazon_negative_target_id, expression_asin, state
+     from negative_targets
+     where profile_id = $1
+     order by id`,
+    [profilePk],
+  );
+  return result.rows.map((row) => ({
+    id: row.id,
+    profileId: row.profile_id,
+    campaignId: row.campaign_id,
+    adGroupId: row.ad_group_id,
+    amazonNegativeTargetId: row.amazon_negative_target_id,
+    expressionAsin: row.expression_asin,
+    state: row.state,
+  }));
+}
+
 export interface EntityChange {
   id: string;
   entityType: string;
@@ -594,6 +660,34 @@ export async function findCampaignByAmazonId(
         amazonProfileId: row.amazon_profile_id,
       }
     : null;
+}
+
+/** All campaigns of a profile in any state, for exclusion drafting. */
+export async function listCampaignsByProfile(
+  db: Db,
+  profilePk: string,
+): Promise<CampaignRow[]> {
+  const result = await db.query<{
+    id: string;
+    profile_id: string;
+    amazon_campaign_id: string;
+    name: string;
+    state: string;
+    targeting_type: string | null;
+  }>(
+    `select id, profile_id, amazon_campaign_id, name, state, targeting_type
+     from campaigns where profile_id = $1
+     order by id`,
+    [profilePk],
+  );
+  return result.rows.map((row) => ({
+    id: row.id,
+    profileId: row.profile_id,
+    amazonCampaignId: row.amazon_campaign_id,
+    name: row.name,
+    state: row.state,
+    targetingType: row.targeting_type,
+  }));
 }
 
 /**

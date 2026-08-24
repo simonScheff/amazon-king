@@ -74,7 +74,7 @@ Limits are per client, per minute. Exceeding any tier returns
 | ------- | -------- | --------------------------------------------------------------------------------- |
 | Global  | 200/min  | Every route without an explicit tier                                              |
 | STRICT  | 10/min   | Login start/verify, Amazon OAuth start/callback                                   |
-| WRITE   | 20/min   | Sync requests, mappings, cover, book profile-links, cannibalization/max-CPC/creation sets, campaign negatives, campaign state/name, workspace settings, apply, rollback |
+| WRITE   | 20/min   | Sync requests, mappings, cover, book profile-links, cannibalization/max-CPC/creation sets, campaign negatives, search-term exclusions, campaign state/name, workspace settings, apply, rollback |
 | PREVIEW | 120/min  | `GET /api/change-sets/:id/preview`                                                |
 
 ### Request IDs
@@ -425,6 +425,47 @@ Response `200` (SearchTermDetail); `404 NOT_FOUND` when the term has no data.
 | campaigns             | array  | Per-campaign `{profileId, campaignId, name, state, totals, estimatedRoyalty, estimatedAdProfit, economicsMissing}` |
 
 Errors: `409 MIXED_CURRENCY` when aggregating across currencies.
+
+### `POST /api/search-terms/:term/exclusion`
+
+The **Exclude everywhere** action: records the term in the workspace's
+persistent exclusion list and, per enabled profile, drafts one change set
+blocking it in every enabled campaign that actually served the term (the
+term appears in the campaign's search-term facts over the trailing 30 days)
+and does not already block it — across all markets. Campaigns that never
+served the term get no action; if one starts serving it later, the worker's
+enforcement pass drafts the same kind of set for it. The drafts stay
+approval-gated in Change center. See
+[Excluding a search term everywhere](/guide/campaign-tools#excluding-a-search-term-everywhere).
+
+- **Auth:** session + CSRF. **Rate:** WRITE. No recent-auth gate — drafting
+  sends nothing to Amazon; the apply in Change center keeps the gate.
+- Response `200`:
+  `{term, created, changeSets: [{changeSetId, profileId, campaignCount}], skippedCampaigns}`.
+  `term` is the normalized (trimmed, lower-cased) stored form; `created` is
+  `false` when the term was already excluded (drafting still runs, so
+  campaigns that started serving the term since get covered);
+  `skippedCampaigns` counts campaigns that served the term but needed no
+  action (not enabled, or already blocking it) — campaigns that never served
+  it are not counted. Each drafted set is `kind: "recommendation"` with
+  `metadata.strategy: "search_term_exclusion"`, and re-submitting replays
+  the same sets (fingerprint-idempotent).
+- Errors: `400 BAD_REQUEST` (blank term).
+
+### `DELETE /api/search-terms/:term/exclusion`
+
+Removes the term from the exclusion list. Only the list entry goes —
+negatives already applied on Amazon stay (re-include them per campaign via
+`POST /api/campaigns/:campaignId/negatives/removals`), and open draft sets
+are unaffected.
+
+- **Auth:** session + CSRF. **Rate:** WRITE.
+- Response `200`: `{removed}` — `false` when the term was not excluded.
+
+### `GET /api/search-terms/exclusions`
+
+Response `200`: `{exclusions: [{term, createdAt}]}` — the workspace
+exclusion list, alphabetically by term.
 
 ---
 

@@ -923,6 +923,46 @@ export async function listSearchTermCampaignRows(
   }));
 }
 
+export interface SearchTermServingCampaign {
+  /** Internal amazon_profiles PK. */
+  profilePk: string;
+  /** Internal campaigns PK. */
+  campaignPk: string;
+}
+
+/**
+ * Campaigns that actually served a shopper term within the window — the
+ * "did this campaign run the term" check behind all-market exclusion
+ * drafting. Same fact source and campaign join as
+ * listSearchTermCampaignRows, but matched case-insensitively against the
+ * normalized (trimmed + lowercased) term, because the exclusion list keys on
+ * the normalized form while fact casing follows the report.
+ */
+export async function listSearchTermServingCampaigns(
+  db: Db,
+  workspaceId: string,
+  normalizedSearchTerm: string,
+  dateStart: string,
+  dateEnd: string,
+): Promise<SearchTermServingCampaign[]> {
+  const result = await db.query<{ profile_pk: string; campaign_pk: string }>(
+    `select distinct m.profile_id::text as profile_pk, c.id::text as campaign_pk
+     from search_term_metrics_daily m
+     join campaigns c
+       on c.profile_id = m.profile_id and c.amazon_campaign_id = m.campaign_id
+     join amazon_profiles p on p.id = m.profile_id
+     join amazon_connections conn on conn.id = p.connection_id
+     where conn.workspace_id = $1
+       and m.metric_date between $2 and $3
+       and lower(m.search_term) = $4`,
+    [workspaceId, dateStart, dateEnd, normalizedSearchTerm],
+  );
+  return result.rows.map((row) => ({
+    profilePk: row.profile_pk,
+    campaignPk: row.campaign_pk,
+  }));
+}
+
 export interface SearchTermDailyPoint {
   date: string;
   cost: string;

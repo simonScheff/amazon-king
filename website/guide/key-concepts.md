@@ -109,7 +109,9 @@ blocks the apply instead of blindly overwriting. See
 rules: bid changes are clamped to ±15% per cooldown period, per-book ceilings
 you set (max bid, max daily budget, max spend without a sale) are enforced,
 and entities on your protected lists (`protectedCampaignIds`,
-`protectedSearchTerms` — empty by default) are left alone. Recently changed
+`protectedSearchTerms` — the latter fed each run from your
+[excluded search terms](/guide/campaign-tools#excluding-a-search-term-everywhere))
+are left alone. Recently changed
 targets are also skipped while their bid cooldown runs. Violations block the affected items, not silently adjust them.
 
 *Why it matters:* even if a rule misfires or your data is misleading, the

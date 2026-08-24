@@ -14,12 +14,14 @@ import {
   useAuditEvents,
   useBooks,
   useDataFreshness,
+  useDeleteSearchTermExclusion,
   useEnqueueFxSync,
   useEnqueueSync,
   useMapAdvertisedBook,
   useProfiles,
   useSaveBookCover,
   useSaveBookEconomics,
+  useSearchTermExclusions,
   useUnmappedAdvertisedProducts,
   useUpdateProfile,
   useWorkspaceSettings,
@@ -659,6 +661,81 @@ function WorkspaceCard() {
   );
 }
 
+/**
+ * The persistent workspace exclusion list: terms blocked wherever they serve,
+ * in every market, with the worker drafting an approval-gated negative once a
+ * future campaign starts serving an excluded term. Removing an entry stops
+ * future enforcement only — negatives already applied on Amazon stay and are
+ * re-included per campaign from the campaign page.
+ */
+function ExclusionsCard() {
+  const exclusions = useSearchTermExclusions();
+  const removeExclusion = useDeleteSearchTermExclusion();
+  const toast = useToast();
+  return (
+    <Card>
+      <CardHeader title="Excluded search terms" />
+      <div className="border-b border-zinc-800 px-4 py-3">
+        <p className="text-xs leading-5 text-zinc-500">
+          Excluded terms are blocked in every campaign that serves them, in
+          every market — and when a future campaign starts serving an excluded
+          term, an approval-gated draft appears in Change center. Removing a
+          term here does not remove negatives already applied on Amazon —
+          re-including those stays the per-campaign flow on the campaign page.
+        </p>
+      </div>
+      {exclusions.isPending ? (
+        <Loading />
+      ) : exclusions.error ? (
+        <ErrorState error={exclusions.error} />
+      ) : exclusions.data.exclusions.length === 0 ? (
+        <EmptyState>
+          No excluded search terms. Exclude one from the search terms list or a
+          search term's detail page.
+        </EmptyState>
+      ) : (
+        <Table>
+          <thead>
+            <tr>
+              <Th>Search term</Th>
+              <Th>Excluded since</Th>
+              <Th>
+                <span className="sr-only">Actions</span>
+              </Th>
+            </tr>
+          </thead>
+          <tbody>
+            {exclusions.data.exclusions.map((entry) => (
+              <tr key={entry.term}>
+                <Td className="break-words">{entry.term}</Td>
+                <Td className="whitespace-nowrap text-xs text-zinc-500">
+                  {formatDate(entry.createdAt.slice(0, 10))}
+                </Td>
+                <Td className="whitespace-nowrap text-right">
+                  <Button
+                    size="sm"
+                    disabled={removeExclusion.isPending}
+                    onClick={() =>
+                      removeExclusion.mutate(entry.term, {
+                        onSuccess: () =>
+                          toast(`“${entry.term}” removed from the list`),
+                        onError: (error) =>
+                          toast(`Remove failed: ${error.message}`, "error"),
+                      })
+                    }
+                  >
+                    Remove
+                  </Button>
+                </Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
+    </Card>
+  );
+}
+
 function ProfilesCard() {
   const profiles = useProfiles();
   return (
@@ -884,6 +961,7 @@ export function SettingsPage() {
         <>
           <WorkspaceCard />
           <ProfilesCard />
+          <ExclusionsCard />
         </>
       ) : null}
       {tab === "books" ? <BooksCard /> : null}

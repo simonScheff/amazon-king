@@ -63,6 +63,11 @@ import {
   getFxSyncStatus,
 } from "./repositories/fx.js";
 import {
+  addExclusion,
+  listExclusions,
+  removeExclusion,
+} from "./repositories/exclusions.js";
+import {
   getWorkspaceDisplayCurrency,
   setWorkspaceDisplayCurrency,
 } from "./repositories/identity.js";
@@ -2010,6 +2015,46 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         searchTerm: "dinosaur colouring book",
       }),
     ).toBe(false);
+  });
+
+  it("search term exclusions add, list, and remove with normalization", async () => {
+    const workspace = await pool.query<{ id: string }>(
+      `insert into workspaces (name) values ('exclusions workspace') returning id`,
+    );
+    const workspaceId = workspace.rows[0]!.id;
+
+    // The term is stored trimmed + lowercased, like recommendation_dismissals.
+    const first = await addExclusion(
+      pool,
+      workspaceId,
+      "  Tractor Colouring Book ",
+    );
+    expect(first.created).toBe(true);
+    expect(first.exclusion.searchTerm).toBe("tractor colouring book");
+
+    // Re-adding (any casing) converges on the same row instead of duplicating.
+    const replay = await addExclusion(
+      pool,
+      workspaceId,
+      "TRACTOR COLOURING BOOK",
+    );
+    expect(replay.created).toBe(false);
+    expect(replay.exclusion.id).toBe(first.exclusion.id);
+    await addExclusion(pool, workspaceId, "dinosaur colouring book");
+    const listed = await listExclusions(pool, workspaceId);
+    expect(listed.map((row) => row.searchTerm)).toEqual([
+      "dinosaur colouring book",
+      "tractor colouring book",
+    ]);
+
+    // Removal is normalized too; removing a missing term reports false.
+    expect(
+      await removeExclusion(pool, workspaceId, " Tractor Colouring Book"),
+    ).toBe(true);
+    expect(
+      await removeExclusion(pool, workspaceId, "tractor colouring book"),
+    ).toBe(false);
+    expect(await listExclusions(pool, workspaceId)).toHaveLength(1);
   });
 
   it("change set creation is idempotent by fingerprint", async () => {

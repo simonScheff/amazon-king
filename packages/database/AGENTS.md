@@ -19,6 +19,12 @@ silently. CI runs them against a real PostgreSQL service.
 - `src/pool.ts` — a thin `pg` pool wrapper.
 - `src/repositories/` — explicit modules with **parameterized SQL only**. No
   query builder, no string interpolation of user input.
+- `src/change-drafts.ts` — change-set drafting shared by apps/api and
+  apps/worker: `campaignNegativeSpec` (ASIN term → `add_negative_target`,
+  else `add_negative_exact`) and `createSearchTermExclusionSet`
+  (fingerprint-idempotent per-profile negatives sets with
+  `metadata.strategy: "search_term_exclusion"`). Only drafting lives here;
+  the guarded apply path stays in apps/api.
 - `src/queue.ts` — the PostgreSQL job queue, claiming with
   `FOR UPDATE SKIP LOCKED` plus leases. `enqueueIfNotQueued` enqueues only
   when no pending/running job with a containing payload exists (the API's
@@ -34,6 +40,14 @@ To add a migration, use the `add-migration` skill.
   equal, with a normalized `search_term`. Rejecting a recommendation writes a
   row here so the next run does not raise the identical finding again. If you
   change the worker's dedupe identity, this key has to move with it.
+- `search_term_exclusions` (migration 0018) is the workspace's persistent
+  exclusion list: terms normalized (trimmed + lowercased) at write time — the
+  same convention as `recommendation_dismissals` — unique per workspace.
+  `repositories/exclusions.ts` adds with `ON CONFLICT DO NOTHING` (re-adding
+  returns the existing row), and removing a row never touches negatives
+  already applied on Amazon. The API writes it on Exclude everywhere; the
+  worker reads it for the enforcement pass and feeds it to the optimizer as
+  `protectedSearchTerms`.
 - Daily fact tables carry `units`, `units_sold_clicks7d`, and
   `units_sold_clicks14d` alongside orders. `units` mirrors `unitsSoldClicks7d`
   the same way `orders` mirrors `purchases7d`. Royalty is valued per copy, so

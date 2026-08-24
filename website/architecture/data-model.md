@@ -28,6 +28,9 @@ in `schema_migrations`. The shape follows `docs/plan.md` §7.
 | `0013_book_profile_link_asin_unique.sql` | Unique `(profile_id, marketplace_asin)` on `book_profile_links` so one catalog book owns an advertised ASIN inside a profile. |
 | `0014_fx_rates.sql`               | `fx_rates` — append-only daily exchange-rate fixings against a USD pivot (primary key `(rate_date, base_currency, quote_currency)`), plus `workspaces.display_currency` (default `'USD'`) for the all-market dashboard view. |
 | `0015_job_queue_finished_at.sql`  | `job_queue.finished_at` — terminal timestamp used (among other things) to report the last `fx_sync` run in data freshness. |
+| `0016_remove_negative_target_action.sql` | Action type `remove_negative_target` — the guarded re-include for a synced negative ASIN target, mirroring `remove_negative_exact`. |
+| `0017_api_tokens.sql`           | `api_tokens` — SHA-256-hashed machine tokens (scope `mcp:read`) for the MCP server's HTTP transport. |
+| `0018_search_term_exclusions.sql` | `search_term_exclusions` — the workspace's persistent excluded search terms (trimmed + lower-cased, unique per workspace). Read by the worker's exclusion-enforcement pass and fed to the optimizer as protected search terms. |
 
 ## Conventions
 

@@ -40,6 +40,7 @@ export interface FakeTables {
   advertisedProductMetricsDaily: FakeRow[];
   negativeKeywords: FakeRow[];
   negativeTargets: FakeRow[];
+  searchTermExclusions: FakeRow[];
   fxRates: FakeRow[];
 }
 
@@ -75,6 +76,7 @@ function emptyTables(): FakeTables {
     advertisedProductMetricsDaily: [],
     negativeKeywords: [],
     negativeTargets: [],
+    searchTermExclusions: [],
     fxRates: [],
   };
 }
@@ -354,6 +356,18 @@ export class FakeDb {
       ...overrides,
     };
     this.tables.negativeTargets.push(row);
+    return row;
+  }
+
+  seedExclusion(overrides: Partial<FakeRow> = {}): FakeRow {
+    const row = {
+      id: nextId(),
+      workspace_id: "1",
+      search_term: "excluded term",
+      created_at: new Date(),
+      ...overrides,
+    };
+    this.tables.searchTermExclusions.push(row);
     return row;
   }
 
@@ -1516,6 +1530,107 @@ export class FakeDb {
             });
           return this.ok(rows);
         },
+      },
+      {
+        match: "from campaigns where profile_id = $1",
+        handle: (p) =>
+          this.ok(t.campaigns.filter((c) => c.profile_id === p[0])),
+      },
+      {
+        match: "from negative_keywords where profile_id = $1",
+        handle: (p) =>
+          this.ok(t.negativeKeywords.filter((n) => n.profile_id === p[0])),
+      },
+      {
+        match: "from negative_targets where profile_id = $1",
+        handle: (p) =>
+          this.ok(t.negativeTargets.filter((n) => n.profile_id === p[0])),
+      },
+
+      // -- search term exclusions ----------------------------------------------
+      {
+        match: "select distinct m.profile_id::text as profile_pk",
+        handle: (p, db) => {
+          const seen = new Set<string>();
+          const rows: FakeRow[] = [];
+          for (const metric of t.searchTermMetricsDaily) {
+            const profile = t.amazonProfiles.find(
+              (row) => row.id === metric.profile_id,
+            );
+            if (!profile || !db.profileForConnectionWorkspace(p[0], profile)) {
+              continue;
+            }
+            const metricDate = String(metric.metric_date);
+            if (metricDate < (p[1] as string) || metricDate > (p[2] as string))
+              continue;
+            if (String(metric.search_term).toLowerCase() !== (p[3] as string))
+              continue;
+            const campaign = t.campaigns.find(
+              (row) =>
+                row.profile_id === metric.profile_id &&
+                row.amazon_campaign_id === metric.campaign_id,
+            );
+            if (!campaign) continue;
+            const key = `${profile.id}|${campaign.id}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            rows.push({
+              profile_pk: String(profile.id),
+              campaign_pk: String(campaign.id),
+            });
+          }
+          return this.ok(rows);
+        },
+      },
+      {
+        match: "insert into search_term_exclusions",
+        handle: (p) => {
+          const existing = t.searchTermExclusions.find(
+            (row) => row.workspace_id === p[0] && row.search_term === p[1],
+          );
+          // ON CONFLICT DO NOTHING: no row returned, the repository re-selects.
+          if (existing) return this.ok([]);
+          const row = {
+            id: nextId(),
+            workspace_id: p[0],
+            search_term: p[1],
+            created_at: new Date(),
+          };
+          t.searchTermExclusions.push(row);
+          return this.ok([row]);
+        },
+      },
+      {
+        // Must precede the select handlers: the DELETE text contains their
+        // match strings too.
+        match: "delete from search_term_exclusions",
+        handle: (p) => {
+          const before = t.searchTermExclusions.length;
+          t.searchTermExclusions = t.searchTermExclusions.filter(
+            (row) => !(row.workspace_id === p[0] && row.search_term === p[1]),
+          );
+          return {
+            rows: [],
+            rowCount: before - t.searchTermExclusions.length,
+          };
+        },
+      },
+      {
+        match:
+          "from search_term_exclusions where workspace_id = $1 and search_term = $2",
+        handle: (p) =>
+          this.ok(
+            t.searchTermExclusions.filter(
+              (row) => row.workspace_id === p[0] && row.search_term === p[1],
+            ),
+          ),
+      },
+      {
+        match: "from search_term_exclusions",
+        handle: (p) =>
+          this.ok(
+            t.searchTermExclusions.filter((row) => row.workspace_id === p[0]),
+          ),
       },
 
       // -- books -----------------------------------------------------------------

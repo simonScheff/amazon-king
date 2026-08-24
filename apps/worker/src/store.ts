@@ -4,6 +4,8 @@ import {
   reports as reportsRepo,
   structure as structureRepo,
   recommendations as recommendationsRepo,
+  exclusions as exclusionsRepo,
+  changeDrafts,
   fx as fxRepo,
   withTransaction,
   enqueue as queueEnqueue,
@@ -336,6 +338,37 @@ export interface WorkerStore {
     identity: RecommendationIdentity,
   ): Promise<number>;
   insertRecommendation(input: RecommendationInsert): Promise<void>;
+
+  // --- search term exclusions (migration 0018) ---
+  /** Workspace exclusion list entries (normalized terms). */
+  listExclusions(
+    workspaceId: string,
+  ): Promise<exclusionsRepo.SearchTermExclusion[]>;
+  /** Owner user id used as the creator of enforcement-drafted change sets. */
+  getWorkspaceOwnerUserId(workspaceId: string): Promise<string | null>;
+  /**
+   * True when an open (draft/previewed/applying) `search_term_exclusion`
+   * change set already covers this campaign+term — the dedupe that keeps
+   * repeated enforcement runs from spamming drafts. Fingerprint idempotency
+   * is the backstop for terminal states.
+   */
+  openExclusionSetCoversCampaign(
+    profilePk: string,
+    campaignId: string,
+    searchTerm: string,
+  ): Promise<boolean>;
+  /**
+   * Draft one per-profile exclusion change set via the shared drafting core
+   * (@amazon-king/database `changeDrafts`) — the same shape the API's
+   * exclusion action creates. Fingerprint-idempotent; `created` is false on
+   * replay.
+   */
+  draftExclusionChangeSet(input: {
+    profileId: string;
+    creatorUserId: string;
+    searchTerm: string;
+    campaigns: readonly changeDrafts.NegativeDraftCampaign[];
+  }): Promise<{ changeSetId: string; created: boolean }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -1100,6 +1133,44 @@ export function createDbStore(pool: Pool): WorkerStore {
 
     async insertRecommendation(input) {
       await recommendationsRepo.insertRecommendation(db, input);
+    },
+
+    async listExclusions(workspaceId) {
+      return exclusionsRepo.listExclusions(db, workspaceId);
+    },
+
+    async getWorkspaceOwnerUserId(workspaceId) {
+      const result = await db.query<{ user_id: string }>(
+        `select user_id::text from workspace_members
+         where workspace_id = $1 and role = 'owner'
+         order by user_id limit 1`,
+        [workspaceId],
+      );
+      return result.rows[0]?.user_id ?? null;
+    },
+
+    async openExclusionSetCoversCampaign(profilePk, campaignId, searchTerm) {
+      const result = await db.query<{ id: string }>(
+        `select cs.id::text
+         from change_sets cs
+         join change_actions ca on ca.change_set_id = cs.id
+         where cs.profile_id = $1
+           and cs.status in ('draft', 'previewed', 'applying')
+           and cs.metadata->>'strategy' = 'search_term_exclusion'
+           and ca.campaign_id = $2
+           and ca.search_term = $3
+         limit 1`,
+        [profilePk, campaignId, searchTerm],
+      );
+      return result.rows.length > 0;
+    },
+
+    async draftExclusionChangeSet(input) {
+      const created = await changeDrafts.createSearchTermExclusionSet(
+        pool,
+        input,
+      );
+      return { changeSetId: created.changeSet.id, created: created.created };
     },
   };
 }

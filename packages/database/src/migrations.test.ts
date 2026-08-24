@@ -98,6 +98,15 @@ describe("migration files", () => {
     );
   });
 
+  it("adds the persistent search_term_exclusions table", async () => {
+    const migrations = await loadMigrations();
+    const migration = migrations.find(
+      (file) => file.filename === "0018_search_term_exclusions.sql",
+    );
+    expect(migration?.sql).toContain("create table search_term_exclusions");
+    expect(migration?.sql).toContain("unique (workspace_id, search_term)");
+  });
+
   it("allows campaign-creation change sets and create actions", async () => {
     const migrations = await loadMigrations();
     const migration = migrations.find(

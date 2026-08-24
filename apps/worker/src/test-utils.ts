@@ -89,6 +89,21 @@ export class FakeStore implements WorkerStore {
   economics: BookEconomicsRecord[] = [];
   recentChanges: RecentChangeRecord[] = [];
   fxRates: FxRateRow[] = [];
+  exclusions: {
+    id: string;
+    workspaceId: string;
+    searchTerm: string;
+    createdAt: string;
+  }[] = [];
+  /** Owner user id returned by getWorkspaceOwnerUserId; null simulates none. */
+  ownerUserId: string | null = "1";
+  /** Enforcement-drafted exclusion change sets (all treated as open drafts). */
+  exclusionSets: {
+    changeSetId: string;
+    profileId: string;
+    searchTerm: string;
+    campaignIds: string[];
+  }[] = [];
   expiredCount = 0;
   /** Converged fact rows keyed by reportType|grain — proves idempotent upserts. */
   convergedFacts = new Map<string, unknown>();
@@ -392,6 +407,53 @@ export class FakeStore implements WorkerStore {
   }
   async insertRecommendation(input: RecommendationInsertInput) {
     this.recommendations.push(input);
+  }
+
+  async listExclusions(workspaceId: string) {
+    return this.exclusions.filter((row) => row.workspaceId === workspaceId);
+  }
+  async getWorkspaceOwnerUserId() {
+    return this.ownerUserId;
+  }
+  async openExclusionSetCoversCampaign(
+    profilePk: string,
+    campaignId: string,
+    searchTerm: string,
+  ) {
+    return this.exclusionSets.some(
+      (set) =>
+        set.profileId === profilePk &&
+        set.searchTerm === searchTerm &&
+        set.campaignIds.includes(campaignId),
+    );
+  }
+  async draftExclusionChangeSet(input: {
+    profileId: string;
+    creatorUserId: string;
+    searchTerm: string;
+    campaigns: readonly { id: string; name: string }[];
+  }) {
+    // Fingerprint idempotency: an identical draft replays the existing set.
+    const existing = this.exclusionSets.find(
+      (set) =>
+        set.profileId === input.profileId &&
+        set.searchTerm === input.searchTerm &&
+        set.campaignIds.length === input.campaigns.length &&
+        set.campaignIds.every((id) =>
+          input.campaigns.some((campaign) => campaign.id === id),
+        ),
+    );
+    if (existing) {
+      return { changeSetId: existing.changeSetId, created: false };
+    }
+    const changeSetId = this.nextId();
+    this.exclusionSets.push({
+      changeSetId,
+      profileId: input.profileId,
+      searchTerm: input.searchTerm,
+      campaignIds: input.campaigns.map((campaign) => campaign.id),
+    });
+    return { changeSetId, created: true };
   }
 }
 

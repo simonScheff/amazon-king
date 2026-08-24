@@ -1,6 +1,6 @@
 ---
 title: Campaign Tools
-description: The new-campaign wizard, cannibalization resolution, and Max CPC enforcement — three campaign-level tools built on the guarded write pipeline.
+description: The new-campaign wizard, cannibalization resolution, persistent search-term exclusion, and Max CPC enforcement — campaign-level tools built on the guarded write pipeline.
 ---
 
 # Campaign Tools
@@ -125,6 +125,54 @@ a rollback removes the negative again. The **Re-include** button on the
 campaign's negatives tabs does the same for any synced negative, however it
 was created.
 :::
+
+## Excluding a search term everywhere
+
+When a shopper term should simply never serve — an irrelevant query that
+keeps spending, a competing ASIN you cannot win — **Exclude everywhere**
+handles it once, permanently, across every market. It is a row action on the
+`/search-terms` list and a header action on the search-term detail page.
+
+One confirmed click does two things:
+
+1. Records the term (trimmed and lower-cased) in the workspace's persistent
+   **exclusion list**.
+2. Drafts one change set per enabled market blocking the term in every
+   enabled campaign that **actually served it** (the term appears in the
+   campaign's search-term facts over the trailing 30 days) and does not
+   already block it — a campaign-level **negative exact keyword**, or a
+   **negative ASIN target** when the "term" is an ASIN. Campaigns that never
+   served the term get no action.
+
+The drafts wait in the [Change center](/guide/applying-changes) like any
+other set: nothing reaches Amazon until you review and apply them there.
+Terms already on the list show an **Excluded everywhere** badge instead of
+the action, and re-excluding a term is idempotent — it replays the same
+drafts rather than piling up duplicates.
+
+Because the list is persistent, it keeps working after the click:
+
+- **Future campaigns stay covered.** After each recommendation run, the
+  worker re-checks every excluded term against the freshly synced structure
+  and search-term facts. A campaign that starts serving an excluded term
+  later — created in the wizard or directly on Amazon — gets the same
+  approval-gated draft once its facts show the term. Coverage follows actual
+  serving, not campaign creation, and the pass only ever drafts; it never
+  writes to Amazon by itself.
+- **The optimizer stops nagging.** Excluded terms are fed to the rules as
+  protected search terms, so `wasteful_search_term` no longer recommends
+  negating them — the exclusion mechanism already owns them.
+
+Manage the list under **Settings → Profiles** in the **Excluded search
+terms** card, which lists every excluded term with a per-term remove.
+Removing a term deletes only the list entry: it does **not** pull negatives
+already applied on Amazon (re-include those per campaign from the negatives
+tabs), and it does not touch open drafts the enforcement pass already
+created.
+
+The older per-market bulk route (`POST /api/search-terms/:term/negatives`,
+one market at a time, nothing recorded) still exists for API users who want
+to block a term in a single market only.
 
 ## Max CPC
 

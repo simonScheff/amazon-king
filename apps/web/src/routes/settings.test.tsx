@@ -24,6 +24,8 @@ const mocks = vi.hoisted(() => ({
   saveSettings: vi.fn(),
   fxSync: vi.fn(),
   mutation: vi.fn(),
+  removeExclusion: vi.fn(),
+  exclusions: [] as { term: string; createdAt: string }[],
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -99,6 +101,15 @@ vi.mock("../api/endpoints", () => ({
     error: null,
     data: mocks.candidates,
   }),
+  useSearchTermExclusions: () => ({
+    isPending: false,
+    error: null,
+    data: { exclusions: mocks.exclusions },
+  }),
+  useDeleteSearchTermExclusion: () => ({
+    isPending: false,
+    mutate: mocks.removeExclusion,
+  }),
   useUpdateProfile: () => ({ isPending: false, mutate: mocks.mutation }),
   useWorkspaceSettings: () => ({ data: mocks.workspaceSettings }),
   useUpdateWorkspaceSettings: () => ({
@@ -124,6 +135,8 @@ describe("SettingsPage book mapping", () => {
     mocks.workspaceSettings = undefined;
     mocks.fxRates = undefined;
     mocks.freshnessOptions = [];
+    mocks.exclusions = [];
+    mocks.removeExclusion.mockReset();
     mocks.search = { tab: "books" };
   });
 
@@ -219,6 +232,35 @@ describe("SettingsPage book mapping", () => {
     expect(
       screen.getByRole("button", { name: "Sync rates now" }),
     ).toBeEnabled();
+  });
+
+  it("lists excluded search terms and removes one from the list", () => {
+    mocks.search = { tab: "profiles" };
+    mocks.exclusions = [
+      { term: "dragons", createdAt: "2026-08-20T10:00:00.000Z" },
+    ];
+    render(<SettingsPage />);
+
+    expect(screen.getByText("Excluded search terms")).toBeInTheDocument();
+    expect(screen.getByText("dragons")).toBeInTheDocument();
+    // The card must spell out that removal does not touch Amazon negatives.
+    expect(screen.getByText(/does not remove negatives/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    expect(mocks.removeExclusion).toHaveBeenCalledWith(
+      "dragons",
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      }),
+    );
+  });
+
+  it("shows the empty state when no search terms are excluded", () => {
+    mocks.search = { tab: "profiles" };
+    render(<SettingsPage />);
+
+    expect(screen.getByText(/No excluded search terms/)).toBeInTheDocument();
   });
 
   it("groups an ASIN across profiles and submits confirmed book metadata", () => {

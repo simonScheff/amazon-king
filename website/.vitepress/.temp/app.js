@@ -4269,7 +4269,7 @@ const _sfc_main$s = /* @__PURE__ */ defineComponent({
   __name: "VPNavBarSearch",
   __ssrInlineRender: true,
   setup(__props) {
-    const VPLocalSearchBox = defineAsyncComponent(() => import("./VPLocalSearchBox.C1bK8BBb.js"));
+    const VPLocalSearchBox = defineAsyncComponent(() => import("./VPLocalSearchBox.C6tpcwbA.js"));
     const VPAlgoliaSearchBox = () => null;
     const { theme: theme2 } = useData();
     const loaded = ref(false);

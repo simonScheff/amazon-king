@@ -39,6 +39,12 @@ Each run:
    serve the term, and `high_ctr_poor_conversion` when the remaining
    unblocked traffic would not trigger the rule.
 
+Those inputs include the workspace's
+[excluded search terms](/guide/campaign-tools#excluding-a-search-term-everywhere),
+which the rules treat as protected: an excluded term never raises a
+`wasteful_search_term` finding, because the persistent exclusion mechanism
+already handles it.
+
 Every stored recommendation records its rule version, exact evidence inputs,
 evidence window, and data-freshness timestamp, so any finding can be traced
 back to the numbers that produced it.

@@ -35,6 +35,7 @@ import type {
 import type { Logger } from "pino";
 import { TerminalJobError, type JobHandler } from "../loop.js";
 import { profilePkSchema, type JobDeps } from "./types.js";
+import { enforceSearchTermExclusions } from "./exclusion-enforcement.js";
 import type {
   BookEconomicsRecord,
   DailyFact,
@@ -108,6 +109,11 @@ export function createRecommendationRunHandler(deps: JobDeps): JobHandler {
           DEFAULT_OPTIMIZER_CONFIG.cooldownDays * 86_400_000,
       ).toISOString(),
     );
+    // Persistent workspace exclusions: they silence wasteful_search_term for
+    // the excluded terms (fed in as protectedSearchTerms below) and drive the
+    // enforcement pass at the end of the run.
+    const exclusionRows = await deps.store.listExclusions(profile.workspaceId);
+    const excludedTerms = exclusionRows.map((row) => row.searchTerm);
 
     const {
       drafts,
@@ -123,6 +129,7 @@ export function createRecommendationRunHandler(deps: JobDeps): JobHandler {
       currency,
       endDate,
       nowIso,
+      protectedSearchTerms: excludedTerms,
     });
 
     let resolved = 0;
@@ -229,6 +236,26 @@ export function createRecommendationRunHandler(deps: JobDeps): JobHandler {
       },
       "Recommendation run completed",
     );
+
+    // Exclusion enforcement runs after the recommendation loop so it reads
+    // the freshly synced structure and facts: any enabled campaign the facts
+    // show serving an excluded term without blocking it — including campaigns
+    // created after the exclusion was recorded, via the wizard or directly on
+    // Amazon — gets an approval-gated draft change set. Never a silent Amazon
+    // write.
+    if (excludedTerms.length > 0) {
+      const enforcement = await enforceSearchTermExclusions(deps, {
+        profile,
+        structure,
+        searchTermFacts: facts.searchTerm,
+        excludedTerms,
+        logger,
+      });
+      logger.info(
+        { profileId, ...enforcement },
+        "Search term exclusion enforcement completed",
+      );
+    }
   };
 }
 
@@ -250,6 +277,8 @@ interface EvaluationInputs {
   currency: CurrencyCode;
   endDate: IsoDate;
   nowIso: IsoDateTime;
+  /** Normalized persistent exclusions (search_term_exclusions). */
+  protectedSearchTerms: string[];
 }
 
 function toDailyRows(facts: readonly DailyFact[]): DailyMetricRow[] {
@@ -320,12 +349,16 @@ export interface EvaluationResult {
 
 export function evaluateAllRules(inputs: EvaluationInputs): EvaluationResult {
   const { structure, facts, economics, currency, endDate, nowIso } = inputs;
-  // TODO(protected-entities): the schema has no `protected_entities` table yet
-  // (checked migrations/0001_initial.sql). Until one exists, the protected
-  // lists stay empty; the owner cannot mark campaigns/terms as protected.
   const config: OptimizerConfig = {
     ...DEFAULT_OPTIMIZER_CONFIG,
-    protectedSearchTerms: [],
+    // Persistent exclusions double as protected terms: a term the owner
+    // excluded everywhere is handled by the exclusion mechanism (and its
+    // enforcement pass), so it must not keep raising wasteful_search_term
+    // findings.
+    protectedSearchTerms: inputs.protectedSearchTerms,
+    // TODO(protected-entities): the schema has no `protected_entities` table
+    // yet (checked migrations/0001_initial.sql). Until one exists, the
+    // protected campaign list stays empty.
     protectedCampaignIds: [],
   };
 

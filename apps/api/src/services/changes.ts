@@ -10,16 +10,19 @@ import {
   type StructureSnapshot,
 } from "@amazon-king/amazon-ads";
 import {
-  isAsin,
   recommendationChangeActionType,
   type CampaignCreationCreate,
   type CampaignMaxCpc,
   type ChangeSet as ContractChangeSet,
   type MaxCpcChangeSetResult,
+  type SearchTermExclusionRemoval,
+  type SearchTermExclusionResult,
 } from "@amazon-king/contracts";
 import {
+  blockedCampaignIds,
   checkGuardrails,
   DEFAULT_GUARDRAIL_CONFIG,
+  keywordSpecsFromNegativeTargets,
   microsFromDecimalString,
   type GuardrailAction,
   type GuardrailResult,
@@ -30,8 +33,11 @@ import {
   books,
   buildChangeActionFingerprint,
   buildChangeSetFingerprint,
+  changeDrafts,
   changes,
+  dashboard,
   enqueue,
+  exclusions,
   profiles,
   recommendations,
   structure,
@@ -416,14 +422,15 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
     auth: AuthContext,
     meta: RequestMeta,
     event: string,
-    entityId: string,
+    entityId: string | null,
     details: Record<string, unknown> = {},
+    entityType = "change_set",
   ): Promise<void> {
     await audit.insertAuditEvent(db, {
       workspaceId: auth.workspaceId,
       actorUserId: auth.userId,
       event,
-      entityType: "change_set",
+      entityType,
       entityId,
       ip: meta.ip ?? null,
       sessionId: auth.sessionId,
@@ -543,53 +550,6 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
     };
   }
 
-  /**
-   * One campaign-level negative spec: block `searchTerm` in `campaign`. ASIN
-   * terms (a shopper landed on a product detail page) can only be blocked
-   * with a negative product target; text terms use a negative exact keyword.
-   */
-  function campaignNegativeSpec(
-    recommendationId: string | null,
-    searchTerm: string,
-    campaign: structure.CampaignRow,
-  ) {
-    const asinTerm = isAsin(searchTerm);
-    return {
-      recommendationId,
-      actionType: (asinTerm ? "add_negative_target" : "add_negative_exact") as
-        "add_negative_target" | "add_negative_exact",
-      campaignId: campaign.id,
-      adGroupId: null,
-      targetId: null,
-      searchTerm,
-      beforeValue: null,
-      afterValue: null,
-      entityName: campaign.name,
-      beforeState: asinTerm
-        ? {
-            scope: "campaign",
-            targetType: "ASIN_SAME_AS",
-            present: false,
-          }
-        : {
-            scope: "campaign",
-            matchType: "NEGATIVE_EXACT",
-            present: false,
-          },
-      afterState: asinTerm
-        ? {
-            scope: "campaign",
-            targetType: "ASIN_SAME_AS",
-            present: true,
-          }
-        : {
-            scope: "campaign",
-            matchType: "NEGATIVE_EXACT",
-            present: true,
-          },
-    };
-  }
-
   /** The same term blocked in every one of several campaigns. */
   function cannibalizationNegativeSpecs(
     recommendationId: string,
@@ -597,7 +557,7 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
     campaigns: readonly structure.CampaignRow[],
   ) {
     return campaigns.map((campaign) =>
-      campaignNegativeSpec(recommendationId, searchTerm, campaign),
+      changeDrafts.campaignNegativeSpec(recommendationId, searchTerm, campaign),
     );
   }
 
@@ -2537,7 +2497,7 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
         throw new ApiError(400, "BAD_REQUEST", "No search terms given");
       }
       const specs = terms.map((term) =>
-        campaignNegativeSpec(null, term, campaign),
+        changeDrafts.campaignNegativeSpec(null, term, campaign),
       );
       const setFingerprint = buildChangeSetFingerprint({
         profileId: campaign.profileId,
@@ -2737,6 +2697,150 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
         changeSetIds.push(result.changeSet.id);
       }
       return { changeSetIds, skippedCampaignIds };
+    },
+
+    async createSearchTermExclusion(auth, term, meta) {
+      const normalized = exclusions.normalizeExclusionTerm(term);
+      if (normalized === "") {
+        throw new ApiError(400, "BAD_REQUEST", "No search term given");
+      }
+      const { exclusion, created } = await exclusions.addExclusion(
+        db,
+        auth.workspaceId,
+        normalized,
+      );
+      // Only campaigns that actually served the term get a negative — the
+      // same resolution the single-market bulk-exclude route applies through
+      // the search-term detail, here across all markets at once. The window
+      // matches the search-terms screens' default 30-day lookback
+      // (UTC-today end). Campaigns that later start serving the term are
+      // covered by the worker's enforcement pass.
+      const SERVING_LOOKBACK_DAYS = 30;
+      const endDate = new Date(now().toISOString().slice(0, 10));
+      const startDate = new Date(
+        endDate.getTime() - (SERVING_LOOKBACK_DAYS - 1) * 86_400_000,
+      );
+      const serving = await dashboard.listSearchTermServingCampaigns(
+        db,
+        auth.workspaceId,
+        normalized,
+        startDate.toISOString().slice(0, 10),
+        endDate.toISOString().slice(0, 10),
+      );
+      const servingByProfile = new Map<string, Set<string>>();
+      for (const row of serving) {
+        const set = servingByProfile.get(row.profilePk) ?? new Set<string>();
+        set.add(row.campaignPk);
+        servingByProfile.set(row.profilePk, set);
+      }
+      const profileRows = await profiles.listProfilesByWorkspace(
+        db,
+        auth.workspaceId,
+      );
+      const drafted: SearchTermExclusionResult["changeSets"] = [];
+      let skippedCampaigns = 0;
+      for (const profile of profileRows) {
+        // Disabled profiles are not synced, so their structure mirror can be
+        // stale; the worker's enforcement pass covers every enabled profile.
+        if (!profile.enabled) continue;
+        const served = servingByProfile.get(profile.id);
+        if (!served || served.size === 0) continue;
+        const [campaignRows, negativeKeywords, negativeTargets] =
+          await Promise.all([
+            structure.listCampaignsByProfile(db, profile.id),
+            structure.listNegativeKeywordsByProfile(db, profile.id),
+            structure.listNegativeTargetsByProfile(db, profile.id),
+          ]);
+        const blocked = blockedCampaignIds(
+          normalized,
+          [
+            ...negativeKeywords,
+            ...keywordSpecsFromNegativeTargets(
+              negativeTargets.map((row) => ({
+                campaignId: row.campaignId,
+                adGroupId: row.adGroupId,
+                asin: row.expressionAsin,
+                state: row.state,
+              })),
+            ),
+          ],
+          // No serving-ad-group facts on this path: only campaign-level
+          // negatives count as blocking — the level exclusion drafts write at.
+          new Map(),
+        );
+        const servedCampaigns = campaignRows.filter((campaign) =>
+          served.has(campaign.id),
+        );
+        if (servedCampaigns.length === 0) continue;
+        const candidates = servedCampaigns.filter(
+          (campaign) =>
+            campaign.state.trim().toLowerCase() === "enabled" &&
+            !blocked.has(campaign.id),
+        );
+        // Skipped = campaigns that served the term but need no action:
+        // already blocking it, or not enabled. Campaigns that never served
+        // the term are not candidates at all and are not counted.
+        skippedCampaigns += servedCampaigns.length - candidates.length;
+        if (candidates.length === 0) continue;
+        const draftedSet = await changeDrafts.createSearchTermExclusionSet(
+          pool,
+          {
+            profileId: profile.id,
+            creatorUserId: auth.userId,
+            searchTerm: normalized,
+            campaigns: candidates,
+          },
+        );
+        drafted.push({
+          changeSetId: draftedSet.changeSet.id,
+          profileId: profile.profileId,
+          campaignCount: candidates.length,
+        });
+      }
+      await recordAudit(
+        auth,
+        meta,
+        "search_term.exclusion.create",
+        exclusion.id,
+        {
+          searchTerm: normalized,
+          created,
+          changeSetCount: drafted.length,
+          campaignCount: drafted.reduce(
+            (sum, entry) => sum + entry.campaignCount,
+            0,
+          ),
+          skippedCampaigns,
+        },
+        "search_term_exclusion",
+      );
+      return {
+        term: normalized,
+        created,
+        changeSets: drafted,
+        skippedCampaigns,
+      };
+    },
+
+    async removeSearchTermExclusion(auth, term, meta) {
+      const normalized = exclusions.normalizeExclusionTerm(term);
+      // Only the list entry goes: negatives already applied on Amazon stay
+      // (re-including them is the existing negative-removal flow), and open
+      // draft change sets are unaffected.
+      const removed = await exclusions.removeExclusion(
+        db,
+        auth.workspaceId,
+        normalized,
+      );
+      await recordAudit(
+        auth,
+        meta,
+        "search_term.exclusion.remove",
+        null,
+        { searchTerm: normalized, removed },
+        "search_term_exclusion",
+      );
+      return { removed };
     },
 
     async createCampaignCreationChangeSets(auth, input, meta) {

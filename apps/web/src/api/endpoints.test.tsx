@@ -4,10 +4,13 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getCsrfToken, setCsrfToken } from "./client";
 import {
+  useCreateSearchTermExclusion,
   useDashboardSummary,
   useDataFreshness,
+  useDeleteSearchTermExclusion,
   useEnqueueFxSync,
   useLogout,
+  useSearchTermExclusions,
   useUpdateWorkspaceSettings,
 } from "./endpoints";
 
@@ -312,5 +315,120 @@ describe("dashboard query hooks", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.profiles).toHaveLength(1);
     expect(result.current.data?.fxRates.lastRunState).toBe("succeeded");
+  });
+});
+
+describe("search-term exclusion hooks", () => {
+  afterEach(() => {
+    setCsrfToken(null);
+    vi.unstubAllGlobals();
+  });
+
+  it("GETs the exclusion list", async () => {
+    const payload = {
+      exclusions: [{ term: "dragons", createdAt: "2026-08-20T10:00:00.000Z" }],
+    };
+    const fetchSpy = vi.fn(
+      async () =>
+        new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    const { result } = renderHook(() => useSearchTermExclusions(), {
+      wrapper: wrapper(queryClient),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/search-terms/exclusions",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(result.current.data?.exclusions[0]?.term).toBe("dragons");
+  });
+
+  it("POSTs the encoded term and invalidates exclusions, search terms, and change sets", async () => {
+    const payload = {
+      term: "fantasy books",
+      created: true,
+      changeSets: [
+        { changeSetId: "41", profileId: "profile-us", campaignCount: 2 },
+      ],
+      skippedCampaigns: 0,
+    };
+    const fetchSpy = vi.fn(
+      async () =>
+        new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+    setCsrfToken("csrf-token");
+    const queryClient = new QueryClient({
+      defaultOptions: { mutations: { retry: false } },
+    });
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+
+    const { result } = renderHook(
+      () => useCreateSearchTermExclusion("fantasy books"),
+      { wrapper: wrapper(queryClient) },
+    );
+
+    await act(async () => {
+      await result.current.mutateAsync();
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/search-terms/fantasy%20books/exclusion",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "x-csrf-token": "csrf-token" }),
+      }),
+    );
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ["search-term-exclusions"],
+    });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["search-terms"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["change-sets"] });
+  });
+
+  it("DELETEs the encoded term and invalidates the list and search terms", async () => {
+    const fetchSpy = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ removed: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+    setCsrfToken("csrf-token");
+    const queryClient = new QueryClient({
+      defaultOptions: { mutations: { retry: false } },
+    });
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+
+    const { result } = renderHook(() => useDeleteSearchTermExclusion(), {
+      wrapper: wrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync("fantasy books");
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/search-terms/fantasy%20books/exclusion",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ["search-term-exclusions"],
+    });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["search-terms"] });
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ["change-sets"] });
   });
 });

@@ -160,10 +160,14 @@ profiles & sync, books & economics, new-ASIN identification, and the audit
 log. Tab badges surface outstanding setup work (unconfigured economics, new
 ASINs). The profiles tab leads with the Workspace card (display currency plus
 the FX rates status row and its **Sync rates now** manual trigger — see the
-FX section above). Books that still need setup auto-expand; each market's
-economics edit in a single table row, with the effective-from date and notes
-behind the row's **Details** toggle, and market linking behind the collapsed
-**Link another market** section.
+FX section above) and carries the **Excluded search terms** card: the
+workspace's persistent exclusion list (`useSearchTermExclusions`) with a
+per-term remove (`useDeleteSearchTermExclusion`). Removing a term deletes
+only the list entry — negatives already applied on Amazon stay, and open
+exclusion drafts are unaffected. Books that still need setup auto-expand;
+each market's economics edit in a single table row, with the effective-from
+date and notes behind the row's **Details** toggle, and market linking
+behind the collapsed **Link another market** section.
 
 ## New-campaign wizard
 
@@ -245,13 +249,19 @@ center for review and apply. Terms an enabled synced negative already blocks
 (keyword text case-insensitively, ASINs uppercased, from the detail payload's
 `negativeKeywords`/`negativeTargets`) render as "Excluded" with no action.
 
-The search-term detail page has the bulk entry point: **Exclude everywhere**
-(`src/components/exclude-search-term-everywhere.tsx`, in the header control
-cluster) confirms the enabled campaigns running the term in the viewed market,
-then drafts one negatives change set per campaign via
-`useCreateSearchTermNegatives` (`POST /api/search-terms/:term/negatives`),
-linking to Change center like the per-row action. It is disabled when no
-enabled campaign runs the term.
+**Exclude everywhere** (`src/components/exclude-search-term-global.tsx`) is
+the persistent, all-market action: a per-row action on the `/search-terms`
+list and the header control on the search-term detail page. It confirms,
+then POSTs `/api/search-terms/:term/exclusion` via
+`useCreateSearchTermExclusion` — recording the term in the workspace
+exclusion list and drafting one negatives change set per market for the
+enabled campaigns that actually served the term (trailing-30-day
+search-term facts) and do not already block it — and links to Change center
+for review and apply. Both pages fetch `useSearchTermExclusions`; a term
+already on the list renders an "Excluded everywhere" badge with no action.
+The single-market `POST /api/search-terms/:term/negatives` route still
+exists (its `useCreateSearchTermNegatives` hook remains) but no longer has a
+UI entry point.
 
 ## Re-authentication
 
