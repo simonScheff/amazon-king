@@ -177,8 +177,11 @@ function dateRange(
     return { start: isoDay(start), end: isoDay(end) };
   }
   const clamped = Math.min(Math.max(Math.trunc(window) || 30, 1), MAX_DAYS);
-  const start = new Date(end.getTime() - (clamped - 1) * DAY_MS);
-  return { start: isoDay(start), end: isoDay(end) };
+  // Facts land a day late (metrics sync imports yesterday), so a 1-day window
+  // means the latest complete day, not the empty in-progress today.
+  const endDay = clamped === 1 ? new Date(end.getTime() - DAY_MS) : end;
+  const start = new Date(endDay.getTime() - (clamped - 1) * DAY_MS);
+  return { start: isoDay(start), end: isoDay(endDay) };
 }
 
 /** Comparison window for dashboard period-over-period totals. */
@@ -206,11 +209,16 @@ function previousDateRange(
     );
     return { start: isoDay(prevStart), end: isoDay(prevEnd) };
   }
+  const clamped = Math.min(Math.max(Math.trunc(window) || 30, 1), MAX_DAYS);
   const { start } = dateRange(now, window);
-  return dateRange(
-    new Date(new Date(`${start}T00:00:00.000Z`).getTime() - DAY_MS),
-    window,
+  // Compute directly instead of composing dateRange: dateRange's 1-day
+  // special case (end yesterday) would otherwise push the previous window a
+  // day too far back.
+  const prevEnd = new Date(
+    new Date(`${start}T00:00:00.000Z`).getTime() - DAY_MS,
   );
+  const prevStart = new Date(prevEnd.getTime() - (clamped - 1) * DAY_MS);
+  return { start: isoDay(prevStart), end: isoDay(prevEnd) };
 }
 
 /** Map a raw job_queue status to the contract's fx_sync run state. */
@@ -1157,6 +1165,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
           amazonConsoleUrl:
             consoleUrlByProfile.get(row.amazonProfileId) ?? null,
           bookIds: row.bookIds,
+          maxCpc: row.maxCpc,
           profitability: {
             dateRange: { start, end },
             currency: row.currency as DashboardSummary["currency"],

@@ -299,6 +299,40 @@ describe("dashboard country filtering", () => {
     );
   });
 
+  it("treats a 1-day window as the latest complete day (yesterday)", async () => {
+    const service = createReadService({
+      db: {} as never,
+      config: { killSwitch: false } as ApiConfig,
+      logger: {} as never,
+      now: () => new Date("2026-08-13T12:00:00.000Z"),
+    });
+
+    const result = await service.dashboardSummary("workspace-1", 1, "US");
+
+    expect(result.dateRange).toEqual({
+      start: "2026-08-12",
+      end: "2026-08-12",
+    });
+    expect(result.previous.dateRange).toEqual({
+      start: "2026-08-11",
+      end: "2026-08-11",
+    });
+    expect(metrics.dashboardTotals).toHaveBeenCalledWith(
+      expect.anything(),
+      US_PROFILE.id,
+      "2026-08-12",
+      "2026-08-12",
+      null,
+    );
+    expect(metrics.dashboardTotals).toHaveBeenCalledWith(
+      expect.anything(),
+      US_PROFILE.id,
+      "2026-08-11",
+      "2026-08-11",
+      null,
+    );
+  });
+
   it("clamps prior-month MTD when the previous month is shorter", async () => {
     const service = createReadService({
       db: {} as never,

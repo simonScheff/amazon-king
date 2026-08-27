@@ -470,6 +470,7 @@ export function useSetCampaignMaxCpc(campaignId: string) {
     onSuccess: async () => {
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["campaign-max-cpc", campaignId] }),
+        qc.invalidateQueries({ queryKey: ["campaigns"] }),
         qc.invalidateQueries({ queryKey: ["change-sets"] }),
       ]);
     },

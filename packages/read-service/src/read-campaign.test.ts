@@ -95,6 +95,7 @@ describe("campaign profitability", () => {
           units: 2,
         },
         estimatedRoyalty: "10.0000",
+        maxCpc: "0.7500",
         economicsMissing: false,
         dataCurrentThrough: "2026-08-13",
         mixedCurrency: false,
@@ -270,6 +271,7 @@ describe("campaign profitability", () => {
         bookIds: ["42"],
         amazonConsoleUrl:
           "https://advertising.amazon.com/cm/campaigns?entityId=ENTITY-1",
+        maxCpc: "0.7500",
         profitability: {
           dateRange: { start: "2026-08-07", end: "2026-08-13" },
           currency: "USD",

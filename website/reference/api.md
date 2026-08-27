@@ -370,6 +370,7 @@ Response `200`: array of campaign rows.
 | amazonConsoleUrl | string \| null | Campaign Manager link; null when no account id on file   |
 | bookIds          | string[]       | Distinct catalog books advertised by the campaign; empty if unmapped |
 | profitability    | object         | `{dateRange, currency, estimatedRoyalty, estimatedAdProfit, economicsMissing, dataCurrentThrough}`; money fields null when economics are missing |
+| maxCpc            | decimal \| null | Campaign-wide CPC ceiling; null when not configured |
 
 ### `GET /api/campaigns/:id?days&books`
 

@@ -181,6 +181,11 @@ adjustments, automated rules — can push your effective CPC far above the base
 bid you set. The **Max CPC** tab on the campaign detail page makes one
 ceiling explicit and enforceable.
 
+On the **Campaigns** page, hover the profitable/not-profitable result (or focus
+it with the keyboard) to see the campaign's ceiling. The tooltip shows the
+configured Max CPC in that market's currency, or **Not configured** when the
+campaign has no ceiling yet.
+
 The tab reads the campaign's live bid controls and reports a coverage status:
 
 - `not_configured` — no ceiling set.

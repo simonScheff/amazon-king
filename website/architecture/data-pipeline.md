@@ -80,7 +80,9 @@ The core of the pipeline (`apps/worker/src/jobs/metrics-sync.ts`). Payload:
 Date handling:
 
 - The scheduled daily job syncs **yesterday** only; `recent_window_resync`
-  separately re-imports the trailing 14 days for late attribution.
+  separately re-imports the trailing 14 days for late attribution, every
+  `RECENT_WINDOW_RESYNC_INTERVAL_MS` (default 6 h) because Amazon revises
+  recent days intra-day (traffic validation, attribution lag).
 - A manual/legacy payload without dates falls back to the trailing **31
   complete UTC days**.
 - Ranges are split into chunks of at most **31 inclusive days** — the

@@ -12,6 +12,12 @@ import type {
  * shadow because collapsed table borders scroll away from a sticky cell, and
  * the header stays below the `z-10` overlay layer that dropdowns use so it
  * cannot paint over an open menu.
+ *
+ * `[contain:layout]` is for WebKit/iOS: a wide table inside `overflow-x-auto`
+ * still propagates its layout overflow into the root scrollWidth there, which
+ * widens the iOS layout viewport and pushes fixed/top-layer elements (the
+ * modal Dialog) off the screen. Layout containment isolates the table's
+ * overflow without the paint clipping that would cut off menus inside cells.
  */
 export function Table({
   className = "",
@@ -20,7 +26,7 @@ export function Table({
 }: TableHTMLAttributes<HTMLTableElement> & { stickyHeader?: boolean }) {
   return (
     <div
-      className={`w-full max-w-full overflow-x-auto ${
+      className={`w-full min-w-0 max-w-full overflow-x-auto [contain:layout] ${
         stickyHeader
           ? "max-h-[calc(100dvh-4rem)] overflow-y-auto [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-[1] [&_thead_th]:shadow-[inset_0_-1px_0_var(--color-zinc-800)]"
           : ""

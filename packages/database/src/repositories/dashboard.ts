@@ -60,6 +60,8 @@ export interface CampaignRowData {
   totals: TotalsRow;
   /** Null when activity exists but royalty economics are incomplete. */
   estimatedRoyalty: string | null;
+  /** Owner-configured campaign-wide CPC ceiling; null when not configured. */
+  maxCpc: string | null;
   economicsMissing: boolean;
   dataCurrentThrough: string | null;
   mixedCurrency: boolean;
@@ -92,6 +94,7 @@ export async function listCampaignRows(
       state: string;
       currency: string;
       estimated_royalty: string | null;
+      max_cpc: string | null;
       economics_missing: boolean;
       data_current_through: string | null;
       mixed_currency: boolean;
@@ -231,6 +234,7 @@ export async function listCampaignRows(
             cr.impressions, cr.clicks, cr.cost, cr.sales, cr.orders, cr.units,
             coalesce(cr.currency, p.currency_code)::text as currency,
             rr.estimated_royalty,
+            policy.max_cpc::text as max_cpc,
             coalesce(rr.economics_missing, false) as economics_missing,
             cr.data_current_through,
             coalesce(cr.mixed_currency, false)
@@ -248,6 +252,7 @@ export async function listCampaignRows(
      left join campaign_books cb
        on cb.profile_id = c.profile_id
       and cb.campaign_id = c.amazon_campaign_id
+     left join campaign_bid_policies policy on policy.campaign_id = c.id
      where conn.workspace_id = $1
        and (coalesce(cardinality($4::bigint[]), 0) = 0 or exists (
          select 1
@@ -274,6 +279,7 @@ export async function listCampaignRows(
     currency: row.currency,
     totals: toTotals(row),
     estimatedRoyalty: row.estimated_royalty,
+    maxCpc: row.max_cpc,
     economicsMissing: row.economics_missing,
     dataCurrentThrough: row.data_current_through,
     mixedCurrency: row.mixed_currency,

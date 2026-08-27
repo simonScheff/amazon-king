@@ -36,7 +36,7 @@ export function Dialog({
     <dialog
       ref={ref}
       onClose={onClose}
-      className="m-auto w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900 p-0 text-zinc-100 shadow-[0_24px_48px_rgba(0,0,0,0.6)] backdrop:bg-black/60 backdrop:backdrop-blur-sm"
+      className="m-auto max-h-[85dvh] w-full max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-900 p-0 text-zinc-100 shadow-[0_24px_48px_rgba(0,0,0,0.6)] backdrop:bg-black/60 backdrop:backdrop-blur-sm sm:max-w-md"
     >
       <div className="border-b border-zinc-800 px-5 py-4">
         <h2 className="text-base font-semibold">{title}</h2>

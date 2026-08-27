@@ -1094,6 +1094,11 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         metricDate: "2026-08-13",
       },
     ]);
+    await pool.query(
+      `insert into campaign_bid_policies (campaign_id, max_cpc, status)
+       values ($1, '0.75', 'active')`,
+      [campaign.id],
+    );
     await expect(
       campaignDailySeries(
         pool,
@@ -1127,6 +1132,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         amazonCampaignId: "amzn-campaign-book-map",
         currency: "USD",
         estimatedRoyalty: "17.0000",
+        maxCpc: "0.7500",
         economicsMissing: false,
         dataCurrentThrough: "2026-08-14",
         mixedCurrency: false,

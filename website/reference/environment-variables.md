@@ -69,6 +69,7 @@ with a `missing_lwa_credentials` auth error until they are set.
 | `REPORT_POLL_MAX_DELAY_MS`       | `60000`            | Maximum report-poll backoff. |
 | `REPORT_POLL_TIMEOUT_MS`         | `2700000` (45 min) | Overall report-poll timeout. Amazon typically needs 19–21 minutes per daily report. |
 | `RECENT_WINDOW_DAYS`             | `14`               | Days re-imported by `recent_window_resync` to absorb attribution lag. |
+| `RECENT_WINDOW_RESYNC_INTERVAL_MS` | `21600000` (6 h) | How often `recent_window_resync` re-imports the trailing window. Amazon revises recent days intra-day (traffic validation up to 72 h, attribution lag); set `28800000` for every 8 hours. |
 | `RECOMMENDATION_FRESHNESS_HOURS` | `48`               | Recommendation runs skip when the last complete metrics sync is older than this. |
 | `SCHEDULE_TICK_MS`               | `900000` (15 min)  | `schedule_tick` self-rescheduling interval. |
 | `FX_RATES_BASE_URL`              | `https://api.frankfurter.dev` | Base URL of the Frankfurter-compatible FX API the daily `fx_sync` job fetches (`GET {base}/v2/rates?base=USD&from=…`). Keyless and quota-free; point at a self-hosted Frankfurter container to avoid the public instance. |

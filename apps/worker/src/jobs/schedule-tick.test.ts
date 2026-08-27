@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createScheduleTickHandler } from "./schedule-tick.js";
-import { FakeStore, makeDeps, runHandler } from "../test-utils.js";
+import { FakeStore, makeDeps, runHandler, testConfig } from "../test-utils.js";
 import type { ProfileRecord } from "../store.js";
 
 const ENABLED_PROFILE: ProfileRecord = {
@@ -79,11 +79,69 @@ describe("schedule_tick", () => {
       {},
     );
     expect(store.jobs.some((job) => job.type === "metrics_sync")).toBe(false);
+    // The resync is interval-based, not gated on the settle hour: with no
+    // cadence marks yet it is due on the very first tick.
     expect(store.jobs.some((job) => job.type === "recent_window_resync")).toBe(
-      false,
+      true,
     );
     // Non-daily work is still enqueued.
     expect(store.jobs.some((job) => job.type === "structure_sync")).toBe(true);
+  });
+
+  it("re-enqueues recent_window_resync only after the interval elapses", async () => {
+    const store = new FakeStore();
+    store.profiles.push(ENABLED_PROFILE);
+    const handler = createScheduleTickHandler(tickDeps(store));
+    await runHandler(handler, {});
+    expect(
+      store.jobs.filter((job) => job.type === "recent_window_resync"),
+    ).toHaveLength(1);
+
+    // Immediate re-tick with the carried-forward marks: the 6 h default has
+    // not elapsed, so no second resync.
+    const nextTick = store.jobs.find((job) => job.type === "schedule_tick")!;
+    await runHandler(handler, nextTick.payload);
+    expect(
+      store.jobs.filter((job) => job.type === "recent_window_resync"),
+    ).toHaveLength(1);
+
+    // Once the interval has elapsed the resync is due again. Mark the first
+    // resync done to simulate the queue having processed it — otherwise the
+    // enqueueIfNotQueued backstop correctly refuses a duplicate.
+    store.jobs.find((job) => job.type === "recent_window_resync")!.status =
+      "done";
+    const later = tickDeps(store, new Date("2026-08-07T13:00:00.000Z"));
+    await runHandler(createScheduleTickHandler(later), nextTick.payload);
+    expect(
+      store.jobs.filter((job) => job.type === "recent_window_resync"),
+    ).toHaveLength(2);
+  });
+
+  it("honors a custom resync interval such as 8 hours", async () => {
+    const store = new FakeStore();
+    store.profiles.push(ENABLED_PROFILE);
+    const config = testConfig({
+      recentWindowResyncIntervalMs: 8 * 60 * 60 * 1000,
+    });
+    const handler = createScheduleTickHandler(
+      makeDeps({ store, config, now: () => NOW }),
+    );
+    await runHandler(handler, {});
+    const nextTick = store.jobs.find((job) => job.type === "schedule_tick")!;
+
+    // 8 hours later the resync is due again the same UTC day (first resync
+    // marked done, as the queue would have processed it).
+    store.jobs.find((job) => job.type === "recent_window_resync")!.status =
+      "done";
+    const later = makeDeps({
+      store,
+      config,
+      now: () => new Date("2026-08-06T20:00:00.000Z"),
+    });
+    await runHandler(createScheduleTickHandler(later), nextTick.payload);
+    expect(
+      store.jobs.filter((job) => job.type === "recent_window_resync"),
+    ).toHaveLength(2);
   });
 
   it("enqueues fx_sync only after 17:00 UTC (ECB fixing published)", async () => {

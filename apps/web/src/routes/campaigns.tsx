@@ -317,6 +317,7 @@ export function CampaignsPage() {
                                 c.profitability.economicsMissing
                               }
                               hasActivity={hasActivity}
+                              maxCpc={c.maxCpc}
                             />
                           </div>
                         </div>
@@ -352,6 +353,7 @@ export function CampaignsPage() {
                         currency={currency}
                         economicsMissing={c.profitability.economicsMissing}
                         hasActivity={hasActivity}
+                        maxCpc={c.maxCpc}
                       />
                     </Td>
                     <Td className="text-right">

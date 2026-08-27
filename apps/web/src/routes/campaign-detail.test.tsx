@@ -321,6 +321,108 @@ describe("CampaignDetailPage profitability", () => {
     ).toBeInTheDocument();
   });
 
+  it("sorts negative-keyword rows when a column header is clicked", () => {
+    const negative = (
+      overrides: Partial<(typeof detail.negativeKeywords)[number]>,
+    ) => ({
+      id: "negative-default",
+      keywordText: "default",
+      matchType: "NEGATIVE_EXACT",
+      level: "campaign" as const,
+      adGroupId: null,
+      adGroupName: null,
+      state: "ENABLED",
+      firstSeenAt: "2026-08-01T10:00:00Z",
+      ...overrides,
+    });
+    mocks.useCampaign.mockReturnValue({
+      isPending: false,
+      error: null,
+      data: {
+        ...detail,
+        negativeKeywords: [
+          negative({
+            id: "zebra",
+            keywordText: "zebra books",
+            matchType: "NEGATIVE_EXACT",
+            level: "campaign",
+            state: "ENABLED",
+            firstSeenAt: "2026-08-01T10:00:00Z",
+          }),
+          negative({
+            id: "alpha",
+            keywordText: "alpha books",
+            matchType: "NEGATIVE_PHRASE",
+            level: "ad_group",
+            adGroupId: "ad-group-1",
+            adGroupName: "Exact ad group",
+            state: "PAUSED",
+            firstSeenAt: "2026-08-10T10:00:00Z",
+          }),
+          negative({
+            id: "middle",
+            keywordText: "middle books",
+            matchType: "NEGATIVE_EXACT",
+            level: "campaign",
+            state: "ENABLED",
+            firstSeenAt: "2026-08-05T10:00:00Z",
+          }),
+        ],
+      },
+    });
+    const rowKeywords = () =>
+      screen
+        .getAllByRole("row")
+        .slice(1)
+        .map((row) => row.querySelector("td")?.textContent ?? "");
+
+    render(<CampaignDetailPage />);
+    fireEvent.click(screen.getByRole("tab", { name: "Negative keywords" }));
+
+    // Default: keyword asc.
+    expect(rowKeywords()).toEqual([
+      "alpha books",
+      "middle books",
+      "zebra books",
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Negative keyword" }));
+    expect(rowKeywords()).toEqual([
+      "zebra books",
+      "middle books",
+      "alpha books",
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Match type" }));
+    expect(rowKeywords()).toEqual([
+      "zebra books",
+      "middle books",
+      "alpha books",
+    ]);
+
+    // Added is a date: first click is newest first.
+    fireEvent.click(screen.getByRole("button", { name: "Added" }));
+    expect(rowKeywords()).toEqual([
+      "alpha books",
+      "middle books",
+      "zebra books",
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Applied to" }));
+    expect(rowKeywords()).toEqual([
+      "alpha books",
+      "zebra books",
+      "middle books",
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "State" }));
+    expect(rowKeywords()).toEqual([
+      "zebra books",
+      "middle books",
+      "alpha books",
+    ]);
+  });
+
   it("shows every synced negative product target", () => {
     render(<CampaignDetailPage />);
 

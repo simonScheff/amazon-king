@@ -25,6 +25,10 @@ export interface WorkerConfig {
   reportPollTimeoutMs: number;
   /** Days re-imported by recent_window_resync (attribution lag, plan §8). */
   recentWindowDays: number;
+  /** How often recent_window_resync re-imports the trailing window. Amazon
+   * revises recent days intra-day (traffic validation up to 72 h, attribution
+   * lag), so a shorter interval picks up corrections sooner. */
+  recentWindowResyncIntervalMs: number;
   /** Recommendation runs skip when the last complete metrics sync is older. */
   recommendationFreshnessHours: number;
   /** schedule_tick self-rescheduling interval (plan §8 cadence). */
@@ -73,6 +77,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
     // cover that spread; a waiting poll costs one request per minute.
     reportPollTimeoutMs: intEnv("REPORT_POLL_TIMEOUT_MS", 45 * 60_000),
     recentWindowDays: intEnv("RECENT_WINDOW_DAYS", 14),
+    recentWindowResyncIntervalMs: intEnv(
+      "RECENT_WINDOW_RESYNC_INTERVAL_MS",
+      6 * 60 * 60_000,
+    ),
     recommendationFreshnessHours: intEnv("RECOMMENDATION_FRESHNESS_HOURS", 48),
     scheduleTickMs: intEnv("SCHEDULE_TICK_MS", 15 * 60_000),
     fxRatesBaseUrl: env.FX_RATES_BASE_URL || "https://api.frankfurter.dev",

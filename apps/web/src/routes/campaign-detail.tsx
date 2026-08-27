@@ -123,6 +123,50 @@ function formatAmazonLabel(value: string) {
     .join(" ");
 }
 
+function appliedToLabel(row: {
+  level: "campaign" | "ad_group";
+  adGroupName: string | null;
+  adGroupId: string | null;
+}): string {
+  return row.level === "campaign"
+    ? "Campaign"
+    : `Ad group · ${row.adGroupName ?? row.adGroupId ?? "Unknown"}`;
+}
+
+const NEGATIVE_KEYWORD_TEXT_COLUMNS = [
+  "keywordText",
+  "matchType",
+  "appliedTo",
+  "state",
+] as const;
+
+type NegativeKeywordSortKey =
+  | "keywordText"
+  | "matchType"
+  | "appliedTo"
+  | "firstSeenAt"
+  | "state";
+
+function negativeKeywordSortValue(
+  row: NegativeKeywordRow,
+  key: NegativeKeywordSortKey,
+): number | string | null {
+  switch (key) {
+    case "keywordText":
+      return row.keywordText.toLowerCase();
+    case "matchType":
+      return formatAmazonLabel(row.matchType).toLowerCase();
+    case "appliedTo":
+      return appliedToLabel(row).toLowerCase();
+    case "firstSeenAt": {
+      const timestamp = Date.parse(row.firstSeenAt);
+      return Number.isNaN(timestamp) ? null : timestamp;
+    }
+    case "state":
+      return formatAmazonLabel(row.state).toLowerCase();
+  }
+}
+
 function NegativeKeywordsTable({
   rows,
   campaignId,
@@ -132,6 +176,17 @@ function NegativeKeywordsTable({
   campaignId: string;
   editable: boolean;
 }) {
+  const [sort, setSort] = useState<Sort<NegativeKeywordSortKey>>({
+    key: "keywordText",
+    direction: "asc",
+  });
+
+  function onSort(column: NegativeKeywordSortKey) {
+    setSort((current) =>
+      nextSort(current, column, NEGATIVE_KEYWORD_TEXT_COLUMNS),
+    );
+  }
+
   if (rows.length === 0) {
     return (
       <EmptyState>
@@ -139,30 +194,60 @@ function NegativeKeywordsTable({
       </EmptyState>
     );
   }
+
+  const sortedRows = [...rows].sort((a, b) =>
+    compareNullable(
+      negativeKeywordSortValue(a, sort.key),
+      negativeKeywordSortValue(b, sort.key),
+      sort.direction,
+    ),
+  );
+
   return (
     <Table stickyHeader>
       <thead>
         <tr>
-          <Th>Negative keyword</Th>
-          <Th>Match type</Th>
-          <Th>Applied to</Th>
-          <Th>Added</Th>
-          <Th>State</Th>
+          <SortableTh
+            label="Negative keyword"
+            column="keywordText"
+            sort={sort}
+            onSort={onSort}
+          />
+          <SortableTh
+            label="Match type"
+            column="matchType"
+            sort={sort}
+            onSort={onSort}
+          />
+          <SortableTh
+            label="Applied to"
+            column="appliedTo"
+            sort={sort}
+            onSort={onSort}
+          />
+          <SortableTh
+            label="Added"
+            column="firstSeenAt"
+            sort={sort}
+            onSort={onSort}
+          />
+          <SortableTh
+            label="State"
+            column="state"
+            sort={sort}
+            onSort={onSort}
+          />
           {editable ? <Th /> : null}
         </tr>
       </thead>
       <tbody>
-        {rows.map((row) => {
+        {sortedRows.map((row) => {
           const state = row.state.toLowerCase();
           return (
             <tr key={row.id}>
               <Td className="font-medium text-zinc-100">{row.keywordText}</Td>
               <Td>{formatAmazonLabel(row.matchType)}</Td>
-              <Td>
-                {row.level === "campaign"
-                  ? "Campaign"
-                  : `Ad group · ${row.adGroupName ?? row.adGroupId ?? "Unknown"}`}
-              </Td>
+              <Td>{appliedToLabel(row)}</Td>
               <Td>{formatDate(row.firstSeenAt)}</Td>
               <Td>
                 <Badge tone={state === "enabled" ? "success" : "neutral"}>
@@ -231,11 +316,7 @@ function NegativeProductsTable({
                 />
               </Td>
               <Td>ASIN same as</Td>
-              <Td>
-                {row.level === "campaign"
-                  ? "Campaign"
-                  : `Ad group · ${row.adGroupName ?? row.adGroupId ?? "Unknown"}`}
-              </Td>
+              <Td>{appliedToLabel(row)}</Td>
               <Td>{formatDate(row.firstSeenAt)}</Td>
               <Td>
                 <Badge tone={state === "enabled" ? "success" : "neutral"}>

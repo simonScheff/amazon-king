@@ -1,6 +1,6 @@
 import type { MetricWindow } from "@amazon-king/contracts";
 
-export const TIMEFRAME_OPTIONS = [7, 14, 30, 60, "mtd"] as const;
+export const TIMEFRAME_OPTIONS = [1, 7, 14, 30, 60, "mtd"] as const;
 export type TimeframeOption = (typeof TIMEFRAME_OPTIONS)[number];
 export const DEFAULT_TIMEFRAME: TimeframeOption = 30;
 

@@ -37,6 +37,10 @@ invisible for that long. Do not fold reaping back into the loop.
     scheduled syncs create their own `sync_runs` row.
 - `schedule_tick` — self-rescheduling every 15 minutes, cadence constants in
   `src/jobs/schedule-tick.ts`, deduped via `enqueueIfNotQueued`
+  - `recent_window_resync` fires every `RECENT_WINDOW_RESYNC_INTERVAL_MS`
+    (default 6 h), not on the daily 05:00 UTC gate: Amazon revises recent
+    days intra-day (traffic validation up to 72 h, attribution lag), so a
+    shorter interval picks up corrections sooner
 - `fx_sync` — workspace-global daily Frankfurter rate top-up into `fx_rates`;
   scheduled by `schedule_tick` after 17:00 UTC, base URL from
   `FX_RATES_BASE_URL`

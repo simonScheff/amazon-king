@@ -14,7 +14,10 @@ import type { JobDeps } from "./types.js";
  * - profile_discovery: daily
  * - structure_sync per enabled profile: every 45 min (30–60 min band)
  * - metrics_sync per enabled profile: once daily after data settles (05:00 UTC)
- * - recent_window_resync per enabled profile: once daily (attribution lag)
+ * - recent_window_resync per enabled profile: every
+ *   `recentWindowResyncIntervalMs` (default 6 h) — Amazon revises recent
+ *   days intra-day (traffic validation up to 72 h, attribution lag), so the
+ *   trailing window is re-imported on an interval, not a daily clock gate
  * - connection_health: every 4 hours
  * - fx_sync: once daily after 17:00 UTC (the day's ECB fixing, ~16:00 CET,
  *   is published by then); workspace-global, not per-profile
@@ -93,7 +96,7 @@ export function createScheduleTickHandler(deps: JobDeps): JobHandler {
         mark(metricsKey);
       }
       const resyncKey = `recent_window_resync:${profile.id}`;
-      if (dueDaily(resyncKey)) {
+      if (dueAfter(resyncKey, deps.config.recentWindowResyncIntervalMs)) {
         await deps.store.enqueueIfNotQueued("recent_window_resync", {
           profileId: profile.id,
         });

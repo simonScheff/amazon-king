@@ -180,6 +180,8 @@ export type CampaignProfitability = z.infer<typeof campaignProfitabilitySchema>;
 /** GET /api/campaigns row, including profitability for the requested window. */
 export const campaignListRowSchema = campaignRowSchema.extend({
   profitability: campaignProfitabilitySchema,
+  /** Campaign-wide CPC ceiling, or null when the owner has not configured one. */
+  maxCpc: nonNegativeDecimalStringSchema.nullable(),
   /**
    * Distinct catalog book ids advertised by this campaign (via enabled
    * book_profile_links). Empty when no ads are mapped. The dashboard joins

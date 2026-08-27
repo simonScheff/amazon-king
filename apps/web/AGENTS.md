@@ -94,8 +94,11 @@ from `GET /api/books`.
 ## Date ranges
 
 Overview, campaign detail, and search-term detail share
-`src/components/timeframe-select.tsx`: 7/14/30/60 days plus month-to-date
-(`?days=mtd`, UTC 1st of the current month through today). Campaign and
+`src/components/timeframe-select.tsx`: 1/7/14/30/60 days plus month-to-date
+(`?days=mtd`, UTC 1st of the current month through today). Facts land a day
+late (metrics sync imports yesterday), so the read service resolves a 1-day
+window to the latest complete day — yesterday, both days equal — not the
+empty in-progress today. Campaign and
 search-term **list** pages deliberately hardcode a 30-day profitability window
 and have no selector.
 

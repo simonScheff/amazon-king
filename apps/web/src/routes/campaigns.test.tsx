@@ -43,6 +43,7 @@ function campaign(
     units: 2,
   },
   bookIds: string[] = [],
+  maxCpc: string | null = null,
 ): CampaignListRow {
   return {
     profileId: "profile-us",
@@ -53,6 +54,7 @@ function campaign(
       "https://advertising.amazon.com/cm/campaigns?entityId=ENTITY-1",
     totals,
     bookIds,
+    maxCpc,
     profitability: {
       dateRange: { start: "2026-08-07", end: "2026-08-13" },
       currency: "USD",
@@ -170,6 +172,36 @@ describe("CampaignsPage thirty-day profitability", () => {
     expect(markets).toHaveLength(4);
     expect(markets[0]).toHaveTextContent("US");
     expect(markets[0]!.querySelector(".fi.fi-us")).not.toBeNull();
+  });
+
+  it("shows the configured Max CPC or setup status from a profit cell", () => {
+    mocks.useCampaigns.mockReturnValue({
+      isPending: false,
+      error: null,
+      data: [
+        campaign("campaign-profit", "General", {}, undefined, [], "0.7500"),
+        campaign("campaign-loss", "Research", {}, undefined, [], null),
+      ],
+    });
+
+    render(<CampaignsPage />);
+
+    const configured = screen.getByLabelText(
+      "General 30-day profit: Profitable",
+    );
+    expect(
+      within(configured).getByRole("tooltip", { hidden: true }),
+    ).toHaveTextContent("Max CPC: $0.75");
+    expect(
+      within(configured).getByText("Profitable").closest("[aria-describedby]"),
+    ).toBeInTheDocument();
+
+    const notConfigured = screen.getByLabelText(
+      "Research 30-day profit: Profitable",
+    );
+    expect(
+      within(notConfigured).getByRole("tooltip", { hidden: true }),
+    ).toHaveTextContent("Max CPC: Not configured");
   });
 
   it("filters campaigns by market", () => {
