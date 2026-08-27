@@ -18,7 +18,12 @@ import {
   listCampaignRows,
   listNegativeKeywordRows,
   listNegativeTargetRows,
+  listNegativeRollupRows,
+  listNegativeSpecRows,
+  listNegativeServingRows,
+  listNegativeTermCampaignRows,
   listSearchTermCampaignRows,
+  listSearchTermPresence,
   listSearchTermRollupRows,
   overviewRoyaltySeries,
   searchTermDailySeries,
@@ -141,6 +146,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       "0015",
       "0016",
       "0017",
+      "0018",
     ]);
     const again = await migrate(pool);
     expect(again).toEqual([]);
@@ -1593,6 +1599,26 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     expect(unmappedDaily).toEqual([
       expect.objectContaining({ estimatedRoyalty: null }),
     ]);
+
+    // Presence ignores the date window: all-time markets and latest fact.
+    const presence = await listSearchTermPresence(
+      pool,
+      workspaceId,
+      "fantasy books",
+    );
+    expect(presence).toEqual([
+      { countryCode: "US", currency: "USD", lastMetricDate: "2026-08-20" },
+    ]);
+
+    // The book filter applies to presence exactly like the windowed rows.
+    await expect(
+      listSearchTermPresence(pool, workspaceId, "unmapped series", [
+        BigInt(book!.id),
+      ]),
+    ).resolves.toEqual([]);
+    await expect(
+      listSearchTermPresence(pool, workspaceId, "never served"),
+    ).resolves.toEqual([]);
   });
 
   it("filters dashboard rows and recommendations by selected books", async () => {
@@ -2456,5 +2482,312 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     expect(await revokeApiToken(pool, "999999", created.id)).toBe(false);
     expect(await revokeApiToken(pool, workspaceId, created.id)).toBe(true);
     expect(await findActiveApiTokenByHash(pool, "a".repeat(64))).toBeNull();
+  });
+
+  it("rolls up workspace negatives with before/window facts and campaign coverage", async () => {
+    const profileId = await seedProfile(pool);
+    const workspace = await pool.query<{
+      workspace_id: string;
+      connection_id: string;
+    }>(
+      `select c.workspace_id::text, c.id::text as connection_id
+       from amazon_profiles p join amazon_connections c on c.id = p.connection_id
+       where p.id = $1`,
+      [profileId],
+    );
+    const workspaceId = workspace.rows[0]!.workspace_id;
+    const connectionId = workspace.rows[0]!.connection_id;
+
+    async function seedCampaign(
+      suffix: string,
+      asin: string,
+      state = "enabled",
+    ) {
+      const campaign = await upsertCampaign(pool, {
+        profileId,
+        amazonCampaignId: `amzn-inv-c-${suffix}`,
+        name: `Inventory ${suffix}`,
+        state,
+      });
+      const adGroup = await upsertAdGroup(pool, {
+        profileId,
+        campaignId: campaign.id,
+        amazonAdGroupId: `amzn-inv-ag-${suffix}`,
+        name: `Inventory ag ${suffix}`,
+        state: "enabled",
+      });
+      await upsertAd(pool, {
+        profileId,
+        adGroupId: adGroup.id,
+        amazonAdId: `amzn-inv-ad-${suffix}`,
+        asin,
+        state: "enabled",
+      });
+      return campaign;
+    }
+
+    const blocked = await seedCampaign("blocked", "B0INVBOOK1");
+    await seedCampaign("leak", "B0INVBOOK1");
+    const paused = await seedCampaign("paused", "B0INVBOOK1", "paused");
+    const otherBook = await seedCampaign("other", "B0INVBOOK2");
+    const product = await seedCampaign("product", "B0INVBOOK1");
+    const deleted = await seedCampaign("deleted", "B0INVBOOK1");
+
+    await upsertNegativeKeyword(pool, {
+      profileId,
+      campaignId: blocked.id,
+      amazonNegativeKeywordId: "amzn-inv-neg-blocked",
+      keywordText: "free books",
+      matchType: "NEGATIVE_EXACT",
+      state: "ENABLED",
+    });
+    await upsertNegativeKeyword(pool, {
+      profileId,
+      campaignId: blocked.id,
+      amazonNegativeKeywordId: "amzn-inv-neg-blocked-phrase",
+      keywordText: "free books",
+      matchType: "NEGATIVE_PHRASE",
+      state: "ENABLED",
+    });
+    await upsertNegativeKeyword(pool, {
+      profileId,
+      campaignId: paused.id,
+      amazonNegativeKeywordId: "amzn-inv-neg-paused",
+      keywordText: "free books",
+      matchType: "NEGATIVE_EXACT",
+      state: "ENABLED",
+    });
+    await upsertNegativeKeyword(pool, {
+      profileId,
+      campaignId: otherBook.id,
+      amazonNegativeKeywordId: "amzn-inv-neg-other",
+      keywordText: "other term",
+      matchType: "NEGATIVE_EXACT",
+      state: "ENABLED",
+    });
+    await upsertNegativeKeyword(pool, {
+      profileId,
+      campaignId: deleted.id,
+      amazonNegativeKeywordId: "amzn-inv-neg-deleted",
+      keywordText: "gone books",
+      matchType: "NEGATIVE_EXACT",
+      state: "DELETED",
+    });
+    await upsertNegativeTarget(pool, {
+      profileId,
+      campaignId: product.id,
+      amazonNegativeTargetId: "amzn-inv-neg-product",
+      expressionAsin: "B0INVBOOK1",
+      state: "ENABLED",
+    });
+
+    await pool.query(
+      `update negative_keywords
+       set created_at = '2026-08-10T00:00:00Z'
+       where amazon_negative_keyword_id in
+         ('amzn-inv-neg-blocked', 'amzn-inv-neg-blocked-phrase',
+          'amzn-inv-neg-paused')`,
+    );
+
+    const bookA = await mapAdvertisedProductToBook(pool, {
+      workspaceId,
+      profileIds: [profileId],
+      asin: "B0INVBOOK1",
+      title: "Inventory book A",
+      format: "ebook",
+    });
+    const bookB = await mapAdvertisedProductToBook(pool, {
+      workspaceId,
+      profileIds: [profileId],
+      asin: "B0INVBOOK2",
+      title: "Inventory book B",
+      format: "ebook",
+    });
+    await addExclusion(pool, workspaceId, "free books");
+
+    const deProfile = await pool.query<{ id: string }>(
+      `insert into amazon_profiles
+         (connection_id, profile_id, region, country_code, currency_code)
+       values ($1, $2, 'EU', 'DE', 'EUR')
+       returning id`,
+      [connectionId, "amzn-inv-profile-de"],
+    );
+    const deProfileId = deProfile.rows[0]!.id;
+    const deCampaign = await upsertCampaign(pool, {
+      profileId: deProfileId,
+      amazonCampaignId: "amzn-inv-c-de",
+      name: "Inventory DE",
+      state: "enabled",
+    });
+    await upsertNegativeKeyword(pool, {
+      profileId: deProfileId,
+      campaignId: deCampaign.id,
+      amazonNegativeKeywordId: "amzn-inv-neg-de",
+      keywordText: "deutsch",
+      matchType: "NEGATIVE_EXACT",
+      state: "ENABLED",
+    });
+
+    const metricValues = {
+      impressions: 50,
+      clicks: 5,
+      purchases7d: 1,
+      sales7d: "10.00",
+      purchases14d: 1,
+      sales14d: "10.00",
+      unitsSoldClicks7d: 1,
+      unitsSoldClicks14d: 1,
+      currency: "USD",
+    };
+    await upsertSearchTermMetrics(pool, [
+      {
+        ...metricValues,
+        profileId,
+        campaignId: "amzn-inv-c-blocked",
+        adGroupId: "amzn-inv-ag-blocked",
+        targetId: "amzn-inv-t-blocked-before",
+        searchTerm: "free books",
+        metricDate: "2026-08-05",
+        cost: "4.00",
+        sales: "12.00",
+        orders: 2,
+        units: 2,
+      },
+      {
+        ...metricValues,
+        profileId,
+        campaignId: "amzn-inv-c-blocked",
+        adGroupId: "amzn-inv-ag-blocked",
+        targetId: "amzn-inv-t-blocked-window",
+        searchTerm: "free books",
+        metricDate: "2026-08-12",
+        cost: "3.00",
+        sales: "8.00",
+        orders: 1,
+        units: 1,
+      },
+      {
+        ...metricValues,
+        profileId,
+        campaignId: "amzn-inv-c-leak",
+        adGroupId: "amzn-inv-ag-leak",
+        targetId: "amzn-inv-t-leak",
+        searchTerm: "free books",
+        metricDate: "2026-08-12",
+        cost: "2.00",
+        sales: "0.00",
+        orders: 0,
+        units: 0,
+      },
+    ]);
+
+    const rows = await listNegativeRollupRows(
+      pool,
+      workspaceId,
+      "2026-08-07",
+      "2026-08-13",
+    );
+    const freeBooks = rows.find(
+      (row) => row.kind === "keyword" && row.valueKey === "free books",
+    )!;
+    const other = rows.find(
+      (row) => row.kind === "keyword" && row.valueKey === "other term",
+    )!;
+    const productRow = rows.find(
+      (row) => row.kind === "product" && row.valueKey === "b0invbook1",
+    )!;
+    const deutsch = rows.find(
+      (row) => row.kind === "keyword" && row.valueKey === "deutsch",
+    )!;
+
+    expect(rows.some((row) => row.valueKey === "gone books")).toBe(false);
+    expect(freeBooks.matchTypes.sort()).toEqual([
+      "NEGATIVE_EXACT",
+      "NEGATIVE_PHRASE",
+    ]);
+    expect(freeBooks.countryCodes).toEqual(["US"]);
+    expect(freeBooks.blockingCampaignCount).toBe(1);
+    expect(freeBooks.pausedCampaignCount).toBe(1);
+    expect(freeBooks.excludedEverywhere).toBe(true);
+    expect(freeBooks.before.totals.orders).toBe(2);
+    expect(freeBooks.before.totals.cost).toBe("4.0000");
+    expect(freeBooks.window.totals.orders).toBe(1);
+    expect(freeBooks.window.totals.cost).toBe("5.0000");
+    expect(freeBooks.lastServedAt).toBe("2026-08-12");
+    expect(productRow.catalogBookId).toBe(bookA!.id);
+    expect(productRow.value).toBe("B0INVBOOK1");
+    expect(deutsch.countryCodes).toEqual(["DE"]);
+    expect(other.bookIds).toEqual([bookB!.id]);
+
+    const usOnly = await listNegativeRollupRows(
+      pool,
+      workspaceId,
+      "2026-08-07",
+      "2026-08-13",
+      null,
+      "US",
+    );
+    expect(usOnly.some((row) => row.valueKey === "deutsch")).toBe(false);
+    expect(usOnly.some((row) => row.valueKey === "free books")).toBe(true);
+
+    const keywordsOnly = await listNegativeRollupRows(
+      pool,
+      workspaceId,
+      "2026-08-07",
+      "2026-08-13",
+      null,
+      null,
+      "keyword",
+    );
+    expect(keywordsOnly.every((row) => row.kind === "keyword")).toBe(true);
+
+    const bookAOnly = await listNegativeRollupRows(
+      pool,
+      workspaceId,
+      "2026-08-07",
+      "2026-08-13",
+      [BigInt(bookA!.id)],
+    );
+    expect(bookAOnly.some((row) => row.valueKey === "other term")).toBe(false);
+    expect(bookAOnly.some((row) => row.valueKey === "free books")).toBe(true);
+
+    const specs = await listNegativeSpecRows(
+      pool,
+      workspaceId,
+      null,
+      "US",
+      "keyword",
+      "free books",
+    );
+    expect(specs).toHaveLength(3);
+    expect(
+      [...new Set(specs.map((spec) => spec.amazonCampaignId))].sort(),
+    ).toEqual(["amzn-inv-c-blocked", "amzn-inv-c-paused"]);
+
+    const serving = await listNegativeServingRows(
+      pool,
+      workspaceId,
+      "2026-08-07",
+      "2026-08-13",
+      null,
+      "US",
+      "keyword",
+      "free books",
+    );
+    expect(
+      [...new Set(serving.map((row) => row.amazonCampaignId))].sort(),
+    ).toEqual(["amzn-inv-c-blocked", "amzn-inv-c-leak"]);
+
+    const campaigns = await listNegativeTermCampaignRows(
+      pool,
+      workspaceId,
+      "free books",
+      "2026-08-07",
+      "2026-08-13",
+    );
+    expect(campaigns.map((row) => row.amazonCampaignId).sort()).toEqual([
+      "amzn-inv-c-blocked",
+      "amzn-inv-c-leak",
+    ]);
   });
 });

@@ -134,12 +134,18 @@ export function PerformanceTrendChart({
   currency,
   showProfit = false,
   visible,
+  markerDate,
 }: {
   daily: readonly PerformancePoint[];
   currency: string;
   showProfit?: boolean;
   /** Series to draw. Defaults to spend/sales/royalty (+ profit when shown). */
   visible?: readonly TrendSeries[];
+  /**
+   * Optional ISO date or datetime drawn as a vertical "First seen" line
+   * (negative first-sync marker on the negatives detail chart).
+   */
+  markerDate?: string | null;
 }) {
   if (daily.length === 0) {
     return <EmptyState>No daily trend data available yet.</EmptyState>;
@@ -186,6 +192,12 @@ export function PerformanceTrendChart({
     visibleSet.has(series) && hasData;
   const showRightAxis =
     show("orders", hasOrdersData) || show("acos", hasAcosData);
+  const markerDay = markerDate?.slice(0, 10);
+  const markerX = markerDay
+    ? data.some((point) => point.date === markerDay)
+      ? markerDay
+      : data.find((point) => point.date >= markerDay)?.date
+    : undefined;
 
   // Shade days where estimated royalties exceed spend. A day band runs from
   // its own tick to the next day's tick; the final day borrows the previous
@@ -262,6 +274,20 @@ export function PerformanceTrendChart({
           ))}
           {show("profit", hasProfitData) ? (
             <ReferenceLine y={0} stroke="#52525b" yAxisId="left" />
+          ) : null}
+          {markerX ? (
+            <ReferenceLine
+              x={markerX}
+              stroke="#a078ff"
+              strokeDasharray="4 4"
+              yAxisId="left"
+              label={{
+                value: "First seen",
+                fill: "#958ea0",
+                fontSize: 11,
+                position: "insideTopRight",
+              }}
+            />
           ) : null}
           {show("spend", true) ? (
             <Area

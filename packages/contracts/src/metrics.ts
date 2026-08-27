@@ -286,12 +286,127 @@ export const searchTermCampaignRowSchema = z.object({
 });
 export type SearchTermCampaignRow = z.infer<typeof searchTermCampaignRowSchema>;
 
+/** Keyword vs ASIN product exclusion on the workspace negatives screens. */
+export const negativeKindSchema = z.enum(["keyword", "product"]);
+export type NegativeKind = z.infer<typeof negativeKindSchema>;
+
+/** GET /api/negatives and GET /api/negatives/:kind/:value query. */
+export const negativesQuerySchema = z.object({
+  days: metricWindowSchema.default(30),
+  books: bookIdListParamSchema,
+  country: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z]{2}$/)
+    .transform((value) => value.toUpperCase())
+    .optional(),
+  kind: negativeKindSchema.optional(),
+});
+export type NegativesQuery = z.infer<typeof negativesQuerySchema>;
+
+const negativePeriodSchema = metricTotalsSchema.extend({
+  acos: z.number().nullable(),
+  estimatedRoyalty: nonNegativeDecimalStringSchema.nullable(),
+  estimatedAdProfit: decimalStringSchema.nullable(),
+  economicsMissing: z.boolean(),
+});
+export type NegativePeriodTotals = z.infer<typeof negativePeriodSchema>;
+
+/**
+ * GET /api/negatives row: one unique negative keyword or product ASIN rolled
+ * up across every campaign of the workspace. Window metrics are serving
+ * facts for the exact term/ASIN in the requested range; `before` is facts
+ * dated before we first saw the negative (Amazon exposes no creation date).
+ */
+export const negativeListRowSchema = z.object({
+  kind: negativeKindSchema,
+  value: z.string(),
+  matchTypes: z.array(z.string()),
+  countryCodes: z.array(z.string()),
+  currency: currencyCodeSchema,
+  bookIds: z.array(z.string()).default([]),
+  blockingCampaignCount: z.number().int().nonnegative(),
+  stillServingCampaignCount: z.number().int().nonnegative(),
+  pausedCampaignCount: z.number().int().nonnegative(),
+  excludedEverywhere: z.boolean(),
+  /** Catalog book when this product ASIN is one of the owner's listings. */
+  catalogBookId: z.string().nullable(),
+  firstSeenAt: isoDateTimeSchema,
+  lastServedAt: isoDateSchema.nullable(),
+  before: negativePeriodSchema,
+  window: negativePeriodSchema,
+  dataCurrentThrough: isoDateSchema.nullable(),
+});
+export type NegativeListRow = z.infer<typeof negativeListRowSchema>;
+
+/** One campaign that currently carries this negative (enabled or paused). */
+export const negativeBlockingCampaignSchema =
+  searchTermCampaignRowSchema.extend({
+    negativeId: z.string(),
+    matchType: z.string(),
+    level: z.enum(["campaign", "ad_group"]),
+    adGroupId: z.string().nullable(),
+    adGroupName: z.string().nullable(),
+    negativeState: z.string(),
+    firstSeenAt: isoDateTimeSchema,
+    /** False when the campaign or the negative is paused (applied, not blocking). */
+    currentlyBlocks: z.boolean(),
+  });
+export type NegativeBlockingCampaign = z.infer<
+  typeof negativeBlockingCampaignSchema
+>;
+
+/**
+ * GET /api/negatives/:kind/:value — one negative with search-term evidence
+ * and the campaigns it runs on vs the campaigns that still serve it.
+ */
+export const negativeDetailSchema = z.object({
+  kind: negativeKindSchema,
+  value: z.string(),
+  matchTypes: z.array(z.string()),
+  countryCode: z.string().regex(/^[A-Z]{2}$/),
+  availableCountryCodes: z.array(z.string().regex(/^[A-Z]{2}$/)).min(1),
+  dateRange: z.object({
+    start: isoDateSchema,
+    end: isoDateSchema,
+  }),
+  currency: currencyCodeSchema,
+  bookIds: z.array(z.string()).default([]),
+  blockingCampaignCount: z.number().int().nonnegative(),
+  stillServingCampaignCount: z.number().int().nonnegative(),
+  pausedCampaignCount: z.number().int().nonnegative(),
+  excludedEverywhere: z.boolean(),
+  catalogBookId: z.string().nullable(),
+  firstSeenAt: isoDateTimeSchema,
+  lastServedAt: isoDateSchema.nullable(),
+  before: negativePeriodSchema,
+  window: negativePeriodSchema,
+  economicsMissing: z.boolean(),
+  dataCurrentThrough: isoDateSchema.nullable(),
+  daily: z.array(
+    z.object({
+      date: isoDateSchema,
+      cost: nonNegativeDecimalStringSchema,
+      sales: nonNegativeDecimalStringSchema,
+      estimatedRoyalty: nonNegativeDecimalStringSchema.nullable(),
+      estimatedAdProfit: decimalStringSchema.nullable(),
+    }),
+  ),
+  blockingCampaigns: z.array(negativeBlockingCampaignSchema),
+  unblockedCampaigns: z.array(searchTermCampaignRowSchema),
+  /** Phrase keywords: other shopper terms in the window that contain the phrase. */
+  matchedTerms: z.array(z.string()).default([]),
+  /** True when search-term facts exist for this exact value (link to /search-terms). */
+  hasSearchTermFacts: z.boolean(),
+});
+export type NegativeDetail = z.infer<typeof negativeDetailSchema>;
+
 /** GET /api/search-terms/:term — a search term with its per-campaign breakdown. */
 export const searchTermDetailSchema = z.object({
   searchTerm: z.string(),
   /** Marketplace selected for this view (two-letter Amazon country code). */
   countryCode: z.string().regex(/^[A-Z]{2}$/),
-  /** Markets where this term has data in the selected window. */
+  /** Markets where this term has facts — in the selected window, or all-time when the window is empty. */
   availableCountryCodes: z.array(z.string().regex(/^[A-Z]{2}$/)).min(1),
   dateRange: z.object({
     start: isoDateSchema,

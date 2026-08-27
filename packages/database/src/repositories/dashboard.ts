@@ -929,6 +929,64 @@ export async function listSearchTermCampaignRows(
   }));
 }
 
+export interface SearchTermPresenceRow {
+  countryCode: string;
+  currency: string;
+  /** Latest metric date the term has any fact in this market, all-time. */
+  lastMetricDate: string;
+}
+
+/**
+ * All-time per-market presence for one shopper search term: which marketplaces
+ * hold any facts for it, their currency, and the latest fact date. Backs the
+ * search-term detail read when the selected window has no facts, so it can
+ * tell "term never served" (null → 404) from "served, but not in this window"
+ * (zeroed detail). Same exact term match and book-scope predicate as
+ * listSearchTermCampaignRows, without the date window.
+ */
+export async function listSearchTermPresence(
+  db: Db,
+  workspaceId: string,
+  searchTerm: string,
+  bookIds: bigint[] | null = null,
+): Promise<SearchTermPresenceRow[]> {
+  const result = await db.query<{
+    country_code: string;
+    currency: string;
+    last_metric_date: string;
+  }>(
+    `select p.country_code,
+            min(m.currency)::text as currency,
+            max(m.metric_date)::text as last_metric_date
+     from search_term_metrics_daily m
+     join amazon_profiles p on p.id = m.profile_id
+     join amazon_connections conn on conn.id = p.connection_id
+     where conn.workspace_id = $1
+       and m.search_term = $2
+       and (coalesce(cardinality($3::bigint[]), 0) = 0 or exists (
+         select 1
+         from ad_groups fg
+         join ads fa
+           on fa.profile_id = fg.profile_id and fa.ad_group_id = fg.id
+         join book_profile_links fb
+           on fb.profile_id = fg.profile_id
+          and fb.marketplace_asin = fa.asin
+          and fb.enabled = true
+         where fg.profile_id = m.profile_id
+           and fg.amazon_ad_group_id = m.ad_group_id
+           and fb.book_id = any($3)
+       ))
+     group by p.country_code
+     order by p.country_code`,
+    [workspaceId, searchTerm, bookIds],
+  );
+  return result.rows.map((row) => ({
+    countryCode: row.country_code,
+    currency: row.currency,
+    lastMetricDate: row.last_metric_date,
+  }));
+}
+
 export interface SearchTermServingCampaign {
   /** Internal amazon_profiles PK. */
   profilePk: string;
@@ -1034,6 +1092,890 @@ export async function searchTermDailySeries(
     currency: row.currency,
     estimatedRoyalty: row.estimated_royalty,
   }));
+}
+
+/** Collapse internal whitespace and lowercase so keyword/ASIN keys compare stably. */
+const NEGATIVE_VALUE_KEY = (expr: string) =>
+  `regexp_replace(lower(btrim(${expr})), '\\s+', ' ', 'g')`;
+
+/**
+ * Shared book-scope predicate for a negative row `n`: keep it when the
+ * selected books are advertised in the negative's ad group, or anywhere in
+ * the campaign for a campaign-level negative. Null/empty $N = no filter.
+ */
+function negativeBookScope(bookParam: number, alias = "n"): string {
+  return `(coalesce(cardinality($${bookParam}::bigint[]), 0) = 0 or exists (
+         select 1
+         from ad_groups fg
+         join ads fa
+           on fa.profile_id = fg.profile_id and fa.ad_group_id = fg.id
+         join book_profile_links fb
+           on fb.profile_id = fg.profile_id
+          and fb.marketplace_asin = fa.asin
+          and fb.enabled = true
+         where fb.book_id = any($${bookParam})
+           and (
+             fg.id = ${alias}.ad_group_id
+             or (${alias}.ad_group_id is null and fg.campaign_id = ${alias}.campaign_id)
+           )
+       ))`;
+}
+
+/**
+ * Union of current (non-deleted) negative keywords and product targets for
+ * a workspace. $1 workspace, $4 books, $5 country, $6 kind, $7 value_key.
+ */
+const NEGATIVE_STRUCTURE_CTE = `negatives as (
+       select 'keyword'::text as kind,
+              ${NEGATIVE_VALUE_KEY("n.keyword_text")} as value_key,
+              n.keyword_text as value_display,
+              n.match_type,
+              n.state as negative_state,
+              n.amazon_negative_keyword_id as amazon_negative_id,
+              n.ad_group_id,
+              n.campaign_id,
+              n.profile_id,
+              n.created_at,
+              c.amazon_campaign_id,
+              c.name as campaign_name,
+              c.state as campaign_state,
+              g.amazon_ad_group_id,
+              g.name as ad_group_name,
+              p.country_code,
+              p.currency_code,
+              p.profile_id as amazon_profile_id,
+              lower(c.state) in ('enabled', 'active') as campaign_enabled,
+              lower(n.state) in ('enabled', 'active') as negative_enabled
+       from negative_keywords n
+       join campaigns c on c.id = n.campaign_id
+       join amazon_profiles p on p.id = n.profile_id
+       join amazon_connections conn on conn.id = p.connection_id
+       left join ad_groups g on g.id = n.ad_group_id
+       where conn.workspace_id = $1
+         and lower(n.state) <> 'deleted'
+         and ($5::text is null or p.country_code = $5)
+         and ($6::text is null or $6 = 'keyword')
+         and ($7::text is null or ${NEGATIVE_VALUE_KEY("n.keyword_text")} = $7)
+         and ${negativeBookScope(4)}
+       union all
+       select 'product'::text,
+              ${NEGATIVE_VALUE_KEY("n.expression_asin")},
+              upper(btrim(n.expression_asin)),
+              'ASIN_SAME_AS',
+              n.state,
+              n.amazon_negative_target_id,
+              n.ad_group_id,
+              n.campaign_id,
+              n.profile_id,
+              n.created_at,
+              c.amazon_campaign_id,
+              c.name,
+              c.state,
+              g.amazon_ad_group_id,
+              g.name,
+              p.country_code,
+              p.currency_code,
+              p.profile_id,
+              lower(c.state) in ('enabled', 'active'),
+              lower(n.state) in ('enabled', 'active')
+       from negative_targets n
+       join campaigns c on c.id = n.campaign_id
+       join amazon_profiles p on p.id = n.profile_id
+       join amazon_connections conn on conn.id = p.connection_id
+       left join ad_groups g on g.id = n.ad_group_id
+       where conn.workspace_id = $1
+         and lower(n.state) <> 'deleted'
+         and n.expression_asin is not null
+         and ($5::text is null or p.country_code = $5)
+         and ($6::text is null or $6 = 'product')
+         and ($7::text is null or ${NEGATIVE_VALUE_KEY("n.expression_asin")} = $7)
+         and ${negativeBookScope(4)}
+     )`;
+
+export interface NegativePeriodTotalsData {
+  totals: TotalsRow;
+  estimatedRoyalty: string | null;
+  economicsMissing: boolean;
+  mixedCurrency: boolean;
+  currency: string | null;
+}
+
+export interface NegativeRollupRowData {
+  kind: "keyword" | "product";
+  value: string;
+  valueKey: string;
+  matchTypes: string[];
+  countryCodes: string[];
+  structureCurrency: string;
+  structureMixedCurrency: boolean;
+  bookIds: string[];
+  catalogBookId: string | null;
+  excludedEverywhere: boolean;
+  firstSeenAt: string | Date;
+  lastServedAt: string | null;
+  blockingCampaignCount: number;
+  pausedCampaignCount: number;
+  window: NegativePeriodTotalsData;
+  before: NegativePeriodTotalsData;
+  dataCurrentThrough: string | null;
+}
+
+function emptyPeriod(currency: string | null): NegativePeriodTotalsData {
+  return {
+    totals: {
+      impressions: 0,
+      clicks: 0,
+      cost: "0",
+      sales: "0",
+      orders: 0,
+      units: 0,
+    },
+    estimatedRoyalty: "0",
+    economicsMissing: false,
+    mixedCurrency: false,
+    currency,
+  };
+}
+
+function periodFromAgg(
+  row: RawTotals & {
+    estimated_royalty: string | null;
+    economics_missing: boolean | null;
+    mixed_currency: boolean | null;
+    currency: string | null;
+  },
+  fallbackCurrency: string,
+): NegativePeriodTotalsData {
+  if (row.currency === null && Number(row.impressions ?? 0) === 0) {
+    return emptyPeriod(fallbackCurrency);
+  }
+  return {
+    totals: toTotals(row),
+    estimatedRoyalty: row.estimated_royalty,
+    economicsMissing: row.economics_missing ?? false,
+    mixedCurrency: row.mixed_currency ?? false,
+    currency: row.currency,
+  };
+}
+
+/**
+ * Unique negative keywords and product ASINs for a workspace, with serving
+ * facts for the exact term/ASIN in the window and facts dated before we
+ * first saw the negative. $6 kind and $7 value_key are optional pins.
+ */
+export async function listNegativeRollupRows(
+  db: Db,
+  workspaceId: string,
+  dateStart: string,
+  dateEnd: string,
+  bookIds: bigint[] | null = null,
+  countryCode: string | null = null,
+  kind: "keyword" | "product" | null = null,
+  valueKey: string | null = null,
+): Promise<NegativeRollupRowData[]> {
+  const result = await db.query<
+    RawTotals & {
+      kind: "keyword" | "product";
+      value_key: string;
+      value: string;
+      match_types: string[];
+      country_codes: string[];
+      structure_currency: string;
+      structure_mixed_currency: boolean;
+      book_ids: string[];
+      catalog_book_id: string | null;
+      excluded_everywhere: boolean;
+      first_seen_at: string | Date;
+      last_served_at: string | null;
+      blocking_campaign_count: string;
+      paused_campaign_count: string;
+      data_current_through: string | null;
+      window_impressions: string | null;
+      window_clicks: string | null;
+      window_cost: string | null;
+      window_sales: string | null;
+      window_orders: string | null;
+      window_units: string | null;
+      window_currency: string | null;
+      window_mixed_currency: boolean | null;
+      window_estimated_royalty: string | null;
+      window_economics_missing: boolean | null;
+      before_impressions: string | null;
+      before_clicks: string | null;
+      before_cost: string | null;
+      before_sales: string | null;
+      before_orders: string | null;
+      before_units: string | null;
+      before_currency: string | null;
+      before_mixed_currency: boolean | null;
+      before_estimated_royalty: string | null;
+      before_economics_missing: boolean | null;
+    }
+  >(
+    `with ${NEGATIVE_STRUCTURE_CTE},
+     grouped as (
+       select n.kind, n.value_key,
+              (array_agg(n.value_display order by n.created_at, n.amazon_negative_id))[1]
+                as value,
+              array_agg(distinct n.match_type order by n.match_type) as match_types,
+              array_agg(distinct n.country_code order by n.country_code) as country_codes,
+              min(n.currency_code) as structure_currency,
+              count(distinct n.currency_code) > 1 as structure_mixed_currency,
+              min(n.created_at) as first_seen_at,
+              count(distinct n.campaign_id) filter (
+                where n.campaign_enabled and n.negative_enabled
+              )::text as blocking_campaign_count,
+              (
+                count(distinct n.campaign_id)
+                - count(distinct n.campaign_id) filter (
+                    where n.campaign_enabled and n.negative_enabled
+                  )
+              )::text as paused_campaign_count
+       from negatives n
+       group by n.kind, n.value_key
+     ),
+     term_books as (
+       select n.kind, n.value_key,
+              array_agg(distinct bpl.book_id::text order by bpl.book_id::text)
+                as book_ids
+       from (select distinct kind, value_key, profile_id, campaign_id, ad_group_id
+             from negatives) n
+       join ad_groups fg
+         on fg.id = n.ad_group_id
+         or (n.ad_group_id is null and fg.campaign_id = n.campaign_id)
+       join ads fa
+         on fa.profile_id = fg.profile_id and fa.ad_group_id = fg.id
+       join book_profile_links bpl
+         on bpl.profile_id = fg.profile_id
+        and bpl.marketplace_asin = fa.asin
+        and bpl.enabled = true
+       group by n.kind, n.value_key
+     ),
+     catalog as (
+       select ${NEGATIVE_VALUE_KEY("bpl.marketplace_asin")} as value_key,
+              min(bpl.book_id)::text as catalog_book_id
+       from book_profile_links bpl
+       join amazon_profiles p on p.id = bpl.profile_id
+       join amazon_connections conn on conn.id = p.connection_id
+       where conn.workspace_id = $1 and bpl.enabled = true
+       group by ${NEGATIVE_VALUE_KEY("bpl.marketplace_asin")}
+     ),
+     keys as (
+       select distinct kind, value_key from grouped
+     ),
+     st_daily as (
+       select k.kind, k.value_key, m.profile_id, m.search_term, m.campaign_id,
+              m.ad_group_id, m.metric_date,
+              sum(m.impressions) as impressions,
+              sum(m.clicks) as clicks,
+              sum(m.cost) as cost,
+              sum(m.sales) as sales,
+              sum(m.orders) as orders,
+              sum(m.units) as units,
+              min(m.currency)::text as currency,
+              count(distinct m.currency) > 1 as mixed_currency
+       from search_term_metrics_daily m
+       join amazon_profiles p on p.id = m.profile_id
+       join amazon_connections conn on conn.id = p.connection_id
+       join keys k on k.value_key = ${NEGATIVE_VALUE_KEY("m.search_term")}
+       where conn.workspace_id = $1
+         and m.metric_date <= $3
+         and ($5::text is null or p.country_code = $5)
+         and (coalesce(cardinality($4::bigint[]), 0) = 0 or exists (
+           select 1
+           from ad_groups fg
+           join ads fa
+             on fa.profile_id = fg.profile_id and fa.ad_group_id = fg.id
+           join book_profile_links fb
+             on fb.profile_id = fg.profile_id
+            and fb.marketplace_asin = fa.asin
+            and fb.enabled = true
+           where fg.profile_id = m.profile_id
+             and fg.amazon_ad_group_id = m.ad_group_id
+             and fb.book_id = any($4)
+         ))
+       group by k.kind, k.value_key, m.profile_id, m.search_term, m.campaign_id,
+                m.ad_group_id, m.metric_date
+     ),
+     single_book_ad_groups as (
+       select g.profile_id, g.amazon_ad_group_id, min(bpl.book_id) as book_id
+       from ad_groups g
+       join ads a on a.profile_id = g.profile_id and a.ad_group_id = g.id
+       left join book_profile_links bpl
+         on bpl.profile_id = g.profile_id
+        and bpl.marketplace_asin = a.asin
+        and bpl.enabled = true
+       group by g.profile_id, g.amazon_ad_group_id
+       having count(distinct bpl.book_id) = 1
+          and count(*) filter (where bpl.book_id is null) = 0
+     ),
+     royalty_daily as (
+       select d.kind, d.value_key, d.profile_id, d.search_term, d.campaign_id,
+              d.ad_group_id, d.metric_date,
+              ${royaltyCopies("d")} * economics.estimated_royalty_per_sale
+                as estimated_royalty
+       from st_daily d
+       join single_book_ad_groups s
+         on s.profile_id = d.profile_id
+        and s.amazon_ad_group_id = d.ad_group_id
+       join lateral (
+         select be.estimated_royalty_per_sale
+         from book_economics be
+         where be.book_id = s.book_id
+           and be.profile_id = d.profile_id
+           and be.currency = d.currency
+           and be.effective_from <= d.metric_date
+         order by be.effective_from desc, be.id desc
+         limit 1
+       ) economics on true
+       where d.orders > 0
+     ),
+     window_agg as (
+       select d.kind, d.value_key,
+              sum(d.impressions)::text as impressions,
+              sum(d.clicks)::text as clicks,
+              sum(d.cost)::text as cost,
+              sum(d.sales)::text as sales,
+              sum(d.orders)::text as orders,
+              sum(d.units)::text as units,
+              min(d.currency)::text as currency,
+              bool_or(d.mixed_currency) as mixed_currency,
+              max(d.metric_date)::text as data_current_through,
+              bool_or(d.orders > 0 and r.ad_group_id is null) as economics_missing,
+              case
+                when bool_or(d.orders > 0 and r.ad_group_id is null) then null
+                else coalesce(sum(r.estimated_royalty), 0)::text
+              end as estimated_royalty
+       from st_daily d
+       left join royalty_daily r
+         on r.kind = d.kind and r.value_key = d.value_key
+        and r.profile_id = d.profile_id
+        and r.search_term = d.search_term
+        and r.campaign_id = d.campaign_id
+        and r.ad_group_id = d.ad_group_id
+        and r.metric_date = d.metric_date
+       where d.metric_date between $2 and $3
+       group by d.kind, d.value_key
+     ),
+     before_agg as (
+       select d.kind, d.value_key,
+              sum(d.impressions)::text as impressions,
+              sum(d.clicks)::text as clicks,
+              sum(d.cost)::text as cost,
+              sum(d.sales)::text as sales,
+              sum(d.orders)::text as orders,
+              sum(d.units)::text as units,
+              min(d.currency)::text as currency,
+              bool_or(d.mixed_currency) as mixed_currency,
+              bool_or(d.orders > 0 and r.ad_group_id is null) as economics_missing,
+              case
+                when bool_or(d.orders > 0 and r.ad_group_id is null) then null
+                else coalesce(sum(r.estimated_royalty), 0)::text
+              end as estimated_royalty
+       from st_daily d
+       join grouped g on g.kind = d.kind and g.value_key = d.value_key
+       left join royalty_daily r
+         on r.kind = d.kind and r.value_key = d.value_key
+        and r.profile_id = d.profile_id
+        and r.search_term = d.search_term
+        and r.campaign_id = d.campaign_id
+        and r.ad_group_id = d.ad_group_id
+        and r.metric_date = d.metric_date
+       where d.metric_date < (g.first_seen_at at time zone 'UTC')::date
+       group by d.kind, d.value_key
+     ),
+     last_served as (
+       select kind, value_key, max(metric_date)::text as last_served_at
+       from st_daily
+       group by kind, value_key
+     )
+     select g.kind, g.value_key, g.value, g.match_types, g.country_codes,
+            g.structure_currency, g.structure_mixed_currency, g.first_seen_at,
+            g.blocking_campaign_count, g.paused_campaign_count,
+            coalesce(tb.book_ids, '{}'::text[]) as book_ids,
+            case when g.kind = 'product' then cat.catalog_book_id else null end
+              as catalog_book_id,
+            exists (
+              select 1 from search_term_exclusions e
+              where e.workspace_id = $1 and e.search_term = g.value_key
+            ) as excluded_everywhere,
+            ls.last_served_at,
+            coalesce(w.data_current_through, ls.last_served_at) as data_current_through,
+            w.impressions as window_impressions,
+            w.clicks as window_clicks,
+            w.cost as window_cost,
+            w.sales as window_sales,
+            w.orders as window_orders,
+            w.units as window_units,
+            w.currency as window_currency,
+            w.mixed_currency as window_mixed_currency,
+            w.estimated_royalty as window_estimated_royalty,
+            w.economics_missing as window_economics_missing,
+            b.impressions as before_impressions,
+            b.clicks as before_clicks,
+            b.cost as before_cost,
+            b.sales as before_sales,
+            b.orders as before_orders,
+            b.units as before_units,
+            b.currency as before_currency,
+            b.mixed_currency as before_mixed_currency,
+            b.estimated_royalty as before_estimated_royalty,
+            b.economics_missing as before_economics_missing
+     from grouped g
+     left join term_books tb
+       on tb.kind = g.kind and tb.value_key = g.value_key
+     left join catalog cat on cat.value_key = g.value_key
+     left join window_agg w
+       on w.kind = g.kind and w.value_key = g.value_key
+     left join before_agg b
+       on b.kind = g.kind and b.value_key = g.value_key
+     left join last_served ls
+       on ls.kind = g.kind and ls.value_key = g.value_key
+     order by g.value`,
+    [workspaceId, dateStart, dateEnd, bookIds, countryCode, kind, valueKey],
+  );
+  return result.rows.map((row) => {
+    const structureCurrency = row.structure_currency;
+    return {
+      kind: row.kind,
+      value: row.value,
+      valueKey: row.value_key,
+      matchTypes: row.match_types ?? [],
+      countryCodes: row.country_codes ?? [],
+      structureCurrency,
+      structureMixedCurrency: row.structure_mixed_currency,
+      bookIds: row.book_ids ?? [],
+      catalogBookId: row.catalog_book_id,
+      excludedEverywhere: row.excluded_everywhere,
+      firstSeenAt: row.first_seen_at,
+      lastServedAt: row.last_served_at,
+      blockingCampaignCount: Number(row.blocking_campaign_count),
+      pausedCampaignCount: Number(row.paused_campaign_count),
+      window: periodFromAgg(
+        {
+          impressions: row.window_impressions,
+          clicks: row.window_clicks,
+          cost: row.window_cost,
+          sales: row.window_sales,
+          orders: row.window_orders,
+          units: row.window_units,
+          estimated_royalty: row.window_estimated_royalty,
+          economics_missing: row.window_economics_missing,
+          mixed_currency: row.window_mixed_currency,
+          currency: row.window_currency,
+        },
+        structureCurrency,
+      ),
+      before: periodFromAgg(
+        {
+          impressions: row.before_impressions,
+          clicks: row.before_clicks,
+          cost: row.before_cost,
+          sales: row.before_sales,
+          orders: row.before_orders,
+          units: row.before_units,
+          estimated_royalty: row.before_estimated_royalty,
+          economics_missing: row.before_economics_missing,
+          mixed_currency: row.before_mixed_currency,
+          currency: row.before_currency,
+        },
+        structureCurrency,
+      ),
+      dataCurrentThrough: row.data_current_through,
+    };
+  });
+}
+
+export interface NegativeSpecRowData {
+  kind: "keyword" | "product";
+  valueKey: string;
+  amazonNegativeId: string;
+  matchType: string;
+  level: "campaign" | "ad_group";
+  amazonAdGroupId: string | null;
+  adGroupName: string | null;
+  negativeState: string;
+  firstSeenAt: string | Date;
+  amazonProfileId: string;
+  amazonCampaignId: string;
+  campaignName: string;
+  campaignState: string;
+  countryCode: string;
+  currency: string;
+}
+
+/** Every synced negative attachment matching the optional kind/value pin. */
+export async function listNegativeSpecRows(
+  db: Db,
+  workspaceId: string,
+  bookIds: bigint[] | null = null,
+  countryCode: string | null = null,
+  kind: "keyword" | "product" | null = null,
+  valueKey: string | null = null,
+): Promise<NegativeSpecRowData[]> {
+  const result = await db.query<{
+    kind: "keyword" | "product";
+    value_key: string;
+    amazon_negative_id: string;
+    match_type: string;
+    amazon_ad_group_id: string | null;
+    ad_group_name: string | null;
+    negative_state: string;
+    created_at: string | Date;
+    amazon_profile_id: string;
+    amazon_campaign_id: string;
+    campaign_name: string;
+    campaign_state: string;
+    country_code: string;
+    currency_code: string;
+  }>(
+    `with ${NEGATIVE_STRUCTURE_CTE}
+     select kind, value_key, amazon_negative_id, match_type,
+            amazon_ad_group_id, ad_group_name, negative_state, created_at,
+            amazon_profile_id, amazon_campaign_id, campaign_name, campaign_state,
+            country_code, currency_code
+     from negatives
+     where ($2::date is null or $3::date is null or true)
+     order by campaign_name, amazon_negative_id`,
+    [workspaceId, null, null, bookIds, countryCode, kind, valueKey],
+  );
+  return result.rows.map((row) => ({
+    kind: row.kind,
+    valueKey: row.value_key,
+    amazonNegativeId: row.amazon_negative_id,
+    matchType: row.match_type,
+    level: row.amazon_ad_group_id === null ? "campaign" : "ad_group",
+    amazonAdGroupId: row.amazon_ad_group_id,
+    adGroupName: row.ad_group_name,
+    negativeState: row.negative_state,
+    firstSeenAt: row.created_at,
+    amazonProfileId: row.amazon_profile_id,
+    amazonCampaignId: row.amazon_campaign_id,
+    campaignName: row.campaign_name,
+    campaignState: row.campaign_state,
+    countryCode: row.country_code,
+    currency: row.currency_code,
+  }));
+}
+
+export interface NegativeServingRowData {
+  kind: "keyword" | "product";
+  valueKey: string;
+  amazonProfileId: string;
+  amazonCampaignId: string;
+  amazonAdGroupId: string;
+  campaignName: string;
+  campaignState: string;
+  countryCode: string;
+  currency: string;
+}
+
+/**
+ * Search-term facts in the window whose normalized term matches a synced
+ * negative. Used with blockedCampaignIds to find coverage gaps.
+ */
+export async function listNegativeServingRows(
+  db: Db,
+  workspaceId: string,
+  dateStart: string,
+  dateEnd: string,
+  bookIds: bigint[] | null = null,
+  countryCode: string | null = null,
+  kind: "keyword" | "product" | null = null,
+  valueKey: string | null = null,
+): Promise<NegativeServingRowData[]> {
+  const result = await db.query<{
+    kind: "keyword" | "product";
+    value_key: string;
+    amazon_profile_id: string;
+    amazon_campaign_id: string;
+    amazon_ad_group_id: string;
+    campaign_name: string;
+    campaign_state: string;
+    country_code: string;
+    currency: string;
+  }>(
+    `with ${NEGATIVE_STRUCTURE_CTE},
+     keys as (select distinct kind, value_key from negatives)
+     select distinct k.kind, k.value_key,
+            p.profile_id as amazon_profile_id,
+            m.campaign_id as amazon_campaign_id,
+            m.ad_group_id as amazon_ad_group_id,
+            c.name as campaign_name,
+            c.state as campaign_state,
+            p.country_code,
+            m.currency
+     from search_term_metrics_daily m
+     join amazon_profiles p on p.id = m.profile_id
+     join amazon_connections conn on conn.id = p.connection_id
+     join campaigns c
+       on c.profile_id = m.profile_id and c.amazon_campaign_id = m.campaign_id
+     join keys k on k.value_key = ${NEGATIVE_VALUE_KEY("m.search_term")}
+     where conn.workspace_id = $1
+       and m.metric_date between $2 and $3
+       and ($5::text is null or p.country_code = $5)
+       and (coalesce(cardinality($4::bigint[]), 0) = 0 or exists (
+         select 1
+         from ad_groups fg
+         join ads fa
+           on fa.profile_id = fg.profile_id and fa.ad_group_id = fg.id
+         join book_profile_links fb
+           on fb.profile_id = fg.profile_id
+          and fb.marketplace_asin = fa.asin
+          and fb.enabled = true
+         where fg.profile_id = m.profile_id
+           and fg.amazon_ad_group_id = m.ad_group_id
+           and fb.book_id = any($4)
+       ))
+     order by k.value_key, c.name, m.ad_group_id`,
+    [workspaceId, dateStart, dateEnd, bookIds, countryCode, kind, valueKey],
+  );
+  return result.rows.map((row) => ({
+    kind: row.kind,
+    valueKey: row.value_key,
+    amazonProfileId: row.amazon_profile_id,
+    amazonCampaignId: row.amazon_campaign_id,
+    amazonAdGroupId: row.amazon_ad_group_id,
+    campaignName: row.campaign_name,
+    campaignState: row.campaign_state,
+    countryCode: row.country_code,
+    currency: row.currency,
+  }));
+}
+
+/**
+ * Like SEARCH_TERM_CTES, but $4 is a normalized value key (lowercase, collapsed
+ * whitespace) rather than a case-sensitive shopper-term string.
+ */
+const NEGATIVE_TERM_CTES = `with st_daily as (
+       select m.profile_id, m.search_term, m.campaign_id, m.ad_group_id,
+              m.metric_date,
+              sum(m.impressions) as impressions,
+              sum(m.clicks) as clicks,
+              sum(m.cost) as cost,
+              sum(m.sales) as sales,
+              sum(m.orders) as orders,
+              sum(m.units) as units,
+              min(m.currency)::text as currency,
+              count(distinct m.currency) > 1 as mixed_currency
+       from search_term_metrics_daily m
+       join amazon_profiles p on p.id = m.profile_id
+       join amazon_connections conn on conn.id = p.connection_id
+       where conn.workspace_id = $1
+         and m.metric_date between $2 and $3
+         and ${NEGATIVE_VALUE_KEY("m.search_term")} = $4
+         and ($6::text is null or p.country_code = $6)
+         and (coalesce(cardinality($5::bigint[]), 0) = 0 or exists (
+           select 1
+           from ad_groups fg
+           join ads fa
+             on fa.profile_id = fg.profile_id and fa.ad_group_id = fg.id
+           join book_profile_links fb
+             on fb.profile_id = fg.profile_id
+            and fb.marketplace_asin = fa.asin
+            and fb.enabled = true
+           where fg.profile_id = m.profile_id
+             and fg.amazon_ad_group_id = m.ad_group_id
+             and fb.book_id = any($5)
+         ))
+       group by m.profile_id, m.search_term, m.campaign_id, m.ad_group_id,
+                m.metric_date
+     ),
+     single_book_ad_groups as (
+       select g.profile_id, g.amazon_ad_group_id, min(bpl.book_id) as book_id
+       from ad_groups g
+       join ads a on a.profile_id = g.profile_id and a.ad_group_id = g.id
+       left join book_profile_links bpl
+         on bpl.profile_id = g.profile_id
+        and bpl.marketplace_asin = a.asin
+        and bpl.enabled = true
+       group by g.profile_id, g.amazon_ad_group_id
+       having count(distinct bpl.book_id) = 1
+          and count(*) filter (where bpl.book_id is null) = 0
+     ),
+     royalty_daily as (
+       select d.profile_id, d.search_term, d.campaign_id, d.ad_group_id,
+              d.metric_date,
+              ${royaltyCopies("d")} * economics.estimated_royalty_per_sale
+                as estimated_royalty
+       from st_daily d
+       join single_book_ad_groups s
+         on s.profile_id = d.profile_id
+        and s.amazon_ad_group_id = d.ad_group_id
+       join lateral (
+         select be.estimated_royalty_per_sale
+         from book_economics be
+         where be.book_id = s.book_id
+           and be.profile_id = d.profile_id
+           and be.currency = d.currency
+           and be.effective_from <= d.metric_date
+         order by be.effective_from desc, be.id desc
+         limit 1
+       ) economics on true
+       where d.orders > 0
+     )`;
+
+/** Per-campaign window metrics for one normalized negative value. */
+export async function listNegativeTermCampaignRows(
+  db: Db,
+  workspaceId: string,
+  valueKey: string,
+  dateStart: string,
+  dateEnd: string,
+  bookIds: bigint[] | null = null,
+): Promise<SearchTermCampaignRowData[]> {
+  const result = await db.query<
+    RawTotals & {
+      amazon_profile_id: string;
+      country_code: string;
+      amazon_campaign_id: string;
+      name: string;
+      state: string;
+      currency: string;
+      estimated_royalty: string | null;
+      economics_missing: boolean;
+      data_current_through: string | null;
+      mixed_currency: boolean;
+    }
+  >(
+    `${NEGATIVE_TERM_CTES}
+     select p.profile_id as amazon_profile_id,
+            p.country_code,
+            d.campaign_id as amazon_campaign_id,
+            c.name, c.state,
+            sum(d.impressions)::text as impressions,
+            sum(d.clicks)::text as clicks,
+            sum(d.cost)::text as cost,
+            sum(d.sales)::text as sales,
+            sum(d.orders)::text as orders,
+            sum(d.units)::text as units,
+            min(d.currency)::text as currency,
+            bool_or(d.mixed_currency) as mixed_currency,
+            max(d.metric_date)::text as data_current_through,
+            bool_or(d.orders > 0 and r.ad_group_id is null) as economics_missing,
+            case
+              when bool_or(d.orders > 0 and r.ad_group_id is null) then null
+              else coalesce(sum(r.estimated_royalty), 0)::text
+            end as estimated_royalty
+     from st_daily d
+     join campaigns c
+       on c.profile_id = d.profile_id and c.amazon_campaign_id = d.campaign_id
+     join amazon_profiles p on p.id = d.profile_id
+     left join royalty_daily r
+       on r.profile_id = d.profile_id
+      and r.search_term = d.search_term
+      and r.campaign_id = d.campaign_id
+      and r.ad_group_id = d.ad_group_id
+      and r.metric_date = d.metric_date
+     group by p.profile_id, p.country_code, d.campaign_id, c.name, c.state
+     order by sum(d.cost) desc, d.campaign_id`,
+    [workspaceId, dateStart, dateEnd, valueKey, bookIds, null],
+  );
+  return result.rows.map((row) => ({
+    amazonProfileId: row.amazon_profile_id,
+    countryCode: row.country_code,
+    amazonCampaignId: row.amazon_campaign_id,
+    name: row.name,
+    state: row.state,
+    currency: row.currency,
+    totals: toTotals(row),
+    estimatedRoyalty: row.estimated_royalty,
+    economicsMissing: row.economics_missing,
+    dataCurrentThrough: row.data_current_through,
+    mixedCurrency: row.mixed_currency,
+  }));
+}
+
+/** Daily series for one normalized negative value in one marketplace. */
+export async function listNegativeDailySeries(
+  db: Db,
+  workspaceId: string,
+  valueKey: string,
+  countryCode: string,
+  dateStart: string,
+  dateEnd: string,
+  bookIds: bigint[] | null = null,
+): Promise<SearchTermDailyPoint[]> {
+  const result = await db.query<{
+    metric_date: string;
+    cost: string;
+    sales: string;
+    orders: string;
+    currency: string;
+    estimated_royalty: string | null;
+  }>(
+    `${NEGATIVE_TERM_CTES}
+     select d.metric_date::text as metric_date,
+            sum(d.cost)::text as cost,
+            sum(d.sales)::text as sales,
+            sum(d.orders)::text as orders,
+            min(d.currency)::text as currency,
+            case
+              when bool_or(d.orders > 0 and r.ad_group_id is null) then null
+              else coalesce(sum(r.estimated_royalty), 0)::text
+            end as estimated_royalty
+     from st_daily d
+     join amazon_profiles ap on ap.id = d.profile_id
+     left join royalty_daily r
+       on r.profile_id = d.profile_id
+      and r.search_term = d.search_term
+      and r.campaign_id = d.campaign_id
+      and r.ad_group_id = d.ad_group_id
+      and r.metric_date = d.metric_date
+     where ap.country_code = $6
+     group by d.metric_date
+     order by d.metric_date`,
+    [workspaceId, dateStart, dateEnd, valueKey, bookIds, countryCode],
+  );
+  return result.rows.map((row) => ({
+    date: row.metric_date,
+    cost: row.cost,
+    sales: row.sales,
+    orders: Number(row.orders),
+    currency: row.currency,
+    estimatedRoyalty: row.estimated_royalty,
+  }));
+}
+
+/** Distinct shopper terms in the window whose normalized form contains `valueKey`. */
+export async function listNegativeCandidateTerms(
+  db: Db,
+  workspaceId: string,
+  valueKey: string,
+  dateStart: string,
+  dateEnd: string,
+  bookIds: bigint[] | null = null,
+  countryCode: string | null = null,
+  limit = 100,
+): Promise<string[]> {
+  const result = await db.query<{ search_term: string }>(
+    `select distinct m.search_term
+     from search_term_metrics_daily m
+     join amazon_profiles p on p.id = m.profile_id
+     join amazon_connections conn on conn.id = p.connection_id
+     where conn.workspace_id = $1
+       and m.metric_date between $2 and $3
+       and ${NEGATIVE_VALUE_KEY("m.search_term")} <> $4
+       and ${NEGATIVE_VALUE_KEY("m.search_term")} like '%' || $4 || '%'
+       and ($6::text is null or p.country_code = $6)
+       and (coalesce(cardinality($5::bigint[]), 0) = 0 or exists (
+         select 1
+         from ad_groups fg
+         join ads fa
+           on fa.profile_id = fg.profile_id and fa.ad_group_id = fg.id
+         join book_profile_links fb
+           on fb.profile_id = fg.profile_id
+          and fb.marketplace_asin = fa.asin
+          and fb.enabled = true
+         where fg.profile_id = m.profile_id
+           and fg.amazon_ad_group_id = m.ad_group_id
+           and fb.book_id = any($5)
+       ))
+     order by m.search_term
+     limit $7`,
+    [workspaceId, dateStart, dateEnd, valueKey, bookIds, countryCode, limit],
+  );
+  return result.rows.map((row) => row.search_term);
 }
 
 export interface CampaignDailyPoint {

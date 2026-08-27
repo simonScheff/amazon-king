@@ -68,6 +68,16 @@ export function formatPercentChange(fraction: number): string {
   return `${rounded > 0 ? "+" : ""}${rounded.toFixed(1)}%`;
 }
 
+export function formatAmazonLabel(value: string): string {
+  const words = value
+    .replace(/^negative_/i, "")
+    .toLowerCase()
+    .split(/[_\s]+/);
+  return words
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);

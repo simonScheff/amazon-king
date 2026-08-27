@@ -56,6 +56,12 @@ const SearchTermsIcon = makeIcon(
     <path d="m20 20-4-4" />
   </>,
 );
+const NegativesIcon = makeIcon(
+  <>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M8 12h8" />
+  </>,
+);
 const ChangesIcon = makeIcon(
   <>
     <path d="M17 3h4v4" />
@@ -106,6 +112,7 @@ const navItems = [
   },
   { to: "/campaigns", label: "Campaigns", Icon: CampaignsIcon },
   { to: "/search-terms", label: "Search terms", Icon: SearchTermsIcon },
+  { to: "/negatives", label: "Negatives", Icon: NegativesIcon },
   { to: "/changes", label: "Change center", Icon: ChangesIcon },
   { to: "/connect", label: "Connection", Icon: ConnectIcon },
   { to: "/settings", label: "Settings", Icon: SettingsIcon },

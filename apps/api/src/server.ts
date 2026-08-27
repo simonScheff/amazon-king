@@ -18,7 +18,9 @@ import {
   dashboardSummaryQuerySchema,
   loginRequestSchema,
   metricWindowSchema,
+  negativeKindSchema,
   negativeRemovalCreateSchema,
+  negativesQuerySchema,
   profileUpdateSchema,
   recommendationStateSchema,
   recommendationTypeSchema,
@@ -496,6 +498,43 @@ export async function buildServer(
       country ?? null,
     );
     if (!detail) throw notFound("Unknown search term");
+    return detail;
+  });
+
+  app.get("/api/negatives", async (request) => {
+    const auth = await authenticate(request);
+    const { days, books, country, kind } = parse(
+      negativesQuerySchema,
+      request.query,
+    );
+    return services.read.listNegatives(
+      auth.workspaceId,
+      days,
+      books ?? null,
+      country ?? null,
+      kind ?? null,
+    );
+  });
+
+  app.get("/api/negatives/:kind/:value", async (request) => {
+    const auth = await authenticate(request);
+    const { kind, value } = parse(
+      z.object({
+        kind: negativeKindSchema,
+        value: z.string().min(1),
+      }),
+      request.params,
+    );
+    const { days, books, country } = parse(negativesQuerySchema, request.query);
+    const detail = await services.read.getNegativeDetail(
+      auth.workspaceId,
+      kind,
+      value,
+      days,
+      books ?? null,
+      country ?? null,
+    );
+    if (!detail) throw notFound("Unknown negative");
     return detail;
   });
 

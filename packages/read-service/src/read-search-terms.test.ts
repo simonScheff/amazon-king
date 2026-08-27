@@ -18,6 +18,7 @@ vi.mock("@amazon-king/database", () => ({
   dashboard: {
     listSearchTermRollupRows: vi.fn(),
     listSearchTermCampaignRows: vi.fn(),
+    listSearchTermPresence: vi.fn(),
     searchTermDailySeries: vi.fn(),
   },
 }));
@@ -82,6 +83,7 @@ describe("search terms", () => {
     vi.mocked(dashboard.listSearchTermRollupRows).mockResolvedValue([
       ROLLUP_ROW,
     ]);
+    vi.mocked(dashboard.listSearchTermPresence).mockResolvedValue([]);
     vi.mocked(dashboard.searchTermDailySeries).mockResolvedValue([
       DAILY_POINT,
       { ...DAILY_POINT, date: "2026-08-12", estimatedRoyalty: null },
@@ -201,19 +203,34 @@ describe("search terms", () => {
       economicsMissing: false,
       dataCurrentThrough: "2026-08-13",
       daily: [
-        {
-          date: "2026-08-13",
-          cost: "5.0000",
-          sales: "12.0000",
-          estimatedRoyalty: "6.0000",
-          estimatedAdProfit: "1.0000",
-        },
+        // Window days before the first fact are true zeros (Amazon only
+        // reports days with impressions).
+        ...[
+          "2026-08-07",
+          "2026-08-08",
+          "2026-08-09",
+          "2026-08-10",
+          "2026-08-11",
+        ].map((date) => ({
+          date,
+          cost: "0.0000",
+          sales: "0.0000",
+          estimatedRoyalty: "0.0000",
+          estimatedAdProfit: "0.0000",
+        })),
         {
           date: "2026-08-12",
           cost: "5.0000",
           sales: "12.0000",
           estimatedRoyalty: null,
           estimatedAdProfit: null,
+        },
+        {
+          date: "2026-08-13",
+          cost: "5.0000",
+          sales: "12.0000",
+          estimatedRoyalty: "6.0000",
+          estimatedAdProfit: "1.0000",
         },
       ],
       campaigns: [
@@ -223,13 +240,80 @@ describe("search terms", () => {
     });
   });
 
-  it("returns null when no campaign advertised the term", async () => {
+  it("returns null when the term has no facts at all", async () => {
     vi.mocked(dashboard.listSearchTermCampaignRows).mockResolvedValue([]);
 
     await expect(
       service().getSearchTermDetail("workspace-pk", "unknown term", 7),
     ).resolves.toBeNull();
+    expect(dashboard.listSearchTermPresence).toHaveBeenCalledWith(
+      expect.anything(),
+      "workspace-pk",
+      "unknown term",
+      null,
+    );
     expect(dashboard.searchTermDailySeries).not.toHaveBeenCalled();
+  });
+
+  it("returns a zeroed detail when the term served only outside the window", async () => {
+    vi.mocked(dashboard.listSearchTermCampaignRows).mockResolvedValue([]);
+    vi.mocked(dashboard.listSearchTermPresence).mockResolvedValue([
+      { countryCode: "GB", currency: "GBP", lastMetricDate: "2026-07-30" },
+      { countryCode: "US", currency: "USD", lastMetricDate: "2026-08-01" },
+    ]);
+
+    const result = await service().getSearchTermDetail(
+      "workspace-pk",
+      "fantasy books",
+      1,
+    );
+
+    // A 1-day window is the latest complete day (2026-08-12); the term has
+    // no facts there but is known, so the page gets zeros, not a 404.
+    expect(result).toMatchObject({
+      searchTerm: "fantasy books",
+      countryCode: "US",
+      availableCountryCodes: ["US", "GB"],
+      dateRange: { start: "2026-08-12", end: "2026-08-12" },
+      currency: "USD",
+      totals: {
+        impressions: 0,
+        clicks: 0,
+        cost: "0.0000",
+        sales: "0.0000",
+        orders: 0,
+        units: 0,
+        acos: null,
+        estimatedRoyalty: "0.0000",
+        estimatedAdProfit: "0.0000",
+      },
+      economicsMissing: false,
+      dataCurrentThrough: "2026-08-01",
+      daily: [],
+      campaigns: [],
+    });
+    expect(dashboard.searchTermDailySeries).not.toHaveBeenCalled();
+  });
+
+  it("zero-fills gaps but stops at the term's latest fact", async () => {
+    vi.mocked(dashboard.searchTermDailySeries).mockResolvedValue([
+      { ...DAILY_POINT, date: "2026-08-10" },
+    ]);
+
+    const result = await service().getSearchTermDetail(
+      "workspace-pk",
+      "fantasy books",
+      7,
+    );
+
+    // 08-07 through 08-10 are covered; 08-11..08-13 may not be imported
+    // yet, so the series ends at the latest fact instead of faking zeros.
+    expect(result?.daily.map((point) => point.date)).toEqual([
+      "2026-08-07",
+      "2026-08-08",
+      "2026-08-09",
+      "2026-08-10",
+    ]);
   });
 
   it("never reports partial profit when any campaign lacks economics", async () => {

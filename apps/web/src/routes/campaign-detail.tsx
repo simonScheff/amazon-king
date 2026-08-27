@@ -141,11 +141,7 @@ const NEGATIVE_KEYWORD_TEXT_COLUMNS = [
 ] as const;
 
 type NegativeKeywordSortKey =
-  | "keywordText"
-  | "matchType"
-  | "appliedTo"
-  | "firstSeenAt"
-  | "state";
+  "keywordText" | "matchType" | "appliedTo" | "firstSeenAt" | "state";
 
 function negativeKeywordSortValue(
   row: NegativeKeywordRow,

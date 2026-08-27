@@ -33,6 +33,8 @@ import {
   searchTermExclusionResultSchema,
   searchTermListRowSchema,
   searchTermNegativesResultSchema,
+  negativeDetailSchema,
+  negativeListRowSchema,
   sessionInfoSchema,
   syncRunSchema,
   syncRunSummarySchema,
@@ -47,6 +49,7 @@ import {
   type ChangeSetCreate,
   type LoginRequest,
   type MetricWindow,
+  type NegativeKind,
   type NegativeRemovalCreate,
   type ProfileUpdate,
   type RecommendationState,
@@ -574,6 +577,51 @@ export function useSearchTerm(
         query: { days, books, country },
         schema: searchTermDetailSchema,
       }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Negatives (workspace inventory of synced keyword/product exclusions)
+// ---------------------------------------------------------------------------
+
+export function useNegatives(
+  days: MetricWindow = 30,
+  bookIds?: string[],
+  countryCode?: string,
+  kind?: NegativeKind,
+) {
+  const books = booksParam(bookIds);
+  const country = countryCode === "all" ? undefined : countryCode;
+  return useQuery({
+    queryKey: ["negatives", days, books ?? null, country ?? null, kind ?? null],
+    queryFn: () =>
+      apiFetch("/api/negatives", {
+        query: { days, books, country, kind },
+        schema: z.array(negativeListRowSchema),
+      }),
+  });
+}
+
+export function useNegative(
+  kind: NegativeKind,
+  value: string,
+  days: MetricWindow,
+  bookIds?: string[],
+  countryCode?: string,
+) {
+  const books = booksParam(bookIds);
+  const country = countryCode === "all" ? undefined : countryCode;
+  return useQuery({
+    queryKey: ["negative", kind, value, days, books ?? null, country ?? null],
+    placeholderData: keepPreviousData,
+    queryFn: () =>
+      apiFetch(
+        `/api/negatives/${encodeURIComponent(kind)}/${encodeURIComponent(value)}`,
+        {
+          query: { days, books, country },
+          schema: negativeDetailSchema,
+        },
+      ),
   });
 }
 

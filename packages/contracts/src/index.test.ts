@@ -17,6 +17,8 @@ import {
   searchTermExclusionListSchema,
   searchTermExclusionRemovalSchema,
   searchTermExclusionResultSchema,
+  negativeDetailSchema,
+  negativeListRowSchema,
   sessionInfoSchema,
   setCampaignMaxCpcSchema,
   updateCampaignStateSchema,
@@ -463,5 +465,87 @@ describe("contracts smoke test", () => {
     expect(() =>
       renameCampaignSchema.parse({ name: "x".repeat(129) }),
     ).toThrow();
+  });
+
+  it("round-trips workspace negative list and detail payloads", () => {
+    const period = {
+      impressions: 10,
+      clicks: 2,
+      cost: "4.0000",
+      sales: "10.0000",
+      orders: 1,
+      units: 1,
+      acos: 0.4,
+      estimatedRoyalty: "5.0000",
+      estimatedAdProfit: "1.0000",
+      economicsMissing: false,
+    };
+    const row = negativeListRowSchema.parse({
+      kind: "keyword",
+      value: "free books",
+      matchTypes: ["NEGATIVE_EXACT"],
+      countryCodes: ["US"],
+      currency: "USD",
+      bookIds: ["42"],
+      blockingCampaignCount: 1,
+      stillServingCampaignCount: 0,
+      pausedCampaignCount: 1,
+      excludedEverywhere: true,
+      catalogBookId: null,
+      firstSeenAt: "2026-08-10T00:00:00.000Z",
+      lastServedAt: "2026-08-13",
+      before: period,
+      window: period,
+      dataCurrentThrough: "2026-08-13",
+    });
+    expect(row.blockingCampaignCount).toBe(1);
+
+    const detail = negativeDetailSchema.parse({
+      ...row,
+      countryCode: "US",
+      availableCountryCodes: ["US"],
+      dateRange: { start: "2026-08-07", end: "2026-08-13" },
+      economicsMissing: false,
+      daily: [
+        {
+          date: "2026-08-13",
+          cost: "4.0000",
+          sales: "10.0000",
+          estimatedRoyalty: "5.0000",
+          estimatedAdProfit: "1.0000",
+        },
+      ],
+      blockingCampaigns: [
+        {
+          profileId: "profile-us",
+          campaignId: "campaign-1",
+          name: "Exact",
+          state: "enabled",
+          totals: {
+            impressions: 10,
+            clicks: 2,
+            cost: "4.0000",
+            sales: "10.0000",
+            orders: 1,
+            units: 1,
+          },
+          estimatedRoyalty: "5.0000",
+          estimatedAdProfit: "1.0000",
+          economicsMissing: false,
+          negativeId: "neg-1",
+          matchType: "NEGATIVE_EXACT",
+          level: "campaign",
+          adGroupId: null,
+          adGroupName: null,
+          negativeState: "enabled",
+          firstSeenAt: "2026-08-10T00:00:00.000Z",
+          currentlyBlocks: true,
+        },
+      ],
+      unblockedCampaigns: [],
+      matchedTerms: [],
+      hasSearchTermFacts: true,
+    });
+    expect(detail.blockingCampaigns[0]?.currentlyBlocks).toBe(true);
   });
 });

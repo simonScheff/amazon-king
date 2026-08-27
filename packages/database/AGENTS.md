@@ -62,7 +62,10 @@ To add a migration, use the `add-migration` skill.
   cannibalization suppression so an ASIN conflict already resolved on Amazon is
   not re-raised from historical search-term spend. Campaign detail reads them
   through `dashboard.listNegativeTargetRows` (same book-filter `EXISTS` as
-  `listNegativeKeywordRows`).
+  `listNegativeKeywordRows`). The workspace `/negatives` inventory is a
+  read-time rollup (`listNegativeRollupRows`, `listNegativeSpecRows`,
+  `listNegativeServingRows`) grouped by normalized keyword text or uppercased
+  ASIN — Amazon exposes no creation date, so `firstSeenAt` is `created_at`.
 - `book_profile_links` is unique on `(profile_id, marketplace_asin)` as well as
   `(book_id, profile_id)`. Marketplace links come from advertised ASINs or from
   owner-confirmed `linkBookToProfiles` when a book has no ads in that market

@@ -19,6 +19,21 @@ removes the negative, so the term or product can serve again once the draft is
 applied in Change center. Adding a negative still goes through a
 recommendation or Change center draft.
 
+## Negatives inventory
+
+`/negatives` lists every synced negative keyword and product ASIN across the
+workspace: how many enabled campaigns currently block it, whether enabled
+campaigns still serve it (a coverage gap), and whether it sold before we first
+saw the negative. Amazon does not expose when a negative was created, so
+**first seen** is the date this app first synced it.
+
+Click a term or ASIN for the inner page (`/negatives/keyword/…` or
+`/negatives/product/…`): search-term KPIs, funnel, and a daily chart with a
+first-seen marker, then two campaign tables — **Running on** (Re-include) and
+**Not running on** (Exclude). Exclude everywhere on keywords reuses the
+persistent exclusion list; nothing reaches Amazon until you apply the draft in
+Change center.
+
 ## Pause / enable / rename
 
 The campaign detail page header has one-click controls to **pause** (or
@@ -131,7 +146,8 @@ was created.
 When a shopper term should simply never serve — an irrelevant query that
 keeps spending, a competing ASIN you cannot win — **Exclude everywhere**
 handles it once, permanently, across every market. It is a row action on the
-`/search-terms` list and a header action on the search-term detail page.
+`/search-terms` and `/negatives` lists and a header action on those detail
+pages (keywords only on Negatives).
 
 One confirmed click does two things:
 

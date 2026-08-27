@@ -24,6 +24,9 @@ import type {
   SearchTermDetail,
   SearchTermExclusionList,
   SearchTermListRow,
+  NegativeDetail,
+  NegativeKind,
+  NegativeListRow,
   SyncRun,
   SyncRunSummary,
   WorkspaceSettings,
@@ -152,6 +155,21 @@ export interface ReadService {
     bookIds?: string[] | null,
     countryCode?: string | null,
   ): Promise<SearchTermDetail | null>;
+  listNegatives(
+    workspaceId: string,
+    days: MetricWindow,
+    bookIds?: string[] | null,
+    countryCode?: string | null,
+    kind?: NegativeKind | null,
+  ): Promise<NegativeListRow[]>;
+  getNegativeDetail(
+    workspaceId: string,
+    kind: NegativeKind,
+    value: string,
+    days: MetricWindow,
+    bookIds?: string[] | null,
+    countryCode?: string | null,
+  ): Promise<NegativeDetail | null>;
   listBooks(workspaceId: string): Promise<Book[]>;
   listUnmappedAdvertisedProducts(
     workspaceId: string,

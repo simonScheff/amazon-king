@@ -470,6 +470,54 @@ exclusion list, alphabetically by term.
 
 ---
 
+## Negatives
+
+Workspace inventory of synced negative keywords and product ASINs. Coverage
+and “before we first saw this negative” metrics are computed at read time;
+Amazon does not expose a creation date. `country=all` is unfiltered (no FX
+conversion), same as search terms. Royalty and profit fields are null when
+book economics are missing.
+
+### `GET /api/negatives?days&books&country&kind`
+
+| Param   | Type   | Notes                                  |
+| ------- | ------ | -------------------------------------- |
+| days    | int \| `"mtd"` | 1–90 (default 30), or `mtd` for UTC month-to-date |
+| books   | string | Optional comma-separated book ids; restricts to negatives on campaigns advertising any of them |
+| country | string | Optional two-letter code; omit for every market |
+| kind    | string | Optional `keyword` or `product` |
+
+Response `200`: array of rows — `{kind, value, matchTypes[], countryCodes[],
+currency, bookIds[], blockingCampaignCount, stillServingCampaignCount,
+pausedCampaignCount, excludedEverywhere, catalogBookId, firstSeenAt,
+lastServedAt, before, window, dataCurrentThrough}`. `before` is search-term
+facts dated earlier than `firstSeenAt`. `stillServingCampaignCount` is enabled
+campaigns that served the exact term/ASIN in the window and are not fully
+blocked. `catalogBookId` is set when a product ASIN is one of the owner's
+listings.
+
+### `GET /api/negatives/:kind/:value?days&books&country`
+
+`kind` is `keyword` or `product` so an ASIN keyword and an ASIN product target
+stay distinct. `country` selects the marketplace view.
+
+Response `200` (NegativeDetail); `404 NOT_FOUND` when that negative is unknown.
+
+| Field | Type | Notes |
+| ----- | ---- | ----- |
+| kind, value, matchTypes, firstSeenAt, before, window | — | Same as the list row, scoped to the selected market |
+| countryCode, availableCountryCodes, dateRange, daily | — | Same shape as search-term detail |
+| blockingCampaigns | array | Campaigns that currently carry the negative (paused ones included with `currentlyBlocks: false`) plus this term's window metrics and Re-include identity (`negativeId`, `level`, `matchType`) |
+| unblockedCampaigns | array | Campaigns that served this exact value but do not have a matching negative |
+| matchedTerms | string[] | Phrase keywords only: other shopper terms in the window that contain the phrase (capped) |
+| hasSearchTermFacts | boolean | True when facts exist for this exact value (link to `/search-terms`) |
+
+Errors: `409 MIXED_CURRENCY` when aggregating across currencies. No write
+endpoints — Re-include and Exclude everywhere reuse the existing guarded draft
+path.
+
+---
+
 ## Books & economics
 
 ### `GET /api/books`

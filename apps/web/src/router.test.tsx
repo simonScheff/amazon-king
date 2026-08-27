@@ -32,6 +32,12 @@ vi.mock("./routes/campaign-detail", () => ({
 vi.mock("./routes/search-term-detail", () => ({
   SearchTermDetailPage: () => <div>search term detail page</div>,
 }));
+vi.mock("./routes/negatives", () => ({
+  NegativesPage: () => <div>negatives page</div>,
+}));
+vi.mock("./routes/negative-detail", () => ({
+  NegativeDetailPage: () => <div>negative detail page</div>,
+}));
 
 import { router } from "./router";
 
@@ -68,6 +74,11 @@ describe("global books search param", () => {
     await screen.findByText("search terms page");
     expect(leafSearch()).toEqual({ books: ["3", "7"] });
     expect(router.state.location.href).toBe("/search-terms?books=3%2C7");
+
+    await router.navigate({ to: "/negatives" });
+    await screen.findByText("negatives page");
+    expect(leafSearch()).toEqual({ books: ["3", "7"] });
+    expect(router.state.location.href).toBe("/negatives?books=3%2C7");
 
     // A functional search update that spreads prev keeps the filter while
     // changing another param, and the URL stays in the ?books=3,7 form.
@@ -136,6 +147,24 @@ describe("country search param", () => {
     expect(router.state.location.href).toBe(
       "/search-terms/fantasy%20books?country=all",
     );
+
+    await router.navigate({
+      to: "/negatives",
+      search: { country: "all" } as never,
+    });
+    await screen.findByText("negatives page");
+    expect(leafSearch()).toEqual({ country: "all" });
+
+    await router.navigate({
+      to: "/negatives/$kind/$value",
+      params: { kind: "keyword", value: "free books" },
+      search: { country: "ALL" } as never,
+    });
+    await screen.findByText("negative detail page");
+    expect(leafSearch()).toEqual({ country: "all" });
+    expect(router.state.location.href).toBe(
+      "/negatives/keyword/free%20books?country=all",
+    );
   });
 
   it("drops invalid country values", async () => {
@@ -185,6 +214,32 @@ describe("days search param", () => {
     expect(leafSearch()).toEqual({ days: "mtd" });
     expect(router.state.location.href).toBe(
       "/search-terms/fantasy%20books?days=mtd",
+    );
+
+    await router.navigate({
+      to: "/negatives",
+      search: { days: "mtd" } as never,
+    });
+    await screen.findByText("negatives page");
+    expect(leafSearch()).toEqual({ days: "mtd" });
+    expect(router.state.location.href).toBe("/negatives?days=mtd");
+
+    await router.navigate({
+      to: "/negatives",
+      search: { kind: "product" } as never,
+    });
+    expect(leafSearch()).toEqual({ kind: "product" });
+    expect(router.state.location.href).toBe("/negatives?kind=product");
+
+    await router.navigate({
+      to: "/negatives/$kind/$value",
+      params: { kind: "product", value: "B0CATALOG1" },
+      search: { days: "mtd" } as never,
+    });
+    await screen.findByText("negative detail page");
+    expect(leafSearch()).toEqual({ days: "mtd" });
+    expect(router.state.location.href).toBe(
+      "/negatives/product/B0CATALOG1?days=mtd",
     );
   });
 

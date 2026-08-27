@@ -25,7 +25,13 @@ profile's `account_id` entity id, null when absent), `negativeTargets` on
 `GET /api/campaigns/:id` (synced `ASIN_SAME_AS` exclusions, same book-filter
 semantics as `negativeKeywords`), the cross-campaign search-term screens
 `GET /api/search-terms` and `GET /api/search-terms/:term` (detail includes a
-per-day `daily` series for the trend chart), and `GET /api/syncs` — the
+per-day `daily` series for the trend chart, zero-filled through the term's
+latest fact since Amazon only reports days with impressions; a term with no
+facts in the window but facts all-time returns zeroed totals from
+`listSearchTermPresence` — 404 is reserved for terms that never served), the
+workspace negatives inventory
+`GET /api/negatives` and `GET /api/negatives/:kind/:value` (`kind` is
+`keyword` | `product`), and `GET /api/syncs` — the
 workspace's recent sync runs, each with per-report-job progress, which the
 overview's Sync status card polls while a run is active.
 
@@ -72,7 +78,8 @@ date. Never apply one royalty rate per country.
 ## The `books` product filter
 
 `dashboard/summary`, `dashboard/country-spend`, `campaigns` list and detail,
-`recommendations`, and `search-terms` list and detail accept a `books`
+`recommendations`, `search-terms` list and detail, and `negatives` list and
+detail accept a `books`
 comma-separated book-id query param.
 
 Ids are resolved to internal PKs per request via `requireBookPks`, which 404s on

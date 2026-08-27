@@ -11,13 +11,21 @@ import type {
   SearchTermDetail,
   SearchTermExclusionList,
   SearchTermListRow,
+  NegativeDetail,
+  NegativeKind,
+  NegativeListRow,
+  NegativePeriodTotals,
+  SearchTermCampaignRow,
   WorkspaceSettings,
 } from "@amazon-king/contracts";
 import {
+  blockedCampaignIds,
   keywordSpecsFromNegativeTargets,
   matchesNegative,
   microsFromDecimalString,
   microsToDecimalString,
+  type NegativeKeywordSpec,
+  type NegativeTargetSpec,
 } from "@amazon-king/optimizer";
 import {
   audit,
@@ -163,6 +171,169 @@ function utcToday(now: Date): Date {
 
 function isoDay(date: Date): string {
   return date.toISOString().slice(0, 10);
+}
+
+const MATCHED_PHRASE_CAP = 20;
+
+/** Same normalization as the optimizer / exclusion list. */
+function negativeValueKey(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function isEnabledAmazonState(state: string): boolean {
+  const normalized = state.trim().toLowerCase();
+  return normalized === "enabled" || normalized === "active";
+}
+
+function isPhraseMatchType(matchType: string): boolean {
+  return (
+    matchType
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_-]/g, "")
+      .replace(/^negative/, "") === "phrase"
+  );
+}
+
+function preferUsCountryCodes(codes: Iterable<string>): string[] {
+  return [...new Set(codes)].sort((a, b) => {
+    if (a === "US") return -1;
+    if (b === "US") return 1;
+    return a.localeCompare(b);
+  });
+}
+
+function toNegativePeriod(
+  period: dashboard.NegativePeriodTotalsData,
+): NegativePeriodTotals {
+  const costMicros = microsFromDecimalString(period.totals.cost);
+  const salesMicros = microsFromDecimalString(period.totals.sales);
+  const royaltyMicros =
+    period.estimatedRoyalty === null
+      ? null
+      : microsFromDecimalString(period.estimatedRoyalty);
+  return {
+    ...period.totals,
+    acos: salesMicros > 0 ? costMicros / salesMicros : null,
+    estimatedRoyalty:
+      royaltyMicros === null ? null : microsToDecimalString(royaltyMicros),
+    estimatedAdProfit:
+      royaltyMicros === null
+        ? null
+        : microsToDecimalString(royaltyMicros - costMicros),
+    economicsMissing: period.economicsMissing,
+  };
+}
+
+function searchTermCampaignFromFacts(
+  row: dashboard.SearchTermCampaignRowData,
+): SearchTermCampaignRow {
+  const rowCostMicros = microsFromDecimalString(row.totals.cost);
+  const rowRoyaltyMicros =
+    row.estimatedRoyalty === null
+      ? null
+      : microsFromDecimalString(row.estimatedRoyalty);
+  return {
+    profileId: row.amazonProfileId,
+    campaignId: row.amazonCampaignId,
+    name: row.name,
+    state: row.state,
+    totals: row.totals,
+    estimatedRoyalty:
+      rowRoyaltyMicros === null
+        ? null
+        : microsToDecimalString(rowRoyaltyMicros),
+    estimatedAdProfit:
+      rowRoyaltyMicros === null
+        ? null
+        : microsToDecimalString(rowRoyaltyMicros - rowCostMicros),
+    economicsMissing: row.economicsMissing,
+  };
+}
+
+function specKeywordSpecs(
+  specs: readonly dashboard.NegativeSpecRowData[],
+): NegativeKeywordSpec[] {
+  const keywords: NegativeKeywordSpec[] = specs
+    .filter((spec) => spec.kind === "keyword")
+    .map((spec) => ({
+      campaignId: spec.amazonCampaignId,
+      adGroupId: spec.amazonAdGroupId,
+      keywordText: spec.valueKey,
+      matchType: spec.matchType,
+      state: spec.negativeState,
+    }));
+  const targets: NegativeTargetSpec[] = specs
+    .filter((spec) => spec.kind === "product")
+    .map((spec) => ({
+      campaignId: spec.amazonCampaignId,
+      adGroupId: spec.amazonAdGroupId,
+      asin: spec.valueKey,
+      state: spec.negativeState,
+    }));
+  return [...keywords, ...keywordSpecsFromNegativeTargets(targets)];
+}
+
+function servingAdGroupsByCampaign(
+  serving: readonly dashboard.NegativeServingRowData[],
+): Map<string, Set<string>> {
+  const map = new Map<string, Set<string>>();
+  for (const row of serving) {
+    const set = map.get(row.amazonCampaignId) ?? new Set<string>();
+    set.add(row.amazonAdGroupId);
+    map.set(row.amazonCampaignId, set);
+  }
+  return map;
+}
+
+function stillServingCampaignCount(
+  term: string,
+  specs: readonly dashboard.NegativeSpecRowData[],
+  serving: readonly dashboard.NegativeServingRowData[],
+): number {
+  const blocked = blockedCampaignIds(
+    term,
+    specKeywordSpecs(specs),
+    servingAdGroupsByCampaign(serving),
+  );
+  const ids = new Set<string>();
+  for (const row of serving) {
+    if (!isEnabledAmazonState(row.campaignState)) continue;
+    if (blocked.has(row.amazonCampaignId)) continue;
+    ids.add(row.amazonCampaignId);
+  }
+  return ids.size;
+}
+
+function pickBlockingSpec(
+  specs: readonly dashboard.NegativeSpecRowData[],
+): dashboard.NegativeSpecRowData {
+  return [...specs].sort((left, right) => {
+    const leftLive =
+      isEnabledAmazonState(left.campaignState) &&
+      isEnabledAmazonState(left.negativeState)
+        ? 0
+        : 1;
+    const rightLive =
+      isEnabledAmazonState(right.campaignState) &&
+      isEnabledAmazonState(right.negativeState)
+        ? 0
+        : 1;
+    if (leftLive !== rightLive) return leftLive - rightLive;
+    const leftLevel = left.level === "campaign" ? 0 : 1;
+    const rightLevel = right.level === "campaign" ? 0 : 1;
+    if (leftLevel !== rightLevel) return leftLevel - rightLevel;
+    return left.amazonNegativeId.localeCompare(right.amazonNegativeId);
+  })[0]!;
+}
+
+/** Market picker order on the search-term detail: US first, then A–Z. */
+function sortMarketCodes(codes: readonly string[]): string[] {
+  return [...codes].sort((a, b) => {
+    if (a === "US") return -1;
+    if (b === "US") return 1;
+    return a.localeCompare(b);
+  });
 }
 
 function dateRange(
@@ -1407,15 +1578,57 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         end,
         bookPks,
       );
-      if (allRows.length === 0) return null;
+      if (allRows.length === 0) {
+        // No facts in this window. Distinguish "term never served" (404)
+        // from "served, but not in this window" (zeroed detail) through
+        // all-time presence, so narrowing the date range never errors out a
+        // term the workspace knows.
+        const presence = await dashboard.listSearchTermPresence(
+          db,
+          workspaceId,
+          searchTerm,
+          bookPks,
+        );
+        if (presence.length === 0) return null;
+        const presenceCountryCodes = sortMarketCodes(
+          presence.map((row) => row.countryCode),
+        );
+        const presenceCountryCode =
+          (countryCode !== null && presenceCountryCodes.includes(countryCode)
+            ? countryCode
+            : null) ?? presenceCountryCodes[0]!;
+        const selected = presence.find(
+          (row) => row.countryCode === presenceCountryCode,
+        )!;
+        const zero = microsToDecimalString(0);
+        return {
+          searchTerm,
+          countryCode: presenceCountryCode,
+          availableCountryCodes: presenceCountryCodes,
+          dateRange: { start, end },
+          currency: selected.currency as SearchTermDetail["currency"],
+          totals: {
+            impressions: 0,
+            clicks: 0,
+            cost: zero,
+            sales: zero,
+            orders: 0,
+            units: 0,
+            acos: null,
+            // Zero orders earn zero royalty — no economics needed, no guess.
+            estimatedRoyalty: zero,
+            estimatedAdProfit: zero,
+          },
+          economicsMissing: false,
+          dataCurrentThrough: selected.lastMetricDate,
+          daily: [],
+          campaigns: [],
+        };
+      }
 
-      const availableCountryCodes = [
+      const availableCountryCodes = sortMarketCodes([
         ...new Set(allRows.map((row) => row.countryCode)),
-      ].sort((a, b) => {
-        if (a === "US") return -1;
-        if (b === "US") return 1;
-        return a.localeCompare(b);
-      });
+      ]);
       const selectedCountryCode =
         (countryCode !== null && availableCountryCodes.includes(countryCode)
           ? countryCode
@@ -1478,6 +1691,56 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         }
       }
 
+      // Amazon reports a search-term row only for days with impressions, so
+      // a missing day up through the term's latest fact is a true zero —
+      // fill those gaps so the trend chart spans the window. Days after the
+      // latest fact may simply not be imported yet; the series ends at the
+      // latest fact instead of fabricating zeros there.
+      const zeroMoney = microsToDecimalString(0);
+      const dailyByDate = new Map(
+        dailyRows.map((point) => [point.date, point]),
+      );
+      const lastFactDate = dailyRows.reduce(
+        (latest, point) => (point.date > latest ? point.date : latest),
+        start,
+      );
+      const daily: SearchTermDetail["daily"] = [];
+      const startMs = new Date(`${start}T00:00:00.000Z`).getTime();
+      for (let offset = 0; ; offset += 1) {
+        const date = isoDay(new Date(startMs + offset * DAY_MS));
+        if (date > lastFactDate) break;
+        const point = dailyByDate.get(date);
+        if (!point) {
+          daily.push({
+            date,
+            cost: zeroMoney,
+            sales: zeroMoney,
+            estimatedRoyalty: economicsMissing ? null : zeroMoney,
+            estimatedAdProfit: economicsMissing ? null : zeroMoney,
+          });
+          continue;
+        }
+        const dayRoyaltyMicros =
+          point.estimatedRoyalty === null
+            ? null
+            : microsFromDecimalString(point.estimatedRoyalty);
+        daily.push({
+          date: point.date,
+          cost: point.cost,
+          sales: point.sales,
+          estimatedRoyalty:
+            dayRoyaltyMicros === null
+              ? null
+              : microsToDecimalString(dayRoyaltyMicros),
+          estimatedAdProfit:
+            dayRoyaltyMicros === null
+              ? null
+              : microsToDecimalString(
+                  dayRoyaltyMicros - microsFromDecimalString(point.cost),
+                ),
+        });
+      }
+
       return {
         searchTerm,
         countryCode: selectedCountryCode,
@@ -1501,27 +1764,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         },
         economicsMissing,
         dataCurrentThrough,
-        daily: dailyRows.map((point) => {
-          const dayRoyaltyMicros =
-            point.estimatedRoyalty === null
-              ? null
-              : microsFromDecimalString(point.estimatedRoyalty);
-          return {
-            date: point.date,
-            cost: point.cost,
-            sales: point.sales,
-            estimatedRoyalty:
-              dayRoyaltyMicros === null
-                ? null
-                : microsToDecimalString(dayRoyaltyMicros),
-            estimatedAdProfit:
-              dayRoyaltyMicros === null
-                ? null
-                : microsToDecimalString(
-                    dayRoyaltyMicros - microsFromDecimalString(point.cost),
-                  ),
-          };
-        }),
+        daily,
         campaigns: rows.map((row) => {
           const rowCostMicros = microsFromDecimalString(row.totals.cost);
           const rowRoyaltyMicros =
@@ -1545,6 +1788,348 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
             economicsMissing: row.economicsMissing,
           };
         }),
+      };
+    },
+
+    async listNegatives(
+      workspaceId,
+      days,
+      bookIds = null,
+      countryCode = null,
+      kind = null,
+    ): Promise<NegativeListRow[]> {
+      const { start, end } = dateRange(now(), days);
+      const bookPks = await requireBookPks(workspaceId, bookIds);
+      const [rows, specs, serving] = await Promise.all([
+        dashboard.listNegativeRollupRows(
+          db,
+          workspaceId,
+          start,
+          end,
+          bookPks,
+          countryCode,
+          kind,
+        ),
+        dashboard.listNegativeSpecRows(
+          db,
+          workspaceId,
+          bookPks,
+          countryCode,
+          kind,
+        ),
+        dashboard.listNegativeServingRows(
+          db,
+          workspaceId,
+          start,
+          end,
+          bookPks,
+          countryCode,
+          kind,
+        ),
+      ]);
+      if (
+        rows.some(
+          (row) =>
+            row.window.mixedCurrency ||
+            row.before.mixedCurrency ||
+            (row.window.currency === null && row.structureMixedCurrency),
+        )
+      ) {
+        throw conflict(
+          "MIXED_CURRENCY",
+          "Negative metrics mix currencies; refusing to aggregate (plan §9)",
+        );
+      }
+      const specsByKey = new Map<string, dashboard.NegativeSpecRowData[]>();
+      for (const spec of specs) {
+        const key = `${spec.kind}:${spec.valueKey}`;
+        const list = specsByKey.get(key) ?? [];
+        list.push(spec);
+        specsByKey.set(key, list);
+      }
+      const servingByKey = new Map<
+        string,
+        dashboard.NegativeServingRowData[]
+      >();
+      for (const row of serving) {
+        const key = `${row.kind}:${row.valueKey}`;
+        const list = servingByKey.get(key) ?? [];
+        list.push(row);
+        servingByKey.set(key, list);
+      }
+      return rows.map((row) => {
+        const key = `${row.kind}:${row.valueKey}`;
+        const currency = (row.window.currency ??
+          row.structureCurrency) as NegativeListRow["currency"];
+        return {
+          kind: row.kind,
+          value: row.value,
+          matchTypes: row.matchTypes,
+          countryCodes: row.countryCodes,
+          currency,
+          bookIds: row.bookIds,
+          blockingCampaignCount: row.blockingCampaignCount,
+          stillServingCampaignCount: stillServingCampaignCount(
+            row.valueKey,
+            specsByKey.get(key) ?? [],
+            servingByKey.get(key) ?? [],
+          ),
+          pausedCampaignCount: row.pausedCampaignCount,
+          excludedEverywhere: row.excludedEverywhere,
+          catalogBookId: row.catalogBookId,
+          firstSeenAt: isoDateTime(row.firstSeenAt),
+          lastServedAt: row.lastServedAt,
+          before: toNegativePeriod(row.before),
+          window: toNegativePeriod(row.window),
+          dataCurrentThrough: row.dataCurrentThrough,
+        };
+      });
+    },
+
+    async getNegativeDetail(
+      workspaceId,
+      kind,
+      value,
+      days,
+      bookIds = null,
+      countryCode = null,
+    ): Promise<NegativeDetail | null> {
+      const { start, end } = dateRange(now(), days);
+      const bookPks = await requireBookPks(workspaceId, bookIds);
+      const valueKey = negativeValueKey(value);
+      const [allSpecs, allFactRows] = await Promise.all([
+        dashboard.listNegativeSpecRows(
+          db,
+          workspaceId,
+          bookPks,
+          null,
+          kind,
+          valueKey,
+        ),
+        dashboard.listNegativeTermCampaignRows(
+          db,
+          workspaceId,
+          valueKey,
+          start,
+          end,
+          bookPks,
+        ),
+      ]);
+      if (allSpecs.length === 0) return null;
+
+      const availableCountryCodes = preferUsCountryCodes([
+        ...allSpecs.map((spec) => spec.countryCode),
+        ...allFactRows.map((row) => row.countryCode),
+      ]);
+      const selectedCountryCode =
+        (countryCode !== null && availableCountryCodes.includes(countryCode)
+          ? countryCode
+          : null) ?? availableCountryCodes[0]!;
+
+      const [rollupRows, serving, dailyRows, candidateTerms] =
+        await Promise.all([
+          dashboard.listNegativeRollupRows(
+            db,
+            workspaceId,
+            start,
+            end,
+            bookPks,
+            selectedCountryCode,
+            kind,
+            valueKey,
+          ),
+          dashboard.listNegativeServingRows(
+            db,
+            workspaceId,
+            start,
+            end,
+            bookPks,
+            selectedCountryCode,
+            kind,
+            valueKey,
+          ),
+          dashboard.listNegativeDailySeries(
+            db,
+            workspaceId,
+            valueKey,
+            selectedCountryCode,
+            start,
+            end,
+            bookPks,
+          ),
+          allSpecs.some((spec) => isPhraseMatchType(spec.matchType))
+            ? dashboard.listNegativeCandidateTerms(
+                db,
+                workspaceId,
+                valueKey,
+                start,
+                end,
+                bookPks,
+                selectedCountryCode,
+              )
+            : Promise.resolve([]),
+        ]);
+      const rollup = rollupRows[0];
+      if (!rollup) return null;
+
+      if (
+        rollup.window.mixedCurrency ||
+        rollup.before.mixedCurrency ||
+        (rollup.window.currency === null && rollup.structureMixedCurrency)
+      ) {
+        throw conflict(
+          "MIXED_CURRENCY",
+          "Negative metrics mix currencies; refusing to aggregate (plan §9)",
+        );
+      }
+
+      const specs = allSpecs.filter(
+        (spec) => spec.countryCode === selectedCountryCode,
+      );
+      const factRows = allFactRows.filter(
+        (row) => row.countryCode === selectedCountryCode,
+      );
+      if (factRows.some((row) => row.mixedCurrency)) {
+        throw conflict(
+          "MIXED_CURRENCY",
+          "Negative metrics mix currencies; refusing to aggregate (plan §9)",
+        );
+      }
+      const currencies = new Set(factRows.map((row) => row.currency));
+      if (currencies.size > 1) {
+        throw conflict(
+          "MIXED_CURRENCY",
+          "Campaigns use different currencies; refusing to aggregate (plan §9)",
+        );
+      }
+
+      const currency = (rollup.window.currency ??
+        [...currencies][0] ??
+        rollup.structureCurrency) as NegativeDetail["currency"];
+      const blocked = blockedCampaignIds(
+        valueKey,
+        specKeywordSpecs(specs),
+        servingAdGroupsByCampaign(serving),
+      );
+      const appliedIds = new Set(specs.map((spec) => spec.amazonCampaignId));
+      const factsByCampaign = new Map(
+        factRows.map((row) => [row.amazonCampaignId, row]),
+      );
+
+      const blockingByCampaign = new Map<
+        string,
+        dashboard.NegativeSpecRowData[]
+      >();
+      for (const spec of specs) {
+        const list = blockingByCampaign.get(spec.amazonCampaignId) ?? [];
+        list.push(spec);
+        blockingByCampaign.set(spec.amazonCampaignId, list);
+      }
+
+      const blockingCampaigns = [...blockingByCampaign.entries()].map(
+        ([campaignId, campaignSpecs]) => {
+          const spec = pickBlockingSpec(campaignSpecs);
+          const facts = factsByCampaign.get(campaignId);
+          const base = facts
+            ? searchTermCampaignFromFacts(facts)
+            : {
+                profileId: spec.amazonProfileId,
+                campaignId: spec.amazonCampaignId,
+                name: spec.campaignName,
+                state: spec.campaignState,
+                totals: {
+                  impressions: 0,
+                  clicks: 0,
+                  cost: "0",
+                  sales: "0",
+                  orders: 0,
+                  units: 0,
+                },
+                estimatedRoyalty: "0",
+                estimatedAdProfit: "0",
+                economicsMissing: false,
+              };
+          return {
+            ...base,
+            negativeId: spec.amazonNegativeId,
+            matchType: spec.matchType,
+            level: spec.level,
+            adGroupId: spec.amazonAdGroupId,
+            adGroupName: spec.adGroupName,
+            negativeState: spec.negativeState,
+            firstSeenAt: isoDateTime(spec.firstSeenAt),
+            currentlyBlocks:
+              isEnabledAmazonState(spec.campaignState) &&
+              blocked.has(campaignId),
+          };
+        },
+      );
+
+      const unblockedCampaigns = factRows
+        .filter((row) => !appliedIds.has(row.amazonCampaignId))
+        .map(searchTermCampaignFromFacts);
+
+      const phraseSpec: NegativeKeywordSpec = {
+        campaignId: "",
+        adGroupId: null,
+        keywordText: valueKey,
+        matchType: "NEGATIVE_PHRASE",
+        state: "enabled",
+      };
+      const matchedTerms = candidateTerms
+        .filter((term) => matchesNegative(term, phraseSpec))
+        .slice(0, MATCHED_PHRASE_CAP);
+
+      const windowPeriod = toNegativePeriod(rollup.window);
+      return {
+        kind,
+        value: rollup.value,
+        matchTypes: rollup.matchTypes,
+        countryCode: selectedCountryCode,
+        availableCountryCodes,
+        dateRange: { start, end },
+        currency,
+        bookIds: rollup.bookIds,
+        blockingCampaignCount: rollup.blockingCampaignCount,
+        stillServingCampaignCount: stillServingCampaignCount(
+          valueKey,
+          specs,
+          serving,
+        ),
+        pausedCampaignCount: rollup.pausedCampaignCount,
+        excludedEverywhere: rollup.excludedEverywhere,
+        catalogBookId: rollup.catalogBookId,
+        firstSeenAt: isoDateTime(rollup.firstSeenAt),
+        lastServedAt: rollup.lastServedAt,
+        before: toNegativePeriod(rollup.before),
+        window: windowPeriod,
+        economicsMissing: windowPeriod.economicsMissing,
+        dataCurrentThrough: rollup.dataCurrentThrough,
+        daily: dailyRows.map((point) => {
+          const dayRoyaltyMicros =
+            point.estimatedRoyalty === null
+              ? null
+              : microsFromDecimalString(point.estimatedRoyalty);
+          return {
+            date: point.date,
+            cost: point.cost,
+            sales: point.sales,
+            estimatedRoyalty:
+              dayRoyaltyMicros === null
+                ? null
+                : microsToDecimalString(dayRoyaltyMicros),
+            estimatedAdProfit:
+              dayRoyaltyMicros === null
+                ? null
+                : microsToDecimalString(
+                    dayRoyaltyMicros - microsFromDecimalString(point.cost),
+                  ),
+          };
+        }),
+        blockingCampaigns,
+        unblockedCampaigns,
+        matchedTerms,
+        hasSearchTermFacts: factRows.length > 0 || dailyRows.length > 0,
       };
     },
 

@@ -213,6 +213,58 @@ export function buildMcpServer(deps: McpServerDeps): McpServer {
   );
 
   server.registerTool(
+    "list_negatives",
+    {
+      description:
+        "Workspace inventory of synced negative keywords and product ASINs: " +
+        "how many campaigns currently block each one, which still serve it, " +
+        "and whether it sold before we first saw the negative. " +
+        SEMANTICS,
+      inputSchema: z.object({
+        days: daysSchema,
+        books: booksSchema,
+        country: countrySchema,
+        kind: z
+          .enum(["keyword", "product"])
+          .optional()
+          .describe("Restrict to keyword or product negatives."),
+      }),
+    },
+    async ({ days, books, country, kind }) =>
+      json(await read.listNegatives(workspaceId, days, books, country, kind)),
+  );
+
+  server.registerTool(
+    "get_negative",
+    {
+      description:
+        "One negative keyword or product ASIN: search-term evidence, " +
+        "campaigns it is applied on, and campaigns that still serve it. " +
+        SEMANTICS,
+      inputSchema: z.object({
+        kind: z.enum(["keyword", "product"]),
+        value: z.string().min(1).describe("Keyword text or ASIN."),
+        days: daysSchema,
+        books: booksSchema,
+        country: countrySchema,
+      }),
+    },
+    async ({ kind, value, days, books, country }) => {
+      const detail = await read.getNegativeDetail(
+        workspaceId,
+        kind,
+        value,
+        days,
+        books,
+        country,
+      );
+      return detail
+        ? json(detail)
+        : notFound(`Unknown ${kind} negative '${value}'`);
+    },
+  );
+
+  server.registerTool(
     "list_books",
     {
       description:

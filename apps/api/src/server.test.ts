@@ -279,6 +279,8 @@ describe("GET metric endpoints: books query param", () => {
       getCampaignDetail: vi.fn(async () => ({ ok: true })),
       listSearchTerms: vi.fn(async () => []),
       getSearchTermDetail: vi.fn(async () => ({ ok: true })),
+      listNegatives: vi.fn(async () => []),
+      getNegativeDetail: vi.fn(async () => ({ ok: true })),
       listRecommendations: vi.fn(async () => []),
     };
     const services = {
@@ -340,6 +342,31 @@ describe("GET metric endpoints: books query param", () => {
     expect(read.getSearchTermDetail).toHaveBeenCalledWith(
       "1",
       "fantasy books",
+      30,
+      ["7", "9"],
+      null,
+    );
+
+    await app!.inject({
+      method: "GET",
+      url: "/api/negatives?books=7&country=de&kind=keyword",
+    });
+    expect(read.listNegatives).toHaveBeenCalledWith(
+      "1",
+      30,
+      ["7"],
+      "DE",
+      "keyword",
+    );
+
+    await app!.inject({
+      method: "GET",
+      url: "/api/negatives/product/B0CRHVCT1T?books=7,9",
+    });
+    expect(read.getNegativeDetail).toHaveBeenCalledWith(
+      "1",
+      "product",
+      "B0CRHVCT1T",
       30,
       ["7", "9"],
       null,

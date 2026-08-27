@@ -7,9 +7,11 @@ import {
 } from "@tanstack/react-router";
 import {
   dashboardCountrySchema,
+  negativeKindSchema,
   recommendationStateSchema,
   recommendationTypeSchema,
   type MetricWindow,
+  type NegativeKind,
 } from "@amazon-king/contracts";
 import { AppLayout } from "./components/layout";
 import { parseDaysSearch } from "./lib/timeframe";
@@ -23,6 +25,8 @@ import { CampaignNewPage } from "./routes/campaign-new";
 import { CampaignDetailPage } from "./routes/campaign-detail";
 import { SearchTermsPage } from "./routes/search-terms";
 import { SearchTermDetailPage } from "./routes/search-term-detail";
+import { NegativesPage } from "./routes/negatives";
+import { NegativeDetailPage } from "./routes/negative-detail";
 import { ChangesPage } from "./routes/changes";
 import {
   SETTINGS_TABS,
@@ -193,6 +197,38 @@ const searchTermDetailRoute = createRoute({
   component: SearchTermDetailPage,
 });
 
+const negativesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/negatives",
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { days?: MetricWindow; country?: string; kind?: NegativeKind } => {
+    const days = parseDaysSearch(search.days);
+    const kind = negativeKindSchema.safeParse(search.kind);
+    return {
+      ...(days !== undefined ? { days } : {}),
+      ...validateCountrySearch(search),
+      ...(kind.success ? { kind: kind.data } : {}),
+    };
+  },
+  component: NegativesPage,
+});
+
+const negativeDetailRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/negatives/$kind/$value",
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { days?: MetricWindow; country?: string } => {
+    const days = parseDaysSearch(search.days);
+    return {
+      ...(days !== undefined ? { days } : {}),
+      ...validateCountrySearch(search),
+    };
+  },
+  component: NegativeDetailPage,
+});
+
 const changesRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/changes",
@@ -243,6 +279,8 @@ const routeTree = rootRoute.addChildren([
     campaignDetailRoute,
     searchTermsRoute,
     searchTermDetailRoute,
+    negativesRoute,
+    negativeDetailRoute,
     changesRoute,
     connectRoute,
     settingsRoute,

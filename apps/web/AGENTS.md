@@ -82,7 +82,7 @@ the `?books=3,7` form. `src/router.test.tsx` proves the retention — keep that
 test passing, because the default stringifier silently rewrites the param into a
 form the API rejects.
 
-Overview, campaigns, campaign detail, search terms, and recommendations pass the
+Overview, campaigns, campaign detail, search terms, negatives, and recommendations pass the
 selection to their query hooks, and their query keys must include the sorted id
 list or the cache will serve another book's numbers. `/changes`, `/settings`,
 and `/connect` ignore the filter.
@@ -93,14 +93,14 @@ from `GET /api/books`.
 
 ## Date ranges
 
-Overview, campaign detail, and search-term detail share
+Overview, campaign detail, search-term detail, and the negatives list/detail
+pages share
 `src/components/timeframe-select.tsx`: 1/7/14/30/60 days plus month-to-date
 (`?days=mtd`, UTC 1st of the current month through today). Facts land a day
 late (metrics sync imports yesterday), so the read service resolves a 1-day
 window to the latest complete day — yesterday, both days equal — not the
-empty in-progress today. Campaign and
-search-term **list** pages deliberately hardcode a 30-day profitability window
-and have no selector.
+empty in-progress today. The campaigns **list** page deliberately hardcodes a
+30-day profitability window and has no selector.
 
 ## All-market view and display currency
 
@@ -151,9 +151,10 @@ daily rates job, deduped server-side, disabled while a run is active. A
 just-triggered sync is invisible in the status until the worker claims the
 job, so the card force-polls freshness until the run appears.
 
-Search terms are the exception: their API stays two-letter only, so the
-search-terms hooks translate `country === "all"` into no country filter
-(unfiltered) rather than sending `all` downstream.
+Search terms and negatives are the exception: their APIs stay two-letter only, so
+those hooks translate `country === "all"` into no country filter
+(unfiltered) rather than sending `all` downstream. There is no FX conversion
+on either screen.
 
 ## Settings page
 
@@ -254,17 +255,27 @@ center for review and apply. Terms an enabled synced negative already blocks
 
 **Exclude everywhere** (`src/components/exclude-search-term-global.tsx`) is
 the persistent, all-market action: a per-row action on the `/search-terms`
-list and the header control on the search-term detail page. It confirms,
+and `/negatives` lists and the header control on search-term and keyword
+negative detail pages. It confirms,
 then POSTs `/api/search-terms/:term/exclusion` via
 `useCreateSearchTermExclusion` — recording the term in the workspace
 exclusion list and drafting one negatives change set per market for the
 enabled campaigns that actually served the term (trailing-30-day
 search-term facts) and do not already block it — and links to Change center
-for review and apply. Both pages fetch `useSearchTermExclusions`; a term
+for review and apply. Those pages fetch `useSearchTermExclusions`; a term
 already on the list renders an "Excluded everywhere" badge with no action.
 The single-market `POST /api/search-terms/:term/negatives` route still
 exists (its `useCreateSearchTermNegatives` hook remains) but no longer has a
 UI entry point.
+
+`/negatives` (`src/routes/negatives.tsx`) is the workspace inventory of synced
+negative keywords and product ASINs. `/negatives/$kind/$value`
+(`src/routes/negative-detail.tsx`, `kind` is `keyword` | `product`) is the
+working view: search-term evidence for that value plus campaigns the negative
+is running on vs not running on. Re-include uses the existing
+`ReincludeNegative` draft path; coverage-gap Exclude uses `ExcludeSearchTerm`.
+Amazon does not expose a creation date — `firstSeenAt` is our first sync
+(`created_at`) and the UI labels it that way.
 
 ## Re-authentication
 

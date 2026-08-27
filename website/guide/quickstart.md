@@ -56,7 +56,8 @@ mostly empty — here's what each part is for.
 
 The left navigation covers the rest: `/recommendations` (filterable table of
 every finding), `/campaigns`, `/search-terms` (cross-campaign search-term
-analysis), `/changes` (the change center: every change set and its status),
+analysis), `/negatives` (synced exclusions across campaigns), `/changes` (the
+change center: every change set and its status),
 `/connect`, and `/settings`.
 
 ## 3. Connect your Amazon account

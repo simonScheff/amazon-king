@@ -20,6 +20,8 @@ function fakeRead(overrides: Partial<ReadService> = {}): ReadService {
     getCampaignDetail: vi.fn(async () => null),
     listSearchTerms: vi.fn(async () => []),
     getSearchTermDetail: vi.fn(async () => null),
+    listNegatives: vi.fn(async () => []),
+    getNegativeDetail: vi.fn(async () => null),
     listBooks: vi.fn(async () => []),
     listRecommendations: vi.fn(async () => []),
     getRecommendation: vi.fn(async () => null),
@@ -64,12 +66,14 @@ describe("MCP tool surface", () => {
       "get_campaign",
       "get_country_spend",
       "get_dashboard_summary",
+      "get_negative",
       "get_recommendation",
       "get_search_term",
       "get_sync_status",
       "list_books",
       "list_campaigns",
       "list_change_sets",
+      "list_negatives",
       "list_profiles",
       "list_recommendations",
       "list_search_terms",
@@ -152,6 +156,46 @@ describe("MCP tool surface", () => {
       "rec-1",
     );
     expect(read.getConversionResolutionContext).not.toHaveBeenCalled();
+  });
+
+  it("forwards list_negatives and get_negative filters", async () => {
+    await client.callTool({
+      name: "list_negatives",
+      arguments: { days: 14, books: ["b1"], country: "DE", kind: "keyword" },
+    });
+    expect(read.listNegatives).toHaveBeenCalledWith(
+      WORKSPACE,
+      14,
+      ["b1"],
+      "DE",
+      "keyword",
+    );
+
+    const missing = await client.callTool({
+      name: "get_negative",
+      arguments: { kind: "product", value: "nope" },
+    });
+    expect(missing.isError).toBe(true);
+    expect(textOf(missing)).toContain("nope");
+
+    read = fakeRead({
+      getNegativeDetail: vi.fn(async () => ({ value: "B0CATALOG1" }) as never),
+    });
+    client = await connect(read);
+    const found = await client.callTool({
+      name: "get_negative",
+      arguments: { kind: "product", value: "B0CATALOG1", days: 7 },
+    });
+    expect(found.isError).toBeUndefined();
+    expect(JSON.parse(textOf(found))).toEqual({ value: "B0CATALOG1" });
+    expect(read.getNegativeDetail).toHaveBeenCalledWith(
+      WORKSPACE,
+      "product",
+      "B0CATALOG1",
+      7,
+      undefined,
+      undefined,
+    );
   });
 
   it("combines sync runs and freshness in get_sync_status", async () => {

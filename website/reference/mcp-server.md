@@ -3,8 +3,8 @@
 amazon-king ships an [MCP](https://modelcontextprotocol.io) server
 (`apps/mcp`) so any MCP-compatible AI agent — Claude, Kimi, Cursor, or your
 own scripts — can query your advertising data and the optimizer's research
-directly: campaign performance, search-term analysis, recommendations with
-their evidence, and sync freshness.
+directly: campaign performance, search-term analysis, the negatives inventory,
+recommendations with their evidence, and sync freshness.
 
 The server is **read-only by design**. It has no apply, rollback, or sync
 tools; applying a change always requires you in the
@@ -65,6 +65,8 @@ reverse proxy.
 | `get_campaign` | One campaign: metrics, trend, ad groups, targets, negatives. |
 | `list_search_terms` | Shopper search terms with aggregated performance — the main research surface. |
 | `get_search_term` | One term broken down by campaign, with trend and negative coverage. |
+| `list_negatives` | Synced negative keywords and product ASINs: blocking coverage, still-serving leaks, and whether the value sold before we first saw it. |
+| `get_negative` | One negative: search-term evidence, campaigns it runs on, and campaigns that still serve it. |
 | `list_books` | Books with KDP economics and advertised-product mappings. |
 | `list_recommendations` | Optimizer findings filterable by type and state, with rationale and evidence windows. |
 | `get_recommendation` | One finding in full, including cannibalization or conversion context. |
