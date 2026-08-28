@@ -42,6 +42,7 @@ export interface FakeTables {
   negativeTargets: FakeRow[];
   searchTermExclusions: FakeRow[];
   fxRates: FakeRow[];
+  kdpRoyaltyImports: FakeRow[];
 }
 
 function emptyTables(): FakeTables {
@@ -78,6 +79,7 @@ function emptyTables(): FakeTables {
     negativeTargets: [],
     searchTermExclusions: [],
     fxRates: [],
+    kdpRoyaltyImports: [],
   };
 }
 
@@ -428,6 +430,25 @@ export class FakeDb {
       ...overrides,
     };
     this.tables.fxRates.push(row);
+    return row;
+  }
+
+  seedKdpRoyaltyImport(overrides: Partial<FakeRow> = {}): FakeRow {
+    const row = {
+      id: nextId(),
+      workspace_id: "1",
+      file_name: "kdp.xlsx",
+      payload_sha256: `hash-${nextId()}`,
+      period_start: "2026-08-01",
+      period_end: "2026-08-25",
+      row_count: 0,
+      suggestions: [],
+      skipped: [],
+      created_at: new Date(),
+      applied_at: null,
+      ...overrides,
+    };
+    this.tables.kdpRoyaltyImports.push(row);
     return row;
   }
 
@@ -1403,9 +1424,12 @@ export class FakeDb {
               Number(row.impressions) + Number(fact.impressions);
             row.clicks = Number(row.clicks) + Number(fact.clicks);
             row.cost = Number(row.cost) + Number(fact.cost);
-            row.sales = Number(row.sales) + Number(fact.sales);
-            row.orders = Number(row.orders) + Number(fact.orders);
-            row.units = Number(row.units) + Number(fact.units);
+            row.sales = Number(row.sales) + Number(fact.sales14d ?? fact.sales);
+            row.orders =
+              Number(row.orders) + Number(fact.purchases14d ?? fact.orders);
+            row.units =
+              Number(row.units) +
+              Number(fact.units_sold_clicks14d ?? fact.units);
             byCurrency.set(currency, row);
           }
           return this.ok(
@@ -1452,9 +1476,12 @@ export class FakeDb {
               Number(row.impressions) + Number(fact.impressions);
             row.clicks = Number(row.clicks) + Number(fact.clicks);
             row.cost = Number(row.cost) + Number(fact.cost);
-            row.sales = Number(row.sales) + Number(fact.sales);
-            row.orders = Number(row.orders) + Number(fact.orders);
-            row.units = Number(row.units) + Number(fact.units);
+            row.sales = Number(row.sales) + Number(fact.sales14d ?? fact.sales);
+            row.orders =
+              Number(row.orders) + Number(fact.purchases14d ?? fact.orders);
+            row.units =
+              Number(row.units) +
+              Number(fact.units_sold_clicks14d ?? fact.units);
             totals.set(term, row);
           }
           // The real query returns numeric sums as strings, highest spend first.
@@ -1712,7 +1739,33 @@ export class FakeDb {
       },
       {
         match: "select distinct on (be.book_id, be.profile_id)",
-        handle: () => this.ok([]),
+        handle: (p) => {
+          const today = new Date().toISOString().slice(0, 10);
+          const latest = new Map<string, FakeRow>();
+          for (const row of t.bookEconomics) {
+            const book = t.books.find((b) => b.id === row.book_id);
+            if (!book || book.workspace_id !== p[0]) continue;
+            if (String(row.effective_from) > today) continue;
+            const key = `${row.book_id}:${row.profile_id}`;
+            const current = latest.get(key);
+            if (
+              !current ||
+              String(row.effective_from) > String(current.effective_from) ||
+              (String(row.effective_from) === String(current.effective_from) &&
+                Number(row.id) > Number(current.id))
+            ) {
+              latest.set(key, row);
+            }
+          }
+          return this.ok(
+            [...latest.values()].map((row) => ({
+              ...row,
+              amazon_profile_id: t.amazonProfiles.find(
+                (ap) => ap.id === row.profile_id,
+              )?.profile_id,
+            })),
+          );
+        },
       },
       {
         match: "select distinct b.id as book_id",
@@ -1765,6 +1818,154 @@ export class FakeDb {
                       String(right.profileId),
                     ),
                   ),
+              })),
+          ),
+      },
+
+      // -- kdp royalty imports ------------------------------------------------
+      {
+        match: "insert into kdp_royalty_imports",
+        handle: (p) => {
+          const existing = t.kdpRoyaltyImports.find(
+            (row) => row.workspace_id === p[0] && row.payload_sha256 === p[2],
+          );
+          // ON CONFLICT DO NOTHING: no row returned, the repository re-selects.
+          if (existing) return this.ok([]);
+          const row = {
+            id: nextId(),
+            workspace_id: p[0],
+            file_name: p[1],
+            payload_sha256: p[2],
+            period_start: p[3],
+            period_end: p[4],
+            row_count: p[5],
+            suggestions: JSON.parse(String(p[6])),
+            skipped: JSON.parse(String(p[7])),
+            created_at: new Date(),
+            applied_at: null,
+          };
+          t.kdpRoyaltyImports.push(row);
+          return this.ok([row]);
+        },
+      },
+      {
+        match: "update kdp_royalty_imports",
+        handle: (p) => {
+          const row = t.kdpRoyaltyImports.find(
+            (r) =>
+              r.workspace_id === p[0] && r.id === p[1] && r.applied_at === null,
+          );
+          if (!row) return { rows: [], rowCount: 0 };
+          row.applied_at = new Date();
+          return { rows: [row], rowCount: 1 };
+        },
+      },
+      {
+        match:
+          "from kdp_royalty_imports where workspace_id = $1 and payload_sha256 = $2",
+        handle: (p) =>
+          this.ok(
+            t.kdpRoyaltyImports.filter(
+              (r) => r.workspace_id === p[0] && r.payload_sha256 === p[1],
+            ),
+          ),
+      },
+      {
+        match: "from kdp_royalty_imports where workspace_id = $1 and id = $2",
+        handle: (p) =>
+          this.ok(
+            t.kdpRoyaltyImports.filter(
+              (r) => r.workspace_id === p[0] && r.id === p[1],
+            ),
+          ),
+      },
+      {
+        match: "from kdp_royalty_imports",
+        handle: (p) =>
+          this.ok(
+            t.kdpRoyaltyImports
+              .filter((r) => r.workspace_id === p[0])
+              .sort((a, b) => Number(b.id) - Number(a.id)),
+          ),
+      },
+      {
+        match: "insert into book_economics",
+        handle: (p) => {
+          const existing = t.bookEconomics.find(
+            (r) =>
+              r.book_id === p[0] &&
+              r.profile_id === p[1] &&
+              r.effective_from === p[2],
+          );
+          if (existing) {
+            existing.currency = p[3];
+            existing.list_price = p[4];
+            existing.estimated_royalty_per_sale = p[5];
+            existing.target_acos = p[6];
+            existing.goal_mode = p[7];
+            existing.max_spend_without_sale = p[8];
+            existing.max_bid = p[9];
+            existing.max_daily_budget = p[10];
+            existing.notes = p[11];
+            return this.ok([existing]);
+          }
+          const row = {
+            id: nextId(),
+            book_id: p[0],
+            profile_id: p[1],
+            effective_from: p[2],
+            currency: p[3],
+            list_price: p[4],
+            estimated_royalty_per_sale: p[5],
+            target_acos: p[6],
+            goal_mode: p[7],
+            max_spend_without_sale: p[8],
+            max_bid: p[9],
+            max_daily_budget: p[10],
+            notes: p[11],
+            created_at: new Date(),
+          };
+          t.bookEconomics.push(row);
+          return this.ok([row]);
+        },
+      },
+      {
+        match:
+          "select * from book_economics where book_id = $1 and profile_id = $2",
+        handle: (p) => {
+          const onDate = p[2]
+            ? String(p[2])
+            : new Date().toISOString().slice(0, 10);
+          const row = t.bookEconomics
+            .filter(
+              (r) =>
+                r.book_id === p[0] &&
+                r.profile_id === p[1] &&
+                String(r.effective_from) <= onDate,
+            )
+            .sort((a, b) =>
+              String(b.effective_from).localeCompare(String(a.effective_from)),
+            )[0];
+          return this.ok(row ? [row] : []);
+        },
+      },
+      {
+        match: "select bpl.book_id, bpl.profile_id, bpl.marketplace_asin",
+        handle: (p) =>
+          this.ok(
+            t.bookProfileLinks
+              .filter(
+                (l) =>
+                  l.enabled === true &&
+                  t.books.some(
+                    (b) => b.id === l.book_id && b.workspace_id === p[0],
+                  ),
+              )
+              .map((l) => ({
+                book_id: l.book_id,
+                profile_id: l.profile_id,
+                marketplace_asin: l.marketplace_asin,
+                title: t.books.find((b) => b.id === l.book_id)?.title,
               })),
           ),
       },
@@ -1846,8 +2047,8 @@ export class FakeDb {
             }
             impressions += Number(fact.impressions);
             clicks += Number(fact.clicks);
-            orders += Number(fact.orders);
-            units += Number(fact.units);
+            orders += Number(fact.purchases14d ?? fact.orders);
+            units += Number(fact.units_sold_clicks14d ?? fact.units);
             const dr = db.fxRateFor(display, date);
             const nr = db.fxRateFor(String(fact.currency), date);
             if (dr === null || nr === null) {
@@ -1857,7 +2058,7 @@ export class FakeDb {
               continue;
             }
             cost += (Number(fact.cost) * dr) / nr;
-            sales += (Number(fact.sales) * dr) / nr;
+            sales += (Number(fact.sales14d ?? fact.sales) * dr) / nr;
           }
           return this.ok([
             {
@@ -1898,7 +2099,7 @@ export class FakeDb {
               orders: 0,
               missing: false,
             };
-            entry.orders += Number(fact.orders);
+            entry.orders += Number(fact.purchases14d ?? fact.orders);
             const dr = db.fxRateFor(display, date);
             const nr = db.fxRateFor(String(fact.currency), date);
             if (dr === null || nr === null) {
@@ -1907,7 +2108,7 @@ export class FakeDb {
               }
             } else {
               entry.cost += (Number(fact.cost) * dr) / nr;
-              entry.sales += (Number(fact.sales) * dr) / nr;
+              entry.sales += (Number(fact.sales14d ?? fact.sales) * dr) / nr;
             }
             byDate.set(date, entry);
           }
@@ -1973,13 +2174,17 @@ export class FakeDb {
                       ) || Number(b.id) - Number(a.id),
                   )[0]
               : undefined;
-            const copies = Math.max(Number(fact.units), Number(fact.orders));
+            const copies = Math.max(
+              Number(fact.units_sold_clicks14d ?? fact.units),
+              Number(fact.purchases14d ?? fact.orders),
+            );
             const entry = byDate.get(date) ?? {
               missing: false,
               royalty: 0,
               ratesMissing: false,
             };
-            if (Number(fact.orders) > 0 && !economics) entry.missing = true;
+            if (Number(fact.purchases14d ?? fact.orders) > 0 && !economics)
+              entry.missing = true;
             const dr = db.fxRateFor(display, date);
             const nr = db.fxRateFor(String(fact.currency), date);
             if (dr === null || nr === null) {

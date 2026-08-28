@@ -9,6 +9,7 @@ import {
   type BookEconomics,
   type BookFormat,
   type GoalMode,
+  type KdpRoyaltyImport,
 } from "@amazon-king/contracts";
 import {
   useAuditEvents,
@@ -40,6 +41,10 @@ import { formatDate, formatDateTime, labelize } from "../lib/format";
 import { countryNameForCode, marketplaceOptions } from "../lib/marketplaces";
 import { LinkBookToMarketsForm } from "../components/link-book-to-markets";
 import { DisplayCurrencySelect } from "../components/display-currency-select";
+import {
+  KdpImportButton,
+  KdpImportReview,
+} from "../components/kdp-royalty-import";
 
 export const SETTINGS_TABS = ["profiles", "books", "asins", "audit"] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
@@ -775,9 +780,16 @@ function ProfilesCard() {
 function BooksCard() {
   const books = useBooks();
   const profiles = useProfiles();
+  const [kdpBatch, setKdpBatch] = useState<KdpRoyaltyImport | null>(null);
   return (
     <Card>
-      <CardHeader title="Books & economics" />
+      <CardHeader
+        title="Books & economics"
+        action={<KdpImportButton onImported={setKdpBatch} />}
+      />
+      {kdpBatch ? (
+        <KdpImportReview batch={kdpBatch} onClose={() => setKdpBatch(null)} />
+      ) : null}
       {books.isPending ? (
         <Loading label="Loading book economics…" />
       ) : books.error ? (

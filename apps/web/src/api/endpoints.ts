@@ -25,6 +25,9 @@ import {
   dashboardSummarySchema,
   dataFreshnessResponseSchema,
   fxSyncResultSchema,
+  kdpRoyaltyApplyResultSchema,
+  kdpRoyaltyImportSchema,
+  kdpRoyaltyImportSummarySchema,
   maxCpcChangeSetResultSchema,
   recommendationSchema,
   searchTermDetailSchema,
@@ -47,6 +50,8 @@ import {
   type CampaignCreationCreate,
   type CampaignNegativesCreate,
   type ChangeSetCreate,
+  type KdpRoyaltyApplyInput,
+  type KdpRoyaltyImportInput,
   type LoginRequest,
   type MetricWindow,
   type NegativeKind,
@@ -996,6 +1001,54 @@ export function useSaveBookCover(bookId: string) {
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["books"] }),
         qc.invalidateQueries({ queryKey: ["audit-events"] }),
+      ]);
+    },
+  });
+}
+
+export function useKdpRoyaltyImports() {
+  return useQuery({
+    queryKey: ["kdp-royalty-imports"],
+    queryFn: () =>
+      apiFetch("/api/kdp/imports", {
+        schema: z.array(kdpRoyaltyImportSummarySchema),
+      }),
+  });
+}
+
+export function useCreateKdpRoyaltyImport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: KdpRoyaltyImportInput) =>
+      apiFetch("/api/kdp/imports", {
+        method: "POST",
+        body,
+        schema: kdpRoyaltyImportSchema,
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["kdp-royalty-imports"] }),
+        qc.invalidateQueries({ queryKey: ["audit-events"] }),
+      ]);
+    },
+  });
+}
+
+export function useApplyKdpRoyaltyImport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: KdpRoyaltyApplyInput & { id: string }) =>
+      apiFetch(`/api/kdp/imports/${id}/apply`, {
+        method: "POST",
+        body,
+        schema: kdpRoyaltyApplyResultSchema,
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["books"] }),
+        qc.invalidateQueries({ queryKey: ["kdp-royalty-imports"] }),
+        qc.invalidateQueries({ queryKey: ["audit-events"] }),
+        qc.invalidateQueries({ queryKey: ["dashboard-summary"] }),
       ]);
     },
   });

@@ -16,6 +16,8 @@ import {
   changeSetCreateSchema,
   countrySpendQuerySchema,
   dashboardSummaryQuerySchema,
+  kdpRoyaltyApplyInputSchema,
+  kdpRoyaltyImportInputSchema,
   loginRequestSchema,
   metricWindowSchema,
   negativeKindSchema,
@@ -597,6 +599,47 @@ export async function buildServer(
       const input = parse(bookCoverInputSchema, request.body);
       await services.read.saveBookCover(auth, bookId, input, meta(request));
       return reply.status(204).send();
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // KDP royalty imports (parsed workbook → suggestions → approved apply)
+  // -------------------------------------------------------------------------
+
+  app.post(
+    "/api/kdp/imports",
+    { config: { rateLimit: WRITE_RATE } },
+    async (request, reply) => {
+      const auth = await authenticate(request);
+      const input = parse(kdpRoyaltyImportInputSchema, request.body);
+      const batch = await services.read.createKdpRoyaltyImport(
+        auth,
+        input,
+        meta(request),
+      );
+      return reply.status(batch.alreadyExisted ? 200 : 201).send(batch);
+    },
+  );
+
+  app.get("/api/kdp/imports", async (request) => {
+    const auth = await authenticate(request);
+    return services.read.listKdpRoyaltyImports(auth.workspaceId);
+  });
+
+  app.post(
+    "/api/kdp/imports/:id/apply",
+    { config: { rateLimit: WRITE_RATE } },
+    async (request, reply) => {
+      const auth = await authenticate(request);
+      const { id } = request.params as { id: string };
+      const input = parse(kdpRoyaltyApplyInputSchema, request.body);
+      const result = await services.read.applyKdpRoyaltyImport(
+        auth,
+        id,
+        input,
+        meta(request),
+      );
+      return reply.send(result);
     },
   );
 

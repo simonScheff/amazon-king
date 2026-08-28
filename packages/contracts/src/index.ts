@@ -11,3 +11,4 @@ export * from "./bid-controls.js";
 export * from "./campaign-creation.js";
 export * from "./workspace.js";
 export * from "./exclusions.js";
+export * from "./kdp.js";

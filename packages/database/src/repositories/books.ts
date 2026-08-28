@@ -209,6 +209,44 @@ export async function isBookLinkedToProfile(
   return result.rows[0]?.linked ?? false;
 }
 
+export interface WorkspaceBookLink {
+  bookId: string;
+  /** Internal profile PK (book_profile_links.profile_id). */
+  profilePk: string;
+  marketplaceAsin: string;
+  title: string;
+}
+
+/**
+ * Every enabled book/profile marketplace link of a workspace, keyed for
+ * ASIN lookups — the KDP royalty import matches report rows by marketplace
+ * ASIN against this set.
+ */
+export async function listBookLinksByWorkspace(
+  db: Db,
+  workspaceId: string,
+): Promise<WorkspaceBookLink[]> {
+  const result = await db.query<{
+    book_id: string;
+    profile_id: string;
+    marketplace_asin: string;
+    title: string;
+  }>(
+    `select bpl.book_id, bpl.profile_id, bpl.marketplace_asin, b.title
+     from book_profile_links bpl
+     join books b on b.id = bpl.book_id
+     where b.workspace_id = $1 and bpl.enabled = true
+     order by bpl.book_id, bpl.profile_id`,
+    [workspaceId],
+  );
+  return result.rows.map((row) => ({
+    bookId: row.book_id,
+    profilePk: row.profile_id,
+    marketplaceAsin: row.marketplace_asin,
+    title: row.title,
+  }));
+}
+
 export interface UnmappedAdvertisedProduct {
   profileId: string;
   asin: string;

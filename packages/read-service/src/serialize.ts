@@ -17,7 +17,7 @@ import type {
 
 /** Map DB rows to contract payloads. Money stays string-encoded; dates are ISO. */
 
-/** pg returns timestamptz as Date and date as "YYYY-MM-DD" string; normalize. */
+/** pg returns timestamptz as Date and, depending on version, date too; normalize. */
 export function isoDateTime(value: string | Date): string {
   return value instanceof Date ? value.toISOString() : value;
 }

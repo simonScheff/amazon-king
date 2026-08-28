@@ -48,6 +48,11 @@ import {
 import { z } from "zod";
 import { ApiError, conflict, notFound } from "./errors.js";
 import {
+  applyKdpRoyaltyImport,
+  createKdpRoyaltyImport,
+  listKdpRoyaltyImports,
+} from "./kdp-royalty.js";
+import {
   amazonConsoleUrl,
   isoDate,
   isoDateTime,
@@ -2365,6 +2370,18 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         sessionId: auth.sessionId,
         details: { coverImageUrl: input.coverImageUrl },
       });
+    },
+
+    async createKdpRoyaltyImport(auth, input, meta) {
+      return createKdpRoyaltyImport(deps, auth, input, meta);
+    },
+
+    async listKdpRoyaltyImports(workspaceId) {
+      return listKdpRoyaltyImports(db, workspaceId);
+    },
+
+    async applyKdpRoyaltyImport(auth, importId, input, meta) {
+      return applyKdpRoyaltyImport(deps, auth, importId, input, meta);
     },
 
     async listRecommendations(workspaceId, filter) {

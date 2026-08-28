@@ -66,10 +66,11 @@ row, since that table is per-profile.
 ## Royalty is valued per copy, not per order
 
 Every royalty query in `repositories/dashboard.ts` values
-`greatest(units, orders)`. KDP pays per copy, so one order of three copies earns
-three royalties. The `greatest` degrades to orders on facts imported before the
-`units` columns existed, which is safe because Amazon never reports fewer units
-than orders.
+`greatest(units_sold_clicks14d, purchases14d)`. KDP pays per copy, so one order
+of three copies earns three royalties. The 14-day pair matches the
+browser-facing conversion window (the Amazon Ads console default); the
+`greatest` degrades to orders on facts imported before the `units` columns
+existed, which is safe because Amazon never reports fewer units than orders.
 
 `GET /api/dashboard/summary` estimates royalty from advertised-product facts
 valued with each book's own `book_economics` for that marketplace and metric
@@ -92,6 +93,23 @@ across selected books, and null or empty means unfiltered.
 marketplaces that do not yet have ads (owner-confirmed ASIN). It is a local
 catalog write — CSRF + WRITE rate, no recent-auth, no Amazon call.
 `POST /api/books/mappings` remains the ads-derived identification path.
+
+## KDP royalty imports
+
+`POST /api/kdp/imports` accepts the browser-parsed rows of a KDP Royalties
+Estimator workbook (JSON + Zod; there is no multipart anywhere — the xlsx is
+parsed client-side) and derives per-book/per-market royalty-per-copy
+suggestions from standard-rate sales only; expanded-distribution rows (40%/50%)
+are excluded from the math and reported as context. Idempotent per file
+content: a repeat upload returns the existing batch (`alreadyExisted: true`).
+`GET /api/kdp/imports` lists recent batches.
+`POST /api/kdp/imports/:id/apply` writes the selected suggestions into
+effective-dated `book_economics`, preserving every other field from the latest
+economics row — books without economics are skipped, never guessed. A batch
+applies once (`409 KDP_IMPORT_ALREADY_APPLIED` after that). All three are
+settings-level writes: CSRF + WRITE rate limit, no recent-auth gate, no Amazon
+call; the audit trail is `kdp.royalty_import.create/apply` plus one
+`books.economics` event per applied row.
 
 ## Campaign creation
 

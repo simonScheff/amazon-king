@@ -16,6 +16,11 @@ import type {
   DashboardSummary,
   DataFreshnessResponse,
   FxSyncResult,
+  KdpRoyaltyApplyInput,
+  KdpRoyaltyApplyResult,
+  KdpRoyaltyImport,
+  KdpRoyaltyImportInput,
+  KdpRoyaltyImportSummary,
   MetricWindow,
   ProfileUpdate,
   Recommendation,
@@ -197,6 +202,30 @@ export interface ReadService {
     input: BookCoverInput,
     meta: RequestMeta,
   ): Promise<void>;
+  /**
+   * Import a parsed KDP Royalties Estimator workbook and derive royalty
+   * suggestions. Idempotent per file content: a repeat upload returns the
+   * existing batch with `alreadyExisted: true`.
+   */
+  createKdpRoyaltyImport(
+    auth: AuthContext,
+    input: KdpRoyaltyImportInput,
+    meta: RequestMeta,
+  ): Promise<KdpRoyaltyImport>;
+  /** Recent KDP royalty import batches, newest first. */
+  listKdpRoyaltyImports(
+    workspaceId: string,
+  ): Promise<KdpRoyaltyImportSummary[]>;
+  /**
+   * Apply selected suggestions into effective-dated economics. One-way:
+   * an applied batch cannot be applied again.
+   */
+  applyKdpRoyaltyImport(
+    auth: AuthContext,
+    importId: string,
+    input: KdpRoyaltyApplyInput,
+    meta: RequestMeta,
+  ): Promise<KdpRoyaltyApplyResult>;
   listRecommendations(
     workspaceId: string,
     filter: RecommendationFilter,

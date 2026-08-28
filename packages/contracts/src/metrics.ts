@@ -9,7 +9,13 @@ import {
   nonNegativeDecimalStringSchema,
 } from "./common.js";
 
-/** Aggregated ad metrics. Money fields are string-encoded decimals. */
+/**
+ * Aggregated ad metrics. Money fields are string-encoded decimals. The
+ * conversion fields (`sales`, `orders`, `units`) are 14-day click attribution,
+ * matching the Amazon Ads console defaults; stored daily facts keep both the
+ * 7-day and 14-day windows, and the worker/optimizer keep reading the 7-day
+ * ones.
+ */
 export const metricTotalsSchema = z.object({
   impressions: z.number().int().nonnegative(),
   clicks: z.number().int().nonnegative(),

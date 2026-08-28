@@ -96,6 +96,14 @@ vi.mock("../api/endpoints", () => ({
     isPending: false,
     mutate: mocks.saveCover,
   }),
+  useCreateKdpRoyaltyImport: () => ({
+    isPending: false,
+    mutate: mocks.mutation,
+  }),
+  useApplyKdpRoyaltyImport: () => ({
+    isPending: false,
+    mutate: mocks.mutation,
+  }),
   useUnmappedAdvertisedProducts: () => ({
     isPending: false,
     error: null,

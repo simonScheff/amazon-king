@@ -30,6 +30,12 @@ import {
 } from "./repositories/dashboard.js";
 import { enqueue, claim, reapExpiredLeases, complete, fail } from "./queue.js";
 import {
+  getKdpRoyaltyImport,
+  insertKdpRoyaltyImport,
+  listKdpRoyaltyImports,
+  markKdpRoyaltyImportApplied,
+} from "./repositories/kdp-royalty-imports.js";
+import {
   upsertAd,
   upsertAdGroup,
   upsertCampaign,
@@ -152,6 +158,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       "0016",
       "0017",
       "0018",
+      "0019",
     ]);
     const again = await migrate(pool);
     expect(again).toEqual([]);
@@ -219,7 +226,9 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       currency: "USD",
       impressions: 100,
       clicks: 10,
-      orders: 2,
+      // Browser-facing conversion metrics read the 14-day columns: the
+      // re-import above left purchases14d = 3 while orders (7d) stayed 2.
+      orders: 3,
       units: 2,
     });
   });
@@ -663,6 +672,8 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         metricDate: "2026-08-14",
         orders: 1,
         units: 2,
+        purchases14d: 1,
+        unitsSoldClicks14d: 2,
         currency: "USD",
       },
       // Three orders, units never imported: degrades to orders.
@@ -675,6 +686,8 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         metricDate: "2026-08-14",
         orders: 3,
         units: 0,
+        purchases14d: 3,
+        unitsSoldClicks14d: 0,
         currency: "EUR",
       },
     ]);
@@ -1426,6 +1439,9 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         sales: "8.00",
         orders: 1,
         units: 1,
+        purchases14d: 1,
+        sales14d: "8.00",
+        unitsSoldClicks14d: 1,
       },
       {
         ...metricValues,
@@ -1439,6 +1455,9 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         sales: "0.00",
         orders: 0,
         units: 0,
+        purchases14d: 0,
+        sales14d: "0.00",
+        unitsSoldClicks14d: 0,
       },
       {
         ...metricValues,
@@ -1452,6 +1471,9 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         sales: "10.00",
         orders: 1,
         units: 1,
+        purchases14d: 1,
+        sales14d: "10.00",
+        unitsSoldClicks14d: 1,
       },
       // One order shipping four copies, on a day outside the windows below.
       {
@@ -1466,6 +1488,9 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         sales: "40.00",
         orders: 1,
         units: 4,
+        purchases14d: 1,
+        sales14d: "40.00",
+        unitsSoldClicks14d: 4,
       },
     ]);
 
@@ -1909,13 +1934,15 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       ),
     ).resolves.toEqual([]);
 
-    // The overview summary totals follow the same filter.
+    // The overview summary totals follow the same filter. Conversion counts
+    // come from the 14-day columns (purchases14d = 2 per campaign here), not
+    // the 7-day `orders` mirror.
     await expect(
       dashboardTotals(pool, profileId, "2026-08-13", "2026-08-14", aOnly),
-    ).resolves.toMatchObject({ cost: "10.0000", orders: 4 });
+    ).resolves.toMatchObject({ cost: "10.0000", orders: 2 });
     await expect(
       dashboardTotals(pool, profileId, "2026-08-13", "2026-08-14", both),
-    ).resolves.toMatchObject({ cost: "40.0000", orders: 13 });
+    ).resolves.toMatchObject({ cost: "40.0000", orders: 4 });
     await expect(
       dashboardTotals(pool, profileId, "2026-08-13", "2026-08-14", noMatch),
     ).resolves.toBeNull();
@@ -2350,6 +2377,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         adId: "amzn-ad-ov-tractor",
         metricDate: "2026-08-13",
         orders: 6,
+        purchases14d: 6,
         currency: "USD",
       },
       {
@@ -2360,6 +2388,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         adId: "amzn-ad-ov-other",
         metricDate: "2026-08-18",
         orders: 4,
+        purchases14d: 4,
         currency: "USD",
       },
       {
@@ -2382,6 +2411,8 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         metricDate: "2026-08-19",
         orders: 6,
         units: 8,
+        purchases14d: 6,
+        unitsSoldClicks14d: 8,
         currency: "USD",
       },
       // Imported before the units columns existed: units stay 0 with orders.
@@ -2394,6 +2425,8 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         metricDate: "2026-08-20",
         orders: 3,
         units: 0,
+        purchases14d: 3,
+        unitsSoldClicks14d: 0,
         currency: "USD",
       },
     ]);
@@ -2745,9 +2778,11 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     expect(freeBooks.blockingCampaignCount).toBe(1);
     expect(freeBooks.pausedCampaignCount).toBe(1);
     expect(freeBooks.excludedEverywhere).toBe(true);
-    expect(freeBooks.before.totals.orders).toBe(2);
+    // Conversion counts read the 14-day columns: purchases14d is 1 on every
+    // seeded "free books" fact, including the leak row whose 7d orders are 0.
+    expect(freeBooks.before.totals.orders).toBe(1);
     expect(freeBooks.before.totals.cost).toBe("4.0000");
-    expect(freeBooks.window.totals.orders).toBe(1);
+    expect(freeBooks.window.totals.orders).toBe(2);
     expect(freeBooks.window.totals.cost).toBe("5.0000");
     expect(freeBooks.lastServedAt).toBe("2026-08-12");
     expect(productRow.catalogBookId).toBe(bookA!.id);
@@ -2825,5 +2860,48 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       "amzn-inv-c-blocked",
       "amzn-inv-c-leak",
     ]);
+  });
+
+  it("kdp royalty imports dedupe by payload hash and apply exactly once", async () => {
+    const workspace = await pool.query<{ id: string }>(
+      `insert into workspaces (name) values ('kdp test') returning id`,
+    );
+    const kdpWorkspaceId = workspace.rows[0]!.id;
+    const input = {
+      workspaceId: kdpWorkspaceId,
+      fileName: "kdp.xlsx",
+      payloadSha256: "a".repeat(64),
+      periodStart: "2026-08-01",
+      periodEnd: "2026-08-25",
+      rowCount: 2,
+      suggestions: [{ bookId: "1", suggestedRoyaltyPerSale: "3.43" }],
+      skipped: [],
+    };
+
+    const first = await insertKdpRoyaltyImport(pool, input);
+    expect(first.created).toBe(true);
+    const replay = await insertKdpRoyaltyImport(pool, input);
+    expect(replay.created).toBe(false);
+    expect(replay.import.id).toBe(first.import.id);
+
+    const listed = await listKdpRoyaltyImports(pool, kdpWorkspaceId);
+    expect(listed).toHaveLength(1);
+    expect(listed[0]!.suggestions).toEqual(input.suggestions);
+
+    const marked = await markKdpRoyaltyImportApplied(
+      pool,
+      kdpWorkspaceId,
+      first.import.id,
+    );
+    expect(marked?.appliedAt).not.toBeNull();
+    const secondMark = await markKdpRoyaltyImportApplied(
+      pool,
+      kdpWorkspaceId,
+      first.import.id,
+    );
+    expect(secondMark).toBeNull();
+    expect(
+      await getKdpRoyaltyImport(pool, "999999", first.import.id),
+    ).toBeNull();
   });
 });

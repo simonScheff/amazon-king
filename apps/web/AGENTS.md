@@ -173,6 +173,16 @@ each market's economics edit in a single table row, with the effective-from
 date and notes behind the row's **Details** toggle, and market linking
 behind the collapsed **Link another market** section.
 
+The Books & economics card header carries **Import from KDP report**
+(`src/components/kdp-royalty-import.tsx`): the owner picks a KDP Royalties
+Estimator .xlsx, `src/lib/kdp-report.ts` parses it in the browser
+(`read-excel-file`) into the canonical JSON payload, and the review section
+shows the derived royalty-per-copy suggestions with per-row checkboxes (low
+evidence and >15% deviation are badge-flagged; books without economics are
+disabled), the skipped-row reasons, and an effective-from date. Apply goes
+through `useApplyKdpRoyaltyImport` and only ever changes royalty per sale.
+The import log UI is phase 2 of `docs/kdp-royalty-import-plan.md`.
+
 ## New-campaign wizard
 
 `src/routes/campaign-new.tsx` is the multi-step wizard, entered from

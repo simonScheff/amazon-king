@@ -38,15 +38,17 @@ function toTotals(row: RawTotals): TotalsRow {
 }
 
 /**
- * SQL fragment for the number of copies a royalty is earned on. KDP pays per
- * copy, so a single order of three copies earns three royalties and `orders`
- * alone undercounts it. `units` arrived later than `orders` (migration 0010)
- * and stays 0 on facts imported before it; since Amazon never reports fewer
- * units than orders, taking the greater of the two degrades to orders on those
- * rows instead of reporting no royalty at all.
+ * SQL fragment for the number of copies a royalty is earned on, on the
+ * browser-facing 14-day click-attribution window (matching the Amazon Ads
+ * console). KDP pays per copy, so a single order of three copies earns three
+ * royalties and `purchases14d` alone undercounts it. `units_sold_clicks14d`
+ * arrived later than `purchases14d` (migration 0010) and stays 0 on facts
+ * imported before it; since Amazon never reports fewer units than orders,
+ * taking the greater of the two degrades to orders on those rows instead of
+ * reporting no royalty at all.
  */
 function royaltyCopies(alias: string): string {
-  return `greatest(${alias}.units, ${alias}.orders)`;
+  return `greatest(${alias}.units_sold_clicks14d, ${alias}.purchases14d)`;
 }
 
 export interface CampaignRowData {
@@ -106,9 +108,9 @@ export async function listCampaignRows(
               sum(impressions)::text as impressions,
               sum(clicks)::text as clicks,
               sum(cost)::text as cost,
-              sum(sales)::text as sales,
-              sum(orders)::text as orders,
-              sum(units)::text as units,
+              sum(sales14d)::text as sales,
+              sum(purchases14d)::text as orders,
+              sum(units_sold_clicks14d)::text as units,
               min(currency)::text as currency,
               count(distinct currency) > 1 as mixed_currency,
               max(metric_date)::text as data_current_through
@@ -118,8 +120,8 @@ export async function listCampaignRows(
      ),
      campaign_days as (
        select profile_id, campaign_id, metric_date,
-              sum(orders) as orders,
-              sum(units) as units,
+              sum(purchases14d) as purchases14d,
+              sum(units_sold_clicks14d) as units_sold_clicks14d,
               min(currency)::text as currency,
               count(distinct currency) > 1 as mixed_currency
        from campaign_metrics_daily
@@ -169,7 +171,7 @@ export async function listCampaignRows(
      royalty_rollup as (
        select d.profile_id, d.campaign_id,
               bool_or(
-                d.orders > 0
+                d.purchases14d > 0
                 and (
                   (r.metric_date is not null and r.economics_missing)
                   or (r.metric_date is null and fallback.royalty is null)
@@ -181,7 +183,7 @@ export async function listCampaignRows(
               ) as mixed_currency,
               case
                 when bool_or(
-                  d.orders > 0
+                  d.purchases14d > 0
                   and (
                     (r.metric_date is not null and r.economics_missing)
                     or (r.metric_date is null and fallback.royalty is null)
@@ -190,7 +192,7 @@ export async function listCampaignRows(
                   then null
                 else coalesce(sum(
                   case
-                    when d.orders = 0 then 0
+                    when d.purchases14d = 0 then 0
                     when r.metric_date is not null then r.estimated_royalty
                     else ${royaltyCopies("d")} * fallback.royalty
                   end
@@ -341,9 +343,9 @@ export async function listAdGroupRows(
             sum(m.impressions)::text as impressions,
             sum(m.clicks)::text as clicks,
             sum(m.cost)::text as cost,
-            sum(m.sales)::text as sales,
-            sum(m.orders)::text as orders,
-            sum(m.units)::text as units
+            sum(m.sales14d)::text as sales,
+            sum(m.purchases14d)::text as orders,
+            sum(m.units_sold_clicks14d)::text as units
      from ad_groups g
      left join target_metrics_daily m
        on m.profile_id = g.profile_id
@@ -501,9 +503,9 @@ export async function listTargetRows(
             sum(m.impressions)::text as impressions,
             sum(m.clicks)::text as clicks,
             sum(m.cost)::text as cost,
-            sum(m.sales)::text as sales,
-            sum(m.orders)::text as orders,
-            sum(m.units)::text as units
+            sum(m.sales14d)::text as sales,
+            sum(m.purchases14d)::text as orders,
+            sum(m.units_sold_clicks14d)::text as units
      from targets t
      left join target_metrics_daily m
        on m.profile_id = t.profile_id
@@ -579,9 +581,9 @@ export async function listSearchTermRows(
               sum(m.impressions) as impressions,
               sum(m.clicks) as clicks,
               sum(m.cost) as cost,
-              sum(m.sales) as sales,
-              sum(m.orders) as orders,
-              sum(m.units) as units,
+              sum(m.sales14d) as sales14d,
+              sum(m.purchases14d) as purchases14d,
+              sum(m.units_sold_clicks14d) as units_sold_clicks14d,
               min(m.currency)::text as currency
        from search_term_metrics_daily m
        where m.profile_id = $1 and m.campaign_id = $2
@@ -631,18 +633,18 @@ export async function listSearchTermRows(
          order by be.effective_from desc, be.id desc
          limit 1
        ) economics on true
-       where d.orders > 0
+       where d.purchases14d > 0
      )
      select d.search_term,
             sum(d.impressions)::text as impressions,
             sum(d.clicks)::text as clicks,
             sum(d.cost)::text as cost,
-            sum(d.sales)::text as sales,
-            sum(d.orders)::text as orders,
-            sum(d.units)::text as units,
-            bool_or(d.orders > 0 and r.ad_group_id is null) as economics_missing,
+            sum(d.sales14d)::text as sales,
+            sum(d.purchases14d)::text as orders,
+            sum(d.units_sold_clicks14d)::text as units,
+            bool_or(d.purchases14d > 0 and r.ad_group_id is null) as economics_missing,
             case
-              when bool_or(d.orders > 0 and r.ad_group_id is null) then null
+              when bool_or(d.purchases14d > 0 and r.ad_group_id is null) then null
               else coalesce(sum(r.estimated_royalty), 0)::text
             end as estimated_royalty
      from st_daily d
@@ -792,9 +794,9 @@ const SEARCH_TERM_CTES = `with st_daily as (
               sum(m.impressions) as impressions,
               sum(m.clicks) as clicks,
               sum(m.cost) as cost,
-              sum(m.sales) as sales,
-              sum(m.orders) as orders,
-              sum(m.units) as units,
+              sum(m.sales14d) as sales14d,
+              sum(m.purchases14d) as purchases14d,
+              sum(m.units_sold_clicks14d) as units_sold_clicks14d,
               min(m.currency)::text as currency,
               count(distinct m.currency) > 1 as mixed_currency
        from search_term_metrics_daily m
@@ -851,7 +853,7 @@ const SEARCH_TERM_CTES = `with st_daily as (
          order by be.effective_from desc, be.id desc
          limit 1
        ) economics on true
-       where d.orders > 0
+       where d.purchases14d > 0
      )`;
 
 export interface SearchTermRollupRowData {
@@ -921,15 +923,15 @@ export async function listSearchTermRollupRows(
             sum(d.impressions)::text as impressions,
             sum(d.clicks)::text as clicks,
             sum(d.cost)::text as cost,
-            sum(d.sales)::text as sales,
-            sum(d.orders)::text as orders,
-            sum(d.units)::text as units,
+            sum(d.sales14d)::text as sales,
+            sum(d.purchases14d)::text as orders,
+            sum(d.units_sold_clicks14d)::text as units,
             min(d.currency)::text as currency,
             bool_or(d.mixed_currency) as mixed_currency,
             max(d.metric_date)::text as data_current_through,
-            bool_or(d.orders > 0 and r.ad_group_id is null) as economics_missing,
+            bool_or(d.purchases14d > 0 and r.ad_group_id is null) as economics_missing,
             case
-              when bool_or(d.orders > 0 and r.ad_group_id is null) then null
+              when bool_or(d.purchases14d > 0 and r.ad_group_id is null) then null
               else coalesce(sum(r.estimated_royalty), 0)::text
             end as estimated_royalty,
             coalesce(tb.book_ids, '{}'::text[]) as book_ids
@@ -1005,15 +1007,15 @@ export async function listSearchTermCampaignRows(
             sum(d.impressions)::text as impressions,
             sum(d.clicks)::text as clicks,
             sum(d.cost)::text as cost,
-            sum(d.sales)::text as sales,
-            sum(d.orders)::text as orders,
-            sum(d.units)::text as units,
+            sum(d.sales14d)::text as sales,
+            sum(d.purchases14d)::text as orders,
+            sum(d.units_sold_clicks14d)::text as units,
             min(d.currency)::text as currency,
             bool_or(d.mixed_currency) as mixed_currency,
             max(d.metric_date)::text as data_current_through,
-            bool_or(d.orders > 0 and r.ad_group_id is null) as economics_missing,
+            bool_or(d.purchases14d > 0 and r.ad_group_id is null) as economics_missing,
             case
-              when bool_or(d.orders > 0 and r.ad_group_id is null) then null
+              when bool_or(d.purchases14d > 0 and r.ad_group_id is null) then null
               else coalesce(sum(r.estimated_royalty), 0)::text
             end as estimated_royalty
      from st_daily d
@@ -1180,11 +1182,11 @@ export async function searchTermDailySeries(
     `${SEARCH_TERM_CTES}
      select d.metric_date::text as metric_date,
             sum(d.cost)::text as cost,
-            sum(d.sales)::text as sales,
-            sum(d.orders)::text as orders,
+            sum(d.sales14d)::text as sales,
+            sum(d.purchases14d)::text as orders,
             min(d.currency)::text as currency,
             case
-              when bool_or(d.orders > 0 and r.ad_group_id is null) then null
+              when bool_or(d.purchases14d > 0 and r.ad_group_id is null) then null
               else coalesce(sum(r.estimated_royalty), 0)::text
             end as estimated_royalty
      from st_daily d
@@ -1485,9 +1487,9 @@ export async function listNegativeRollupRows(
               sum(m.impressions) as impressions,
               sum(m.clicks) as clicks,
               sum(m.cost) as cost,
-              sum(m.sales) as sales,
-              sum(m.orders) as orders,
-              sum(m.units) as units,
+              sum(m.sales14d) as sales14d,
+              sum(m.purchases14d) as purchases14d,
+              sum(m.units_sold_clicks14d) as units_sold_clicks14d,
               min(m.currency)::text as currency,
               count(distinct m.currency) > 1 as mixed_currency
        from search_term_metrics_daily m
@@ -1544,22 +1546,22 @@ export async function listNegativeRollupRows(
          order by be.effective_from desc, be.id desc
          limit 1
        ) economics on true
-       where d.orders > 0
+       where d.purchases14d > 0
      ),
      window_agg as (
        select d.kind, d.value_key,
               sum(d.impressions)::text as impressions,
               sum(d.clicks)::text as clicks,
               sum(d.cost)::text as cost,
-              sum(d.sales)::text as sales,
-              sum(d.orders)::text as orders,
-              sum(d.units)::text as units,
+              sum(d.sales14d)::text as sales,
+              sum(d.purchases14d)::text as orders,
+              sum(d.units_sold_clicks14d)::text as units,
               min(d.currency)::text as currency,
               bool_or(d.mixed_currency) as mixed_currency,
               max(d.metric_date)::text as data_current_through,
-              bool_or(d.orders > 0 and r.ad_group_id is null) as economics_missing,
+              bool_or(d.purchases14d > 0 and r.ad_group_id is null) as economics_missing,
               case
-                when bool_or(d.orders > 0 and r.ad_group_id is null) then null
+                when bool_or(d.purchases14d > 0 and r.ad_group_id is null) then null
                 else coalesce(sum(r.estimated_royalty), 0)::text
               end as estimated_royalty
        from st_daily d
@@ -1578,14 +1580,14 @@ export async function listNegativeRollupRows(
               sum(d.impressions)::text as impressions,
               sum(d.clicks)::text as clicks,
               sum(d.cost)::text as cost,
-              sum(d.sales)::text as sales,
-              sum(d.orders)::text as orders,
-              sum(d.units)::text as units,
+              sum(d.sales14d)::text as sales,
+              sum(d.purchases14d)::text as orders,
+              sum(d.units_sold_clicks14d)::text as units,
               min(d.currency)::text as currency,
               bool_or(d.mixed_currency) as mixed_currency,
-              bool_or(d.orders > 0 and r.ad_group_id is null) as economics_missing,
+              bool_or(d.purchases14d > 0 and r.ad_group_id is null) as economics_missing,
               case
-                when bool_or(d.orders > 0 and r.ad_group_id is null) then null
+                when bool_or(d.purchases14d > 0 and r.ad_group_id is null) then null
                 else coalesce(sum(r.estimated_royalty), 0)::text
               end as estimated_royalty
        from st_daily d
@@ -1869,9 +1871,9 @@ const NEGATIVE_TERM_CTES = `with st_daily as (
               sum(m.impressions) as impressions,
               sum(m.clicks) as clicks,
               sum(m.cost) as cost,
-              sum(m.sales) as sales,
-              sum(m.orders) as orders,
-              sum(m.units) as units,
+              sum(m.sales14d) as sales14d,
+              sum(m.purchases14d) as purchases14d,
+              sum(m.units_sold_clicks14d) as units_sold_clicks14d,
               min(m.currency)::text as currency,
               count(distinct m.currency) > 1 as mixed_currency
        from search_term_metrics_daily m
@@ -1928,7 +1930,7 @@ const NEGATIVE_TERM_CTES = `with st_daily as (
          order by be.effective_from desc, be.id desc
          limit 1
        ) economics on true
-       where d.orders > 0
+       where d.purchases14d > 0
      )`;
 
 /** Per-campaign window metrics for one normalized negative value. */
@@ -1962,15 +1964,15 @@ export async function listNegativeTermCampaignRows(
             sum(d.impressions)::text as impressions,
             sum(d.clicks)::text as clicks,
             sum(d.cost)::text as cost,
-            sum(d.sales)::text as sales,
-            sum(d.orders)::text as orders,
-            sum(d.units)::text as units,
+            sum(d.sales14d)::text as sales,
+            sum(d.purchases14d)::text as orders,
+            sum(d.units_sold_clicks14d)::text as units,
             min(d.currency)::text as currency,
             bool_or(d.mixed_currency) as mixed_currency,
             max(d.metric_date)::text as data_current_through,
-            bool_or(d.orders > 0 and r.ad_group_id is null) as economics_missing,
+            bool_or(d.purchases14d > 0 and r.ad_group_id is null) as economics_missing,
             case
-              when bool_or(d.orders > 0 and r.ad_group_id is null) then null
+              when bool_or(d.purchases14d > 0 and r.ad_group_id is null) then null
               else coalesce(sum(r.estimated_royalty), 0)::text
             end as estimated_royalty
      from st_daily d
@@ -2023,11 +2025,11 @@ export async function listNegativeDailySeries(
     `${NEGATIVE_TERM_CTES}
      select d.metric_date::text as metric_date,
             sum(d.cost)::text as cost,
-            sum(d.sales)::text as sales,
-            sum(d.orders)::text as orders,
+            sum(d.sales14d)::text as sales,
+            sum(d.purchases14d)::text as orders,
             min(d.currency)::text as currency,
             case
-              when bool_or(d.orders > 0 and r.ad_group_id is null) then null
+              when bool_or(d.purchases14d > 0 and r.ad_group_id is null) then null
               else coalesce(sum(r.estimated_royalty), 0)::text
             end as estimated_royalty
      from st_daily d
@@ -2131,8 +2133,10 @@ export async function campaignDailySeries(
     estimated_royalty: string | null;
   }>(
     `with campaign_daily as (
-       select metric_date, sum(cost)::text as cost, sum(sales)::text as sales,
-              sum(orders) as orders, sum(units) as units, currency
+       select metric_date, sum(cost)::text as cost,
+              sum(sales14d)::text as sales,
+              sum(purchases14d) as purchases14d,
+              sum(units_sold_clicks14d) as units_sold_clicks14d, currency
        from campaign_metrics_daily
        where profile_id = $1 and campaign_id = $2
          and metric_date between $3 and $4
@@ -2195,10 +2199,10 @@ export async function campaignDailySeries(
           and count(*) filter (where bpl.book_id is null) = 0
      )
      select c.metric_date::text as metric_date, c.cost, c.sales,
-            c.orders::text as orders,
+            c.purchases14d::text as orders,
             c.currency,
             case
-              when c.orders = 0 then '0'
+              when c.purchases14d = 0 then '0'
               when r.metric_date is not null and not r.economics_missing
                 then coalesce(r.estimated_royalty, '0')
               when r.metric_date is null and fallback.royalty is not null
@@ -2278,11 +2282,11 @@ export async function overviewRoyaltySeries(
     `select m.metric_date::text as metric_date,
             m.profile_id::text as profile_id,
             m.currency,
-            bool_or(m.orders > 0 and economics.estimated_royalty_per_sale is null)
+            bool_or(m.purchases14d > 0 and economics.estimated_royalty_per_sale is null)
               as economics_missing,
             case
               when bool_or(
-                m.orders > 0 and economics.estimated_royalty_per_sale is null
+                m.purchases14d > 0 and economics.estimated_royalty_per_sale is null
               )
                 then null
               else coalesce(
@@ -2359,8 +2363,8 @@ export async function dailySeries(
     `select metric_date::text as metric_date,
             profile_id::text as profile_id,
             sum(cost)::text as cost,
-            sum(sales)::text as sales,
-            sum(orders)::text as orders,
+            sum(sales14d)::text as sales,
+            sum(purchases14d)::text as orders,
             currency
      from campaign_metrics_daily m
      where m.profile_id = any($1::bigint[])
@@ -2495,9 +2499,9 @@ export async function convertedDailyTotals(
     `select coalesce(sum(m.impressions), 0)::text as impressions,
             coalesce(sum(m.clicks), 0)::text as clicks,
             coalesce(round(sum(m.cost * dr.rate / nr.rate), 4), 0)::text as cost,
-            coalesce(round(sum(m.sales * dr.rate / nr.rate), 4), 0)::text as sales,
-            coalesce(sum(m.orders), 0)::text as orders,
-            coalesce(sum(m.units), 0)::text as units,
+            coalesce(round(sum(m.sales14d * dr.rate / nr.rate), 4), 0)::text as sales,
+            coalesce(sum(m.purchases14d), 0)::text as orders,
+            coalesce(sum(m.units_sold_clicks14d), 0)::text as units,
             coalesce(bool_or(
               (dr.rate is null or nr.rate is null)
               and (m.cost <> 0 or m.sales <> 0)
@@ -2569,8 +2573,8 @@ export async function convertedDailySeries(
   }>(
     `select m.metric_date::text as metric_date,
             round(sum(m.cost * dr.rate / nr.rate), 4)::text as cost,
-            round(sum(m.sales * dr.rate / nr.rate), 4)::text as sales,
-            sum(m.orders)::text as orders,
+            round(sum(m.sales14d * dr.rate / nr.rate), 4)::text as sales,
+            sum(m.purchases14d)::text as orders,
             coalesce(bool_or(
               (dr.rate is null or nr.rate is null)
               and (m.cost <> 0 or m.sales <> 0)
@@ -2617,7 +2621,8 @@ export interface ConvertedRoyaltyPoint {
 
 /**
  * All-market variant of `overviewRoyaltySeries`: the same per-book,
- * per-marketplace economics and the same `greatest(units, orders)` per-copy
+ * per-marketplace economics and the same `greatest(units_sold_clicks14d,
+ * purchases14d)` per-copy
  * valuation, with each fact date's royalty converted into the display
  * currency at that date's fixing. Grouped by metric date only. Missing
  * economics still hide the day's royalty instead of guessing (plan §9).
@@ -2640,11 +2645,11 @@ export async function convertedRoyaltySeries(
     rates_missing: boolean;
   }>(
     `select m.metric_date::text as metric_date,
-            bool_or(m.orders > 0 and economics.estimated_royalty_per_sale is null)
+            bool_or(m.purchases14d > 0 and economics.estimated_royalty_per_sale is null)
               as economics_missing,
             case
               when bool_or(
-                m.orders > 0 and economics.estimated_royalty_per_sale is null
+                m.purchases14d > 0 and economics.estimated_royalty_per_sale is null
               )
                 then null
               else round(coalesce(

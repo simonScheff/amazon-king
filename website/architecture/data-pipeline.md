@@ -260,6 +260,11 @@ the 7-day window — `orders = purchases7d`, `sales = sales7d`,
 `recent_window_resync` exists: a conversion attributed 10 days late updates
 the stored 7d/14d columns through the same idempotent upsert.
 
+Consumers split by window: the worker and optimizer read the 7-day convenience
+columns, while every browser-facing figure (dashboard totals, campaign and
+search-term rows, trend series) reads the 14-day click-attribution columns so
+the app matches the Amazon Ads console.
+
 ## Failure semantics at a glance
 
 | Failure                                  | Result                                                              |

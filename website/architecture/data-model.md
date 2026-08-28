@@ -242,7 +242,10 @@ Five tables, one per report grain, with identical metric columns —
 `sales7d`, `purchases14d`, `sales14d`, `units_sold_clicks7d`,
 `units_sold_clicks14d` (all non-negative) — plus `currency char(3)` per row.
 `orders`, `sales`, and `units` are set from the 7-day attribution columns at
-import; both windows stay stored explicitly.
+import; both windows stay stored explicitly. The worker and the optimizer keep
+reading the 7-day convenience columns, while browser-facing dashboard queries
+read the 14-day columns (`purchases14d`, `sales14d`, `units_sold_clicks14d`)
+so the numbers match the Amazon Ads console defaults.
 
 | Table                             | Grain (unique key)                                   |
 | --------------------------------- | ---------------------------------------------------- |

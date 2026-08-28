@@ -154,11 +154,12 @@ These are binding design constraints; code must follow them.
   profit — profit recommendations require user-entered KDP royalty economics and
   must be disabled, not guessed, when economics are missing.
 - **Royalty is earned per copy.** KDP pays per copy sold, so one order of three
-  copies earns three royalties. Value royalty on copies —
-  `greatest(units, orders)` in SQL, `royaltyCopies(orders, units)` in the
-  optimizer — never on order counts. Facts imported before units were captured
-  degrade to orders, which is safe because Amazon never reports fewer units than
-  orders.
+  copies earns three royalties. Value royalty on copies — never on order
+  counts. Browser-facing SQL uses the 14-day click-attribution pair
+  (`greatest(units_sold_clicks14d, purchases14d)`, matching the Amazon Ads
+  console); the optimizer keeps `royaltyCopies(orders, units)` on the 7-day
+  mirror columns. Facts imported before units were captured degrade to orders,
+  which is safe because Amazon never reports fewer units than orders.
 - **Guarded writes.** Read-only is the default per profile. Applying a change
   requires an immutable change set, a fresh re-read of Amazon state matching the
   `before` snapshot, guardrail re-checks, an idempotency fingerprint, per-item

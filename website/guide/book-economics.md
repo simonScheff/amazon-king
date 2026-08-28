@@ -88,6 +88,37 @@ royalty changes, add a new row with a new effective date instead of editing
 the old one — historical recommendations stay reproducible against the
 economics that were in force at the time.
 
+## Importing royalty from a KDP report
+
+Instead of hand-calculating royalty per sale, you can recalibrate it from
+actuals once a month. Download the **Royalties Estimator** workbook (.xlsx)
+from your KDP dashboard for last month, then click **Import from KDP report**
+on **Settings → Books & economics**. The file is parsed in your browser and
+never leaves your own deployment.
+
+amazon-king derives a suggested royalty per copy per book and market from
+**standard-rate sales only** — expanded-distribution sales (the 40%/50%
+royalty rows) can't come from an ad click, so they are excluded from the math
+and shown as context instead. The review screen lists every suggestion with
+its evidence (standard copies sold in the period), flags rows with **low
+evidence** (fewer than five standard copies, unchecked by default) and rows
+that **deviate more than 15%** from the current value, and explains any
+skipped rows (unknown marketplace, ASIN not linked, currency mismatch, or no
+standard-rate sales).
+
+Applying writes only the royalty per sale — list price, target ACoS, goal
+mode, and limits are kept from the latest economics row, effective from the
+date you choose. Books with no economics row yet are not touchable here;
+profit rules correctly stay off for them until you complete their row
+manually. Re-uploading the same file replays the existing import instead of
+duplicating it, and each import applies once. Every applied row is written
+through the same audited save path as a manual edit.
+
+KDP reports carry no ad attribution and arrive with a processing lag of
+several days, so this is a monthly recalibration ritual — download a few days
+into the new month — not a per-day truth. Per-day profit figures continue to
+come from your synced ads data valued with these economics.
+
 ## What changes when economics are present
 
 With at least one effective economics row for a market:

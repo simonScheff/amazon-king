@@ -50,9 +50,14 @@ To add a migration, use the `add-migration` skill.
   `protectedSearchTerms`.
 - Daily fact tables carry `units`, `units_sold_clicks7d`, and
   `units_sold_clicks14d` alongside orders. `units` mirrors `unitsSoldClicks7d`
-  the same way `orders` mirrors `purchases7d`. Royalty is valued per copy, so
-  queries read `greatest(units, orders)` — facts imported before these columns
-  existed have no units and degrade to orders.
+  the same way `orders` mirrors `purchases7d`; those 7d columns remain the
+  worker/optimizer input. Browser-facing read queries (dashboard repositories,
+  `metrics.dashboardTotals`) instead expose the 14-day click-attribution
+  columns (`purchases14d`, `sales14d`, `units_sold_clicks14d`) so the app
+  matches the Amazon Ads console. Royalty is valued per copy on the same 14d
+  window, so those queries read
+  `greatest(units_sold_clicks14d, purchases14d)` — facts imported before the
+  units columns existed have no units and degrade to orders.
 - Change-set kinds and action types are enumerated in the schema:
   `campaign_creation` with the four `create_*` actions, and `campaign_update`
   with `update_campaign_state` / `update_campaign_name`. A new action type needs
@@ -76,6 +81,14 @@ To add a migration, use the `add-migration` skill.
   Dates without a fixing (weekends/holidays) have no row; readers fall back to
   the most recent earlier `rate_date`. `workspaces.display_currency` is a
   display setting only — stored facts keep their native currency.
+- `kdp_royalty_imports` (migration 0019) holds uploaded KDP Royalties
+  Estimator batches: derived suggestions and skipped rows as JSONB, idempotent
+  per workspace via `unique (workspace_id, payload_sha256)` — re-uploading the
+  same file replays the existing batch (insert `ON CONFLICT DO NOTHING`, then
+  re-select). `applied_at` is a one-way stamp set only by
+  `markKdpRoyaltyImportApplied`, which returns null on a second attempt so a
+  batch can never be applied twice. Only the import flow reads this table;
+  applying writes real `book_economics` rows through `upsertBookEconomics`.
 - The converting dashboard queries (`convertedDailyTotals`,
   `convertedDailySeries`, `convertedRoyaltySeries`, `convertedCountrySpend` in
   `repositories/dashboard.ts`) serve the `country=all` view: each fact is

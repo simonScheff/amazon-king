@@ -259,9 +259,9 @@ export async function dashboardTotals(
             sum(impressions)::text as impressions,
             sum(clicks)::text as clicks,
             sum(cost)::text as cost,
-            sum(sales)::text as sales,
-            sum(orders)::text as orders,
-            sum(units)::text as units
+            sum(sales14d)::text as sales,
+            sum(purchases14d)::text as orders,
+            sum(units_sold_clicks14d)::text as units
      from campaign_metrics_daily m
      where m.profile_id = $1 and m.metric_date between $2 and $3
        and (coalesce(cardinality($4::bigint[]), 0) = 0 or exists (

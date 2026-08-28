@@ -20,4 +20,5 @@ export * as bidPolicies from "./repositories/bid-policies.js";
 export * as fx from "./repositories/fx.js";
 export * as apiTokens from "./repositories/api-tokens.js";
 export * as exclusions from "./repositories/exclusions.js";
+export * as kdpRoyaltyImports from "./repositories/kdp-royalty-imports.js";
 export * as changeDrafts from "./change-drafts.js";
