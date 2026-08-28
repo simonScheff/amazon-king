@@ -120,7 +120,62 @@ const detail: CampaignDetail = {
     },
   ],
   adGroups: [],
-  targets: [],
+  targets: [
+    {
+      id: "target-kw",
+      name: "tractor book",
+      state: "ENABLED",
+      kind: "keyword",
+      matchType: "EXACT",
+      bid: "0.4500",
+      asin: null,
+      bookTitle: null,
+      totals: {
+        impressions: 100,
+        clicks: 5,
+        cost: "2.0000",
+        sales: "8.3000",
+        orders: 1,
+        units: 1,
+      },
+    },
+    {
+      id: "target-asin",
+      name: "B0CRHVCT1T",
+      state: "ENABLED",
+      kind: "product",
+      matchType: null,
+      bid: "0.4000",
+      asin: "B0CRHVCT1T",
+      bookTitle: "Tractor Colouring Book",
+      totals: {
+        impressions: 50,
+        clicks: 2,
+        cost: "0.8000",
+        sales: "0.0000",
+        orders: 0,
+        units: 0,
+      },
+    },
+    {
+      id: "target-auto",
+      name: "Auto · close match",
+      state: "ENABLED",
+      kind: "product",
+      matchType: null,
+      bid: null,
+      asin: null,
+      bookTitle: null,
+      totals: {
+        impressions: 10,
+        clicks: 1,
+        cost: "0.3000",
+        sales: "0.0000",
+        orders: 0,
+        units: 0,
+      },
+    },
+  ],
   searchTerms: [
     {
       id: "tractor gifts",
@@ -294,6 +349,34 @@ describe("CampaignDetailPage profitability", () => {
       days: "mtd",
       books: ["3"],
     });
+  });
+
+  it("shows keyword text, book titles, ASINs, and bids on the Targets tab", () => {
+    render(<CampaignDetailPage />);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Targets" }));
+
+    expect(
+      screen.getByRole("cell", { name: "tractor book" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("cell", { name: "Keyword · Exact" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "$0.45" })).toBeInTheDocument();
+
+    // An ASIN mapped to a catalog book leads with the book title.
+    const bookCell = screen.getByRole("cell", {
+      name: /Tractor Colouring Book/,
+    });
+    expect(within(bookCell).getByText("B0CRHVCT1T")).toBeInTheDocument();
+    expect(
+      within(bookCell).getByRole("link", { name: /View on Amazon/ }),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByRole("cell", { name: "Auto · close match" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Auto" })).toBeInTheDocument();
   });
 
   it("opens campaign-wide Max CPC controls from the breakdown tabs", () => {

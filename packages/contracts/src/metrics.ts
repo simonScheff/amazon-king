@@ -200,6 +200,23 @@ export const namedMetricRowSchema = z.object({
 });
 export type NamedMetricRow = z.infer<typeof namedMetricRowSchema>;
 
+/**
+ * One keyword or product target of a campaign with its metric totals. `name`
+ * is the human-readable target: the keyword text, the targeted ASIN, or an
+ * "Auto · …" label for automatic targeting predicates.
+ */
+export const targetRowSchema = namedMetricRowSchema.extend({
+  kind: z.enum(["keyword", "product"]),
+  /** Keyword targets only (exact/phrase/broad); null on product targets. */
+  matchType: z.string().nullable(),
+  bid: nonNegativeDecimalStringSchema.nullable(),
+  /** Product targets only: the targeted ASIN; null on auto predicates. */
+  asin: z.string().nullable(),
+  /** Catalog book title when `asin` is one of the owner's books. */
+  bookTitle: z.string().nullable(),
+});
+export type TargetRow = z.infer<typeof targetRowSchema>;
+
 /** Current Amazon negative keyword attached to a campaign or one ad group. */
 export const negativeKeywordRowSchema = z.object({
   id: z.string(),
@@ -460,7 +477,7 @@ export const campaignDetailSchema = z.object({
     }),
   ),
   adGroups: z.array(namedMetricRowSchema).default([]),
-  targets: z.array(namedMetricRowSchema).default([]),
+  targets: z.array(targetRowSchema).default([]),
   searchTerms: z.array(campaignSearchTermRowSchema).default([]),
   negativeKeywords: z.array(negativeKeywordRowSchema).default([]),
   negativeTargets: z.array(negativeTargetRowSchema).default([]),

@@ -244,6 +244,13 @@ products** (`negativeTargets`): campaign- and ad-group-level `ASIN_SAME_AS`
 exclusions from structure sync, with an Amazon retail link per ASIN. Do not
 route that tab through `MetricsTable`.
 
+The **Targets** tab uses its own `TargetsTable` (not `MetricsTable`): the
+read side derives each row's identity from the stored `targets.expression` —
+keyword text with a `Keyword · <match type>` badge, the ASIN for product
+targets (leading with the catalog book title when the ASIN is one of the
+owner's books, plus an Amazon retail link), and an "Auto · …" label for
+automatic predicates — and carries the synced `bid` as its own column.
+
 The **Search terms** tab adds a per-row **Exclude** action
 (`src/components/exclude-search-term.tsx`, a `MetricsTable` `renderAction`
 cell shown only while the campaign is not archived): one click drafts a

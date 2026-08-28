@@ -1398,6 +1398,18 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
         ),
       ]);
       if (!profile) return null;
+      const targetAsins = [
+        ...new Set(
+          targets
+            .map((target) => target.asin)
+            .filter((asin): asin is string => asin !== null),
+        ),
+      ];
+      const targetBookTitles = await books.listBookTitlesByMarketplaceAsins(
+        db,
+        campaign.profileId,
+        targetAsins,
+      );
       const row = rows.find(
         (r) =>
           r.amazonCampaignId === amazonCampaignId &&
@@ -1480,7 +1492,13 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
           };
         }),
         adGroups,
-        targets,
+        targets: targets.map((target) => ({
+          ...target,
+          bookTitle:
+            target.asin === null
+              ? null
+              : (targetBookTitles.get(target.asin) ?? null),
+        })),
         searchTerms: searchTerms.map((term) => {
           const termCostMicros = microsFromDecimalString(term.totals.cost);
           const termRoyaltyMicros =

@@ -372,6 +372,104 @@ export async function listAdGroupRows(
   }));
 }
 
+export interface TargetRowData extends NamedMetricRowData {
+  kind: "keyword" | "product";
+  /** Keyword targets only (exact/phrase/broad); null on product targets. */
+  matchType: string | null;
+  bid: string | null;
+  /** Product targets only: the targeted ASIN; null on auto predicates. */
+  asin: string | null;
+}
+
+/**
+ * Labels for Amazon's automatic targeting predicates, which carry no
+ * expression value — Amazon picks the queries/products. Keys cover both the
+ * API enum names and the friendly names the demo seed uses.
+ */
+const AUTO_TARGET_LABELS: Record<string, string> = {
+  QUERY_HIGH_REL_MATCHES: "Auto · close match",
+  CLOSE_MATCH: "Auto · close match",
+  QUERY_BROAD_REL_MATCHES: "Auto · loose match",
+  LOOSE_MATCH: "Auto · loose match",
+  ASIN_SUBSTITUTE_RELATED: "Auto · substitutes",
+  SUBSTITUTES: "Auto · substitutes",
+  ASIN_ACCESSORY_RELATED: "Auto · complements",
+  COMPLEMENTS: "Auto · complements",
+};
+
+interface TargetPredicate {
+  type: string;
+  value?: string;
+}
+
+function toPredicate(raw: unknown): TargetPredicate | null {
+  if (!raw || typeof raw !== "object") return null;
+  const record = raw as Record<string, unknown>;
+  if (typeof record.type !== "string") return null;
+  if (typeof record.value === "string") {
+    return { type: record.type, value: record.value };
+  }
+  // The demo seed stores `{ type, values: [asin] }`.
+  const values = record.values;
+  if (Array.isArray(values) && typeof values[0] === "string") {
+    return { type: record.type, value: values[0] };
+  }
+  return { type: record.type };
+}
+
+/**
+ * Normalizes the stored `targets.expression` JSON into predicates. Shapes
+ * differ by writer: structure sync stores keywords as
+ * `{ type: "keyword", value }` and product targets as the raw Amazon clause
+ * (`resolvedExpression` / `expression` arrays of `{ type, value }`), while
+ * the demo seed stores bare arrays. Unknown shapes yield no predicates.
+ */
+function targetPredicates(expression: unknown): TargetPredicate[] {
+  let list: unknown;
+  if (Array.isArray(expression)) {
+    list = expression;
+  } else if (expression && typeof expression === "object") {
+    const record = expression as Record<string, unknown>;
+    list =
+      record.resolvedExpression ??
+      record.expression ??
+      (typeof record.type === "string" ? [expression] : []);
+  }
+  if (!Array.isArray(list)) return [];
+  return list
+    .map(toPredicate)
+    .filter((predicate): predicate is TargetPredicate => predicate !== null);
+}
+
+/**
+ * Derives the human-readable target identity from its stored expression:
+ * the keyword text for keywords, the targeted ASIN for product targets, an
+ * "Auto · …" label for automatic predicates. Falls back to the match type /
+ * target kind (the historical name) when the expression is unrecognized.
+ */
+export function describeTarget(
+  targetKind: string,
+  matchType: string | null,
+  expression: unknown,
+): { name: string; asin: string | null } {
+  const fallback = matchType ?? targetKind;
+  const predicates = targetPredicates(expression);
+  if (targetKind === "keyword") {
+    const keyword = predicates.find(
+      (predicate) =>
+        predicate.type.toLowerCase() === "keyword" && predicate.value,
+    );
+    return { name: keyword?.value ?? fallback, asin: null };
+  }
+  const valued = predicates.find((predicate) => predicate.value);
+  if (valued?.value) return { name: valued.value, asin: valued.value };
+  for (const predicate of predicates) {
+    const label = AUTO_TARGET_LABELS[predicate.type.toUpperCase()];
+    if (label) return { name: label, asin: null };
+  }
+  return { name: fallback, asin: null };
+}
+
 /**
  * Targets (keywords/product targets) of a campaign with metric totals.
  * `bookIds` (null or empty = no filter) keeps only targets whose ad group
@@ -383,16 +481,22 @@ export async function listTargetRows(
   dateStart: string,
   dateEnd: string,
   bookIds: bigint[] | null = null,
-): Promise<NamedMetricRowData[]> {
+): Promise<TargetRowData[]> {
   const result = await db.query<
     RawTotals & {
       amazon_target_id: string;
-      name: string;
+      target_kind: string;
+      match_type: string | null;
+      bid: string | null;
+      expression: unknown;
       state: string;
     }
   >(
     `select t.amazon_target_id,
-            coalesce(t.match_type, t.target_kind) as name,
+            t.target_kind,
+            t.match_type,
+            t.bid::text as bid,
+            t.expression,
             t.state,
             sum(m.impressions)::text as impressions,
             sum(m.clicks)::text as clicks,
@@ -420,12 +524,24 @@ export async function listTargetRows(
      order by coalesce(sum(m.cost), 0) desc, t.id`,
     [campaignPk, dateStart, dateEnd, bookIds],
   );
-  return result.rows.map((row) => ({
-    id: row.amazon_target_id,
-    name: row.name,
-    state: row.state,
-    totals: toTotals(row),
-  }));
+  return result.rows.map((row) => {
+    const { name, asin } = describeTarget(
+      row.target_kind,
+      row.match_type,
+      row.expression,
+    );
+    return {
+      id: row.amazon_target_id,
+      name,
+      state: row.state,
+      kind: (row.target_kind === "keyword" ? "keyword" : "product") as
+        "keyword" | "product",
+      matchType: row.match_type,
+      bid: row.bid,
+      asin,
+      totals: toTotals(row),
+    };
+  });
 }
 
 export interface SearchTermRowData extends NamedMetricRowData {

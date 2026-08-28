@@ -10,6 +10,7 @@ import type {
   MetricWindow,
   NegativeKeywordRow,
   NegativeTargetRow,
+  TargetRow,
 } from "@amazon-king/contracts";
 import { useCampaign, useProfiles } from "../api/endpoints";
 import { AmazonProductLink } from "../components/amazon-product-link";
@@ -329,6 +330,223 @@ function NegativeProductsTable({
                   />
                 </Td>
               ) : null}
+            </tr>
+          );
+        })}
+      </tbody>
+    </Table>
+  );
+}
+
+const TARGET_TEXT_COLUMNS = ["name", "type", "state"] as const;
+
+type TargetSortKey =
+  | "name"
+  | "type"
+  | "bid"
+  | "state"
+  | "impressions"
+  | "clicks"
+  | "cost"
+  | "sales"
+  | "orders"
+  | "units"
+  | "acos";
+
+/** Type badge for a target row; keyword rows carry their match type. */
+function targetTypeLabel(row: TargetRow): string {
+  if (row.kind === "keyword") {
+    return row.matchType
+      ? `Keyword · ${formatAmazonLabel(row.matchType)}`
+      : "Keyword";
+  }
+  return row.asin === null ? "Auto" : "Product";
+}
+
+function targetSortValue(
+  row: TargetRow,
+  key: TargetSortKey,
+): number | string | null {
+  switch (key) {
+    case "name":
+      return (row.bookTitle ?? row.name).toLowerCase();
+    case "type":
+      return targetTypeLabel(row).toLowerCase();
+    case "bid":
+      return row.bid === null ? null : Number(row.bid);
+    case "state":
+      return row.state;
+    case "impressions":
+      return row.totals.impressions;
+    case "clicks":
+      return row.totals.clicks;
+    case "cost":
+      return Number(row.totals.cost);
+    case "sales":
+      return Number(row.totals.sales);
+    case "orders":
+      return row.totals.orders;
+    case "units":
+      return row.totals.units;
+    case "acos":
+      return Number(row.totals.sales) > 0
+        ? Number(row.totals.cost) / Number(row.totals.sales)
+        : null;
+  }
+}
+
+function TargetsTable({
+  rows,
+  currency,
+  countryCode,
+}: {
+  rows: TargetRow[];
+  currency: string;
+  countryCode?: string;
+}) {
+  const [sort, setSort] = useState<Sort<TargetSortKey>>({
+    key: "cost",
+    direction: "desc",
+  });
+
+  function onSort(column: TargetSortKey) {
+    setSort((current) => nextSort(current, column, TARGET_TEXT_COLUMNS));
+  }
+
+  if (rows.length === 0) {
+    return <EmptyState>No targets are synced for this campaign.</EmptyState>;
+  }
+
+  const sortedRows = [...rows].sort((a, b) =>
+    compareNullable(
+      targetSortValue(a, sort.key),
+      targetSortValue(b, sort.key),
+      sort.direction,
+    ),
+  );
+
+  return (
+    <Table stickyHeader>
+      <thead>
+        <tr>
+          <SortableTh
+            label="Target"
+            column="name"
+            sort={sort}
+            onSort={onSort}
+          />
+          <SortableTh label="Type" column="type" sort={sort} onSort={onSort} />
+          <SortableTh
+            label="Bid"
+            column="bid"
+            sort={sort}
+            onSort={onSort}
+            className="text-right"
+          />
+          <SortableTh
+            label="State"
+            column="state"
+            sort={sort}
+            onSort={onSort}
+          />
+          <SortableTh
+            label="Impressions"
+            column="impressions"
+            sort={sort}
+            onSort={onSort}
+            className="text-right"
+          />
+          <SortableTh
+            label="Clicks"
+            column="clicks"
+            sort={sort}
+            onSort={onSort}
+            className="text-right"
+          />
+          <SortableTh
+            label="Spend"
+            column="cost"
+            sort={sort}
+            onSort={onSort}
+            className="text-right"
+          />
+          <SortableTh
+            label="Sales"
+            column="sales"
+            sort={sort}
+            onSort={onSort}
+            className="text-right"
+          />
+          <SortableTh
+            label="Orders"
+            column="orders"
+            sort={sort}
+            onSort={onSort}
+            className="text-right"
+            title={ORDERS_COLUMN_TITLE}
+          />
+          <SortableTh
+            label="Units"
+            column="units"
+            sort={sort}
+            onSort={onSort}
+            className="text-right"
+          />
+          <SortableTh
+            label="ACoS"
+            column="acos"
+            sort={sort}
+            onSort={onSort}
+            className="text-right"
+          />
+        </tr>
+      </thead>
+      <tbody>
+        {sortedRows.map((row) => {
+          const acos =
+            Number(row.totals.sales) > 0
+              ? Number(row.totals.cost) / Number(row.totals.sales)
+              : null;
+          const state = row.state.toLowerCase();
+          return (
+            <tr key={row.id}>
+              <Td className="max-w-xs truncate">
+                <span className="font-medium text-zinc-100">
+                  {row.bookTitle ?? row.name}
+                </span>
+                {row.bookTitle !== null && row.asin !== null ? (
+                  <span className="ml-2 text-xs text-zinc-500">{row.asin}</span>
+                ) : null}
+                {row.asin !== null ? (
+                  <AmazonProductLink
+                    term={row.asin}
+                    countryCode={countryCode}
+                    className="ml-2 text-xs"
+                  />
+                ) : null}
+              </Td>
+              <Td>
+                <Badge tone="neutral">{targetTypeLabel(row)}</Badge>
+              </Td>
+              <Td className="text-right">{formatMoney(row.bid, currency)}</Td>
+              <Td>
+                <Badge tone={state === "enabled" ? "success" : "neutral"}>
+                  {formatAmazonLabel(state)}
+                </Badge>
+              </Td>
+              <Td className="text-right">
+                {formatCount(row.totals.impressions)}
+              </Td>
+              <Td className="text-right">{formatCount(row.totals.clicks)}</Td>
+              <Td className="text-right">
+                {formatMoney(row.totals.cost, currency)}
+              </Td>
+              <Td className="text-right">
+                {formatMoney(row.totals.sales, currency)}
+              </Td>
+              <Td className="text-right">{formatCount(row.totals.orders)}</Td>
+              <Td className="text-right">{formatCount(row.totals.units)}</Td>
+              <Td className="text-right">{formatAcos(acos)}</Td>
             </tr>
           );
         })}
@@ -679,6 +897,12 @@ export function CampaignDetailPage() {
                 countryCode={country}
                 campaignId={id}
                 editable={editable}
+              />
+            ) : tab === "targets" ? (
+              <TargetsTable
+                rows={campaign.data.targets}
+                currency={currency}
+                countryCode={country}
               />
             ) : (
               <MetricsTable

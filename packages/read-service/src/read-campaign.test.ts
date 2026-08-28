@@ -4,6 +4,7 @@ vi.mock("@amazon-king/database", () => ({
   audit: {},
   books: {
     getBook: vi.fn(),
+    listBookTitlesByMarketplaceAsins: vi.fn(),
   },
   changes: {},
   connections: {},
@@ -104,6 +105,9 @@ describe("campaign profitability", () => {
     ]);
     vi.mocked(dashboard.listAdGroupRows).mockResolvedValue([]);
     vi.mocked(dashboard.listTargetRows).mockResolvedValue([]);
+    vi.mocked(books.listBookTitlesByMarketplaceAsins).mockResolvedValue(
+      new Map(),
+    );
     vi.mocked(dashboard.listSearchTermRows).mockResolvedValue([
       {
         id: "tractor gifts",
@@ -253,6 +257,72 @@ describe("campaign profitability", () => {
         },
       ],
     });
+  });
+
+  it("attaches catalog book titles to product-target ASINs", async () => {
+    vi.mocked(dashboard.listTargetRows).mockResolvedValue([
+      {
+        id: "target-1",
+        name: "B0CRHVCT1T",
+        state: "ENABLED",
+        kind: "product",
+        matchType: null,
+        bid: "0.4000",
+        asin: "B0CRHVCT1T",
+        totals: {
+          impressions: 10,
+          clicks: 1,
+          cost: "0.4000",
+          sales: "8.3000",
+          orders: 1,
+          units: 1,
+        },
+      },
+      {
+        id: "target-2",
+        name: "B0COMPETITOR",
+        state: "ENABLED",
+        kind: "product",
+        matchType: null,
+        bid: null,
+        asin: "B0COMPETITOR",
+        totals: {
+          impressions: 5,
+          clicks: 0,
+          cost: "0.0000",
+          sales: "0.0000",
+          orders: 0,
+          units: 0,
+        },
+      },
+    ]);
+    vi.mocked(books.listBookTitlesByMarketplaceAsins).mockResolvedValue(
+      new Map([["B0CRHVCT1T", "Tractor Colouring Book"]]),
+    );
+
+    const result = await service().getCampaignDetail(
+      "workspace-pk",
+      "amazon-campaign",
+      7,
+    );
+
+    expect(books.listBookTitlesByMarketplaceAsins).toHaveBeenCalledWith(
+      expect.anything(),
+      "profile-pk",
+      ["B0CRHVCT1T", "B0COMPETITOR"],
+    );
+    expect(result?.targets).toEqual([
+      expect.objectContaining({
+        id: "target-1",
+        asin: "B0CRHVCT1T",
+        bookTitle: "Tractor Colouring Book",
+      }),
+      expect.objectContaining({
+        id: "target-2",
+        asin: "B0COMPETITOR",
+        bookTitle: null,
+      }),
+    ]);
   });
 
   it("returns seven-day profitability with each campaign list row", async () => {

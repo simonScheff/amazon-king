@@ -168,6 +168,32 @@ export async function listCampaignBooks(
   }));
 }
 
+/**
+ * Book titles keyed by marketplace ASIN for one profile, used to recognize
+ * the owner's own books behind product-target ASINs. Unlinked ASINs
+ * (competitor products) are simply absent from the map.
+ */
+export async function listBookTitlesByMarketplaceAsins(
+  db: Db,
+  profilePk: string,
+  marketplaceAsins: string[],
+): Promise<Map<string, string>> {
+  if (marketplaceAsins.length === 0) return new Map();
+  const result = await db.query<{
+    marketplace_asin: string;
+    title: string;
+  }>(
+    `select bpl.marketplace_asin, b.title
+     from book_profile_links bpl
+     join books b on b.id = bpl.book_id
+     where bpl.profile_id = $1
+       and bpl.enabled = true
+       and bpl.marketplace_asin = any($2)`,
+    [profilePk, marketplaceAsins],
+  );
+  return new Map(result.rows.map((row) => [row.marketplace_asin, row.title]));
+}
+
 export async function isBookLinkedToProfile(
   db: Db,
   bookId: string,
