@@ -26,3 +26,4 @@ exports/
 .idea/
 .vscode/
 docs/
+tmp/
