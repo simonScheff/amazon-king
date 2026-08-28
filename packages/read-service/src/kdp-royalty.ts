@@ -59,6 +59,13 @@ const KDP_MARKETPLACE_COUNTRIES: Record<string, string> = {
 /** Royalty rates that only occur off-Amazon (expanded distribution, etc.). */
 const NON_STANDARD_ROYALTY_TYPES = new Set(["40%", "50%"]);
 
+/**
+ * The Amazon Ads API reports the United Kingdom profile with country code
+ * "UK" while ISO 3166 (and KDP_MARKETPLACE_COUNTRIES) use "GB" — without this
+ * alias a real UK profile looks like "no ads profile" for Amazon.co.uk rows.
+ */
+const PROFILE_COUNTRY_ALIASES: Record<string, string> = { GB: "UK" };
+
 /** Below this many standard units a suggestion is advisory-only by default. */
 const LOW_EVIDENCE_UNITS = 5;
 /** Deviation from the current value that flags a suggestion for review. */
@@ -179,7 +186,11 @@ export async function createKdpRoyaltyImport(
       skip("unknown_marketplace");
       continue;
     }
-    const profile = profileByCountry.get(countryCode);
+    const profile =
+      profileByCountry.get(countryCode) ??
+      (PROFILE_COUNTRY_ALIASES[countryCode]
+        ? profileByCountry.get(PROFILE_COUNTRY_ALIASES[countryCode])
+        : undefined);
     if (!profile) {
       skip("no_ads_profile");
       continue;

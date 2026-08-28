@@ -723,58 +723,64 @@ function BlockingCampaignTable({
             <Th>Match</Th>
             <Th>Added</Th>
           </>,
+          "This term",
         )}
       </thead>
       <tbody>
-        {rows.map((row) => (
-          <tr key={`${row.profileId}-${row.campaignId}-${row.negativeId}`}>
-            <Td>
-              <Link
-                to="/campaigns/$id"
-                params={{ id: row.campaignId }}
-                search={{ days }}
-                className="text-sky-400 hover:underline"
-              >
-                {row.name}
-              </Link>
-              <div className="mt-2 md:hidden">
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-                  {windowQualifier(days)} profit
-                </p>
-                <ProfitabilityResult
-                  status={getCampaignProfitStatus(
-                    row.totals,
-                    row.economicsMissing,
-                    row.estimatedAdProfit,
-                  )}
-                  amount={row.estimatedAdProfit}
-                  currency={currency}
-                  economicsMissing={row.economicsMissing}
-                  hasActivity={hasCampaignActivity(row.totals)}
+        {rows.map((row) => {
+          const reason = row.currentlyBlocks ? null : notBlockingReason(row);
+          return (
+            <tr key={`${row.profileId}-${row.campaignId}-${row.negativeId}`}>
+              <Td>
+                <Link
+                  to="/campaigns/$id"
+                  params={{ id: row.campaignId }}
+                  search={{ days }}
+                  className="text-sky-400 hover:underline"
+                >
+                  {row.name}
+                </Link>
+                <div className="mt-2 md:hidden">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                    {windowQualifier(days)} profit
+                  </p>
+                  <ProfitabilityResult
+                    status={getCampaignProfitStatus(
+                      row.totals,
+                      row.economicsMissing,
+                      row.estimatedAdProfit,
+                    )}
+                    amount={row.estimatedAdProfit}
+                    currency={currency}
+                    economicsMissing={row.economicsMissing}
+                    hasActivity={hasCampaignActivity(row.totals)}
+                  />
+                </div>
+              </Td>
+              <Td>
+                {reason === null ? (
+                  <Badge tone="success">Blocking</Badge>
+                ) : (
+                  <Badge tone="neutral" title={reason.title}>
+                    {`Not blocking · ${reason.label}`}
+                  </Badge>
+                )}
+              </Td>
+              <Td>{appliedToLabel(row)}</Td>
+              <Td>{formatAmazonLabel(row.matchType)}</Td>
+              <Td>{formatDate(row.firstSeenAt)}</Td>
+              <MetricCells row={row} currency={currency} days={days} />
+              <Td className="text-right">
+                <ReincludeNegative
+                  campaignId={row.campaignId}
+                  kind={kind === "product" ? "target" : "keyword"}
+                  negativeId={row.negativeId}
+                  label={label}
                 />
-              </div>
-            </Td>
-            <Td>
-              <Badge tone={row.currentlyBlocks ? "success" : "neutral"}>
-                {row.currentlyBlocks
-                  ? "Blocking"
-                  : `Not blocking · ${formatAmazonLabel(row.state)}`}
-              </Badge>
-            </Td>
-            <Td>{appliedToLabel(row)}</Td>
-            <Td>{formatAmazonLabel(row.matchType)}</Td>
-            <Td>{formatDate(row.firstSeenAt)}</Td>
-            <MetricCells row={row} currency={currency} days={days} />
-            <Td className="text-right">
-              <ReincludeNegative
-                campaignId={row.campaignId}
-                kind={kind === "product" ? "target" : "keyword"}
-                negativeId={row.negativeId}
-                label={label}
-              />
-            </Td>
-          </tr>
-        ))}
+              </Td>
+            </tr>
+          );
+        })}
       </tbody>
     </Table>
   );

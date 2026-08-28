@@ -36,6 +36,13 @@ import {
   markKdpRoyaltyImportApplied,
 } from "./repositories/kdp-royalty-imports.js";
 import {
+  deleteKdpSaleTransactionsForMonths,
+  insertKdpSaleTransactions,
+  listKdpMonthlyBookSales,
+  listKdpSaleTransactions,
+  upsertKdpMonthlyBookSales,
+} from "./repositories/kdp-sales.js";
+import {
   upsertAd,
   upsertAdGroup,
   upsertCampaign,
@@ -105,6 +112,16 @@ import {
  * machines without Postgres.
  */
 const databaseUrl = process.env.TEST_DATABASE_URL;
+// Hard safety rail: beforeAll drops the public schema. Refuse to run against
+// anything but an obvious scratch database, so a misconfigured
+// TEST_DATABASE_URL can never wipe a development database. (2026-08-28: it
+// happened once via TEST_DATABASE_URL=$DATABASE_URL; do not remove this.)
+if (databaseUrl && !/\/[\w-]*test[\w-]*(\?|$)/i.test(databaseUrl)) {
+  throw new Error(
+    'TEST_DATABASE_URL must point at a scratch database with "test" in ' +
+      `its name — the suite drops the public schema. Got: ${databaseUrl.replace(/\/\/[^@]*@/, "//***@")}`,
+  );
+}
 const describeIf = databaseUrl ? describe : describe.skip;
 
 async function seedProfile(pool: Pool): Promise<string> {
@@ -159,6 +176,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       "0017",
       "0018",
       "0019",
+      "0020",
     ]);
     const again = await migrate(pool);
     expect(again).toEqual([]);
@@ -2903,5 +2921,185 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     expect(
       await getKdpRoyaltyImport(pool, "999999", first.import.id),
     ).toBeNull();
+  });
+
+  it("kdp sales history: monthly upsert replaces, transactions re-import cleanly", async () => {
+    const workspace = await pool.query<{ id: string }>(
+      `insert into workspaces (name) values ('kdp history') returning id`,
+    );
+    const workspaceId = workspace.rows[0]!.id;
+    const profile = await pool.query<{ id: string }>(
+      `with c as (
+         insert into amazon_connections
+           (workspace_id, encrypted_refresh_token, encryption_key_version, status)
+         values ($1, '\\xdeadbeef'::bytea, 1, 'connected')
+         returning id
+       )
+       insert into amazon_profiles
+         (connection_id, profile_id, region, country_code, currency_code)
+       select c.id, 'amzn-profile-kdp-hist', 'NA', 'US', 'USD' from c
+       returning id`,
+      [workspaceId],
+    );
+    const profileId = profile.rows[0]!.id;
+    const book = await pool.query<{ id: string }>(
+      `insert into books (workspace_id, asin, title, format)
+       values ($1, 'B0KDPHIST1', 'History book', 'paperback')
+       returning id`,
+      [workspaceId],
+    );
+    const bookId = book.rows[0]!.id;
+
+    const firstImport = await insertKdpRoyaltyImport(pool, {
+      workspaceId,
+      fileName: "kdp-aug-partial.xlsx",
+      payloadSha256: "b".repeat(64),
+      periodStart: "2026-08-01",
+      periodEnd: "2026-08-15",
+      rowCount: 1,
+      suggestions: [],
+      skipped: [],
+    });
+    const secondImport = await insertKdpRoyaltyImport(pool, {
+      workspaceId,
+      fileName: "kdp-aug-full.xlsx",
+      payloadSha256: "c".repeat(64),
+      periodStart: "2026-08-01",
+      periodEnd: "2026-08-31",
+      rowCount: 2,
+      suggestions: [],
+      skipped: [],
+    });
+
+    // Monthly aggregates: the later full-month file replaces the partial one.
+    await upsertKdpMonthlyBookSales(pool, [
+      {
+        workspaceId,
+        importId: firstImport.import.id,
+        bookId,
+        profileId,
+        month: "2026-08-01",
+        standardUnits: 10,
+        expandedUnits: 1,
+        royalty: "35.00",
+        currency: "USD",
+      },
+    ]);
+    await upsertKdpMonthlyBookSales(pool, [
+      {
+        workspaceId,
+        importId: secondImport.import.id,
+        bookId,
+        profileId,
+        month: "2026-08-01",
+        standardUnits: 12,
+        expandedUnits: 2,
+        royalty: "42.00",
+        currency: "USD",
+      },
+    ]);
+    const monthly = await listKdpMonthlyBookSales(pool, workspaceId);
+    expect(monthly).toHaveLength(1);
+    expect(monthly[0]).toMatchObject({
+      importId: secondImport.import.id,
+      month: "2026-08-01",
+      standardUnits: 12,
+      expandedUnits: 2,
+      royalty: "42.0000",
+    });
+
+    // The month column rejects anything but the first of the month.
+    await expect(
+      upsertKdpMonthlyBookSales(pool, [
+        {
+          workspaceId,
+          importId: secondImport.import.id,
+          bookId,
+          profileId,
+          month: "2026-08-15",
+          standardUnits: 1,
+          expandedUnits: 0,
+          royalty: "3.50",
+          currency: "USD",
+        },
+      ]),
+    ).rejects.toThrow();
+
+    // Transactions: one linked row and one unlinked (ASIN not mapped).
+    await insertKdpSaleTransactions(pool, [
+      {
+        workspaceId,
+        importId: firstImport.import.id,
+        bookId,
+        profileId,
+        asin: "B0KDPHIST1",
+        marketplace: "Amazon.com",
+        format: "paperback",
+        royaltyType: "60%",
+        orderDate: "2026-08-10",
+        royaltyDate: "2026-08-13",
+        netUnits: 1,
+        royalty: "3.50",
+        currency: "USD",
+      },
+      {
+        workspaceId,
+        importId: firstImport.import.id,
+        bookId: null,
+        profileId: null,
+        asin: "B0UNKNOWN99",
+        marketplace: "Amazon.com",
+        format: "paperback",
+        royaltyType: "40%",
+        orderDate: "2026-08-11",
+        royaltyDate: "2026-08-14",
+        netUnits: 1,
+        royalty: "1.10",
+        currency: "USD",
+      },
+    ]);
+    expect(await listKdpSaleTransactions(pool, workspaceId)).toHaveLength(2);
+
+    // Re-importing the month deletes the old rows before inserting the new.
+    await deleteKdpSaleTransactionsForMonths(pool, workspaceId, ["2026-08-01"]);
+    expect(await listKdpSaleTransactions(pool, workspaceId)).toHaveLength(0);
+    await insertKdpSaleTransactions(pool, [
+      {
+        workspaceId,
+        importId: secondImport.import.id,
+        bookId,
+        profileId,
+        asin: "B0KDPHIST1",
+        marketplace: "Amazon.com",
+        format: "paperback",
+        royaltyType: "60%",
+        orderDate: "2026-08-22",
+        royaltyDate: "2026-08-25",
+        netUnits: 1,
+        royalty: "3.50",
+        currency: "USD",
+      },
+    ]);
+
+    // Filters and date mapping (pg returns date columns as Date objects —
+    // the repository casts to text so ISO strings cross the boundary).
+    const all = await listKdpSaleTransactions(pool, workspaceId);
+    expect(all).toHaveLength(1);
+    expect(all[0]).toMatchObject({
+      importId: secondImport.import.id,
+      bookId,
+      orderDate: "2026-08-22",
+      royaltyDate: "2026-08-25",
+      royalty: "3.5000",
+    });
+    expect(
+      await listKdpSaleTransactions(pool, workspaceId, { month: "2026-08-01" }),
+    ).toHaveLength(1);
+    expect(
+      await listKdpSaleTransactions(pool, workspaceId, { month: "2026-09-01" }),
+    ).toHaveLength(0);
+    expect(
+      await listKdpSaleTransactions(pool, workspaceId, { bookId: "999999" }),
+    ).toHaveLength(0);
   });
 });

@@ -6,7 +6,7 @@ include .env
 export
 endif
 
-.PHONY: help install setup preflight db-up db-wait migrate mcp mcp-token run dev test typecheck lint build check prod-config prod-preflight prod-up prod-logs prod-stop stop clean
+.PHONY: help install setup preflight db-up db-wait migrate mcp mcp-token run dev test typecheck lint build check prod-config prod-preflight prod-up prod-logs prod-stop stop clean backup restore
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -45,6 +45,7 @@ mcp-token: ## Manage MCP machine tokens: make mcp-token ARGS="issue <label>"
 	pnpm exec tsx scripts/mcp-token.ts $(ARGS)
 
 run: setup preflight db-up migrate ## Run the entire application (db + api + worker + web)
+	@$(MAKE) --no-print-directory backup || echo "Warning: database backup failed; starting anyway"
 	@echo "Starting api (http://localhost:3000), worker, and web (http://localhost:5173) — Ctrl-C stops all"
 	@set -a; [ ! -f .env ] || . ./.env; set +a; \
 	trap 'kill $$(jobs -p) 2>/dev/null || true' INT TERM EXIT; \
@@ -89,6 +90,23 @@ prod-stop: ## Stop the production stack without deleting persistent data
 stop: ## Stop local PostgreSQL
 	docker compose down
 
-clean: stop ## Stop db and delete its data volume (destroys local data)
+backup: ## Dump the local database to backups/ (keeps the last 14; db must be running)
+	@docker exec amazon-king-db pg_isready -U postgres -d amazon_king -q || (echo "PostgreSQL is not running (make db-up first)" >&2; exit 1)
+	@mkdir -p backups
+	@docker exec amazon-king-db pg_dump -U postgres -Fc amazon_king > backups/amazon_king-$$(date +%Y%m%d-%H%M%S).dump
+	@ls -t backups/amazon_king-*.dump | tail -n +15 | xargs rm -f 2>/dev/null || true
+	@echo "Backup written: $$(ls -t backups/amazon_king-*.dump | head -1)"
+
+restore: ## Restore a dump over the local database: make restore DUMP=backups/<file>.dump
+	@test -n "$(DUMP)" || (echo "Usage: make restore DUMP=backups/amazon_king-YYYYMMDD-HHMMSS.dump" >&2; exit 1)
+	@test -f "$(DUMP)" || (echo "$(DUMP) does not exist" >&2; exit 1)
+	@read -p "This OVERWRITES the local amazon_king database with $(DUMP). Type yes to continue: " ans; \
+		[ "$$ans" = yes ] || (echo "Aborted" >&2; exit 1)
+	@docker exec -i amazon-king-db pg_restore -U postgres -d amazon_king --clean --if-exists < "$(DUMP)"
+	@echo "Restored $(DUMP)"
+
+clean: stop ## Stop db and delete its data volume (destroys local data; asks first)
+	@read -p "This permanently deletes the local database volume and .data. Type yes to continue: " ans; \
+		[ "$$ans" = yes ] || (echo "Aborted" >&2; exit 1)
 	docker compose down -v
 	rm -rf .data

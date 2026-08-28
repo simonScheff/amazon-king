@@ -128,6 +128,33 @@ describe("kdp royalty import derivation", () => {
     expect(suggestion.deviationWarning).toBe(false);
   });
 
+  it("matches a UK-country Amazon profile to Amazon.co.uk rows", async () => {
+    const db = new FakeDb();
+    seedCatalog(db);
+    // The real Amazon Ads API reports the United Kingdom profile as "UK",
+    // not the ISO "GB" that the KDP marketplace map produces.
+    db.tables.amazonProfiles.find((p) => p.id === "p2")!.country_code = "UK";
+    const service = makeService(db);
+
+    const result = await service.createKdpRoyaltyImport(
+      auth,
+      input([
+        row({
+          marketplace: "Amazon.co.uk",
+          asin: "B0TRCUK01",
+          royalty: "2.83",
+          currency: "GBP",
+        }),
+      ]),
+      meta,
+    );
+
+    expect(result.skipped).toEqual([]);
+    expect(result.suggestions).toHaveLength(1);
+    expect(result.suggestions[0]!.profileId).toBe("amz-uk");
+    expect(result.suggestions[0]!.suggestedRoyaltyPerSale).toBe("2.83");
+  });
+
   it("weights the suggestion over the actual per-row royalties", async () => {
     const db = new FakeDb();
     seedCatalog(db);

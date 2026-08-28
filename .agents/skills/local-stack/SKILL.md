@@ -12,10 +12,12 @@ make run
 
 That installs dependencies, creates `.env` from `.env.example` if missing,
 validates required config, starts PostgreSQL via `docker compose`, applies
-migrations, then runs api (:3000), worker, and web (:5173) together. Ctrl-C
+migrations, snapshots the database (`make backup`), then runs api (:3000),
+worker, and web (:5173) together. Ctrl-C
 stops all three. `make help` lists every target; the useful ones day to day are
-`setup`, `db-up`, `migrate`, `test`, `typecheck`, `lint`, `check`, `stop`, and
-`clean` (which destroys the local data volume).
+`setup`, `db-up`, `migrate`, `backup`, `restore`, `test`, `typecheck`, `lint`,
+`check`, `stop`, and
+`clean` (which destroys the local data volume, but asks for `yes` first).
 
 `make run` fails preflight unless `DATABASE_URL`, `SESSION_SECRET`,
 `LWA_CLIENT_ID`, and `LWA_CLIENT_SECRET` are all set in `.env`. The Amazon
@@ -24,6 +26,18 @@ account.
 
 PostgreSQL runs as the `amazon-king-db` container (postgres:16-alpine,
 `amazon_king` database, port 5432).
+
+## Local database backups
+
+`make backup` dumps `amazon_king` (custom-format `pg_dump`) into `backups/`
+(gitignored) and keeps the last 14. It runs automatically on every `make run`,
+and daily at 03:17 via the owner's crontab
+(`crontab -l`; remove the `make backup` line to disable — a sleeping laptop
+skips the cron, the `make run` snapshot is the reliable one).
+`make restore DUMP=backups/<file>.dump` overwrites the local database from a
+dump after a typed `yes` confirmation. **For an actual data-loss incident,
+use the `recover-local-data` skill** — it covers choosing the right dump,
+re-migrating, and the rebuild-from-sources path when no dump exists.
 
 ## Sign-in on localhost: no email is ever sent
 
@@ -55,8 +69,9 @@ check in this order:
 
 - Changing `.env` requires restarting the affected process; the Makefile exports
   it into each recipe at start time.
-- `make clean` deletes the Postgres volume and `.data`. Everything local is
-  gone, including your session and any connected Amazon account.
+- `make clean` asks for a typed `yes`, then deletes the Postgres volume and
+  `.data`. Everything local is gone, including your session and any connected
+  Amazon account — restore with `make restore DUMP=…` from `backups/`.
 - The web dev server proxies `/api` to `http://localhost:3000`, so the API must
   be running for the dashboard to load data. They are same-origin through the
   proxy, which is why cookies work without CORS configuration.

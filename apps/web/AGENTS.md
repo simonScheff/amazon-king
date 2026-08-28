@@ -295,8 +295,11 @@ UI entry point.
 `/negatives` (`src/routes/negatives.tsx`) is the workspace inventory of synced
 negative keywords and product ASINs. `/negatives/$kind/$value`
 (`src/routes/negative-detail.tsx`, `kind` is `keyword` | `product`) is the
-working view: search-term evidence for that value plus campaigns the negative
-is running on vs not running on. Re-include uses the existing
+working view: search-term evidence for that value plus two campaign tables —
+"Negative applied on" (campaigns carrying the negative, with a **This term**
+column that says Blocking or why not: campaign paused, negative paused, or
+partial ad-group coverage) and "Term can still serve on" (campaigns that
+served the term in the window with no negative). Re-include uses the existing
 `ReincludeNegative` draft path; coverage-gap Exclude uses `ExcludeSearchTerm`.
 Amazon does not expose a creation date — `firstSeenAt` is our first sync
 (`created_at`) and the UI labels it that way.

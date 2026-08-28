@@ -9,7 +9,12 @@ for the data-model conventions that every table here must follow.
 
 Integration tests in `src/integration.test.ts` run only when
 `TEST_DATABASE_URL` points at a scratch Postgres database; otherwise they skip
-silently. CI runs them against a real PostgreSQL service.
+silently. CI runs them against a real PostgreSQL service. **Hard rail:** the
+suite drops the public schema in `beforeAll`, so it refuses to start unless
+the database name in `TEST_DATABASE_URL` contains `test` (2026-08-28: a run
+with `TEST_DATABASE_URL=$DATABASE_URL` wiped the development database; do not
+weaken this check). Local backups: `make backup` (also runs automatically on
+`make run`, and daily via the owner's crontab), `make restore DUMP=…`.
 
 ## Layout and rules
 
@@ -89,6 +94,17 @@ To add a migration, use the `add-migration` skill.
   `markKdpRoyaltyImportApplied`, which returns null on a second attempt so a
   batch can never be applied twice. Only the import flow reads this table;
   applying writes real `book_economics` rows through `upsertBookEconomics`.
+- `kdp_monthly_book_sales` and `kdp_sale_transactions` (migration 0020,
+  `repositories/kdp-sales.ts`) are the phase-2 KDP history tables feeding
+  `/kdp-history`: monthly per-book × per-marketplace aggregates plus verbatim
+  per-transaction rows (`royalty_date − order_date` is the fulfillment lag).
+  Re-importing a month replaces its data — monthly rows upsert on
+  `(book_id, profile_id, month)` with the newer import winning, and
+  `deleteKdpSaleTransactionsForMonths` clears the covered months' transactions
+  before the new file's rows are inserted, so overlapping files never
+  double-count. Unlinked-ASIN transactions keep null `book_id`/`profile_id`.
+  The ad side of the sales mix is never stored here — it is computed at query
+  time from the fact tables.
 - The converting dashboard queries (`convertedDailyTotals`,
   `convertedDailySeries`, `convertedRoyaltySeries`, `convertedCountrySpend` in
   `repositories/dashboard.ts`) serve the `country=all` view: each fact is

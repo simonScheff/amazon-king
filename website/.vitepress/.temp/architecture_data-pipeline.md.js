@@ -1,7 +1,7 @@
 import { resolveComponent, useSSRContext } from "vue";
 import { ssrRenderAttrs, ssrRenderStyle, ssrRenderSuspense, ssrRenderComponent } from "vue/server-renderer";
 import { _ as _export_sfc } from "./plugin-vue_export-helper.1tPrXgE0.js";
-const __pageData = JSON.parse('{"title":"Data pipeline","description":"How amazon-king imports Amazon Ads structure and metrics — the metrics_sync report orchestration, structure_sync snapshot upserts, the PostgreSQL job queue, and the deterministic recommendation run.","frontmatter":{"title":"Data pipeline","description":"How amazon-king imports Amazon Ads structure and metrics — the metrics_sync report orchestration, structure_sync snapshot upserts, the PostgreSQL job queue, and the deterministic recommendation run."},"headers":[],"relativePath":"architecture/data-pipeline.md","filePath":"architecture/data-pipeline.md","lastUpdated":1787826669000}');
+const __pageData = JSON.parse('{"title":"Data pipeline","description":"How amazon-king imports Amazon Ads structure and metrics — the metrics_sync report orchestration, structure_sync snapshot upserts, the PostgreSQL job queue, and the deterministic recommendation run.","frontmatter":{"title":"Data pipeline","description":"How amazon-king imports Amazon Ads structure and metrics — the metrics_sync report orchestration, structure_sync snapshot upserts, the PostgreSQL job queue, and the deterministic recommendation run."},"headers":[],"relativePath":"architecture/data-pipeline.md","filePath":"architecture/data-pipeline.md","lastUpdated":1787941465000}');
 const _sfc_main = { name: "architecture/data-pipeline.md" };
 function _sfc_ssrRender(_ctx, _push, _parent, _attrs, $props, $setup, $data, $options) {
   const _component_Mermaid = resolveComponent("Mermaid");

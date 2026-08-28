@@ -191,10 +191,10 @@ describe("NegativeDetailPage", () => {
       screen.getByRole("heading", { name: "7-day conversion funnel" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Running on (1)" }),
+      screen.getByRole("heading", { name: "Negative applied on (1)" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Not running on (1)" }),
+      screen.getByRole("heading", { name: "Term can still serve on (1)" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Blocked")).toBeInTheDocument();
     expect(screen.getByText("Leak")).toBeInTheDocument();
@@ -224,11 +224,30 @@ describe("NegativeDetailPage", () => {
     });
     render(<NegativeDetailPage />);
 
-    expect(screen.getByText("Not blocking · Paused")).toBeInTheDocument();
+    expect(
+      screen.getByText("Not blocking · campaign paused"),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(
         "Every campaign that served this term already blocks it.",
       ),
+    ).toBeInTheDocument();
+  });
+
+  it("names the negative's own state when it is paused on an enabled campaign", () => {
+    mocks.useNegative.mockReturnValue({
+      isPending: false,
+      error: null,
+      data: detail({
+        blockingCampaigns: [
+          blocking({ negativeState: "paused", currentlyBlocks: false }),
+        ],
+      }),
+    });
+    render(<NegativeDetailPage />);
+
+    expect(
+      screen.getByText("Not blocking · negative paused"),
     ).toBeInTheDocument();
   });
 
