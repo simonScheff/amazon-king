@@ -96,7 +96,9 @@ from `GET /api/books`.
 Overview, campaign detail, search-term detail, and the negatives list/detail
 pages share
 `src/components/timeframe-select.tsx`: 1/7/14/30/60 days plus month-to-date
-(`?days=mtd`, UTC 1st of the current month through today). Facts land a day
+(`?days=mtd`, UTC 1st of the current month through today). Bare `/` defaults to
+`mtd` — the overview passes it as the `resolveTimeframe` fallback; the other
+pages keep the 30-day `DEFAULT_TIMEFRAME`. Facts land a day
 late (metrics sync imports yesterday), so the read service resolves a 1-day
 window to the latest complete day — yesterday, both days equal — not the
 empty in-progress today. The campaigns **list** page deliberately hardcodes a
@@ -108,7 +110,12 @@ The overview country selector offers **"All markets"** as a peer of the
 specific markets (`allMarketsLabel` on `src/components/country-select.tsx` —
 same control, no flag). Selecting it sets `?country=all`; the overview
 route's `validateSearch` accepts the `all` literal via the contracts
-`dashboardCountrySchema` (same acceptance as the API). The option is
+`dashboardCountrySchema` (same acceptance as the API). Bare `/` (no
+`?country=`) also lands here once FX rates are synced — the overview gates
+that default on `useDataFreshness()` reporting a non-null
+`fxRates.latestRateDate`, the same source the API's `ratesAvailable` uses,
+and falls back to the US-first `resolveCountry` resolution before the first
+rates sync. The option is
 disabled with a tooltip pointing at the Sync status card until the summary
 response reports `ratesAvailable: true` — that field comes back on every
 summary response, so the gate works before the view is ever requested.

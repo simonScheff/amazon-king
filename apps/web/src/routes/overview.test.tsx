@@ -61,6 +61,7 @@ const mocks = vi.hoisted(() => ({
   fxRates: undefined as FxRatesStatus | undefined,
   freshnessProfiles: [] as DataFreshness[],
   countrySpend: undefined as CountrySpend | undefined,
+  summaryRequest: undefined as { days: unknown; country: unknown } | undefined,
   saveSettings: vi.fn(),
 }));
 
@@ -72,23 +73,26 @@ vi.mock("@tanstack/react-router", () => ({
 
 vi.mock("../api/endpoints", () => ({
   useAmazonStatus: () => ({ data: { status: "connected" } }),
-  useDashboardSummary: () => ({
-    isPending: false,
-    error: null,
-    data: {
-      dateRange: { start: "2026-07-22", end: "2026-08-20" },
-      currency: mocks.currency,
-      ratesAvailable: mocks.ratesAvailable,
-      totals: emptyTotals,
-      previous: {
-        dateRange: { start: "2026-06-22", end: "2026-07-21" },
+  useDashboardSummary: (days: unknown, country: unknown) => {
+    mocks.summaryRequest = { days, country };
+    return {
+      isPending: false,
+      error: null,
+      data: {
+        dateRange: { start: "2026-07-22", end: "2026-08-20" },
+        currency: mocks.currency,
+        ratesAvailable: mocks.ratesAvailable,
         totals: emptyTotals,
+        previous: {
+          dateRange: { start: "2026-06-22", end: "2026-07-21" },
+          totals: emptyTotals,
+        },
+        economicsMissing: true,
+        dataCurrentThrough: "2026-08-20T12:00:00.000Z",
+        daily: [],
       },
-      economicsMissing: true,
-      dataCurrentThrough: "2026-08-20T12:00:00.000Z",
-      daily: [],
-    },
-  }),
+    };
+  },
   useDataFreshness: () => ({
     isPending: false,
     error: null,
@@ -150,6 +154,7 @@ beforeEach(() => {
   mocks.fxRates = fxUpToDate;
   mocks.freshnessProfiles = [];
   mocks.countrySpend = undefined;
+  mocks.summaryRequest = undefined;
   mocks.saveSettings.mockReset();
 });
 
@@ -162,6 +167,37 @@ describe("OverviewPage pending recommendations", () => {
     expect(
       screen.getByText(`Created ${formatDateTime(createdAt)}`),
     ).toBeInTheDocument();
+  });
+});
+
+describe("OverviewPage default view", () => {
+  it("lands on MTD across all markets when rates are synced and no params are given", () => {
+    render(<OverviewPage />);
+
+    expect(mocks.summaryRequest).toEqual({ days: "mtd", country: "all" });
+    expect(screen.getByRole("button", { name: "Country" })).toHaveTextContent(
+      "All markets",
+    );
+  });
+
+  it("falls back to the US market when rates have never been synced", () => {
+    mocks.fxRates = {
+      latestRateDate: null,
+      lastRunState: "never_run",
+      lastRunAt: null,
+      lastError: null,
+      stale: true,
+    };
+    render(<OverviewPage />);
+
+    expect(mocks.summaryRequest).toEqual({ days: "mtd", country: "US" });
+  });
+
+  it("honors explicit search params over the defaults", () => {
+    mocks.search = { country: "US", days: 7 };
+    render(<OverviewPage />);
+
+    expect(mocks.summaryRequest).toEqual({ days: 7, country: "US" });
   });
 });
 

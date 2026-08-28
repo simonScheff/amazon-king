@@ -108,6 +108,35 @@ function appliedToLabel(row: {
     : `Ad group · ${row.adGroupName ?? row.adGroupId ?? "Unknown"}`;
 }
 
+function isEnabledState(state: string): boolean {
+  const normalized = state.trim().toLowerCase();
+  return normalized === "enabled" || normalized === "active";
+}
+
+/**
+ * Why an applied negative is not stopping the term right now. The remaining
+ * case after both states is ad-group coverage: the negative sits on only some
+ * of the ad groups that served the term.
+ */
+function notBlockingReason(row: NegativeBlockingCampaign): {
+  label: string;
+  title?: string;
+} {
+  if (!isEnabledState(row.state)) {
+    return { label: `campaign ${formatAmazonLabel(row.state).toLowerCase()}` };
+  }
+  if (!isEnabledState(row.negativeState)) {
+    return {
+      label: `negative ${formatAmazonLabel(row.negativeState).toLowerCase()}`,
+    };
+  }
+  return {
+    label: "partial coverage",
+    title:
+      "Enabled, but it covers only some of the ad groups that served this term.",
+  };
+}
+
 export function NegativeDetailPage() {
   const params = useParams({ strict: false }) as {
     kind?: string;
@@ -160,6 +189,11 @@ export function NegativeDetailPage() {
   );
 
   const sortedBlocking = [...data.blockingCampaigns].sort((a, b) => {
+    if (blockingSort.key === "state") {
+      const live = Number(a.currentlyBlocks) - Number(b.currentlyBlocks);
+      if (live !== 0) return blockingSort.direction === "asc" ? -live : live;
+      return a.name.localeCompare(b.name);
+    }
     const live = Number(b.currentlyBlocks) - Number(a.currentlyBlocks);
     if (live !== 0 && blockingSort.key === "cost") return live;
     return compareNullable(
@@ -425,7 +459,8 @@ export function NegativeDetailPage() {
 
       <Card>
         <CardHeader
-          title={`Running on (${formatCount(data.blockingCampaigns.length)})`}
+          title={`Negative applied on (${formatCount(data.blockingCampaigns.length)})`}
+          description="Campaigns that carry this negative. “Blocking” means the term cannot serve there right now."
         />
         {data.blockingCampaigns.length === 0 ? (
           <EmptyState>No campaigns currently carry this negative.</EmptyState>
@@ -448,7 +483,8 @@ export function NegativeDetailPage() {
 
       <Card>
         <CardHeader
-          title={`Not running on (${formatCount(data.unblockedCampaigns.length)})`}
+          title={`Term can still serve on (${formatCount(data.unblockedCampaigns.length)})`}
+          description="Campaigns that served this term in the window and have no negative for it."
         />
         {data.unblockedCampaigns.length === 0 ? (
           <EmptyState>
@@ -522,6 +558,7 @@ function metricHeaders(
   onSort: (column: CampaignSortKey) => void,
   days: ReturnType<typeof resolveTimeframe>,
   extra?: ReactNode,
+  stateLabel = "State",
 ) {
   return (
     <tr>
@@ -542,7 +579,12 @@ function metricHeaders(
           />
         </div>
       </Th>
-      <SortableTh label="State" column="state" sort={sort} onSort={onSort} />
+      <SortableTh
+        label={stateLabel}
+        column="state"
+        sort={sort}
+        onSort={onSort}
+      />
       {extra}
       <SortableTh
         label={`${windowQualifier(days)} profit`}

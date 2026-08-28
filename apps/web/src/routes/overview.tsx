@@ -47,13 +47,23 @@ export function OverviewPage() {
     country?: string;
     books?: string[];
   };
-  const days = resolveTimeframe(search.days);
+  // Bare `/` lands on month-to-date; an explicit ?days= always wins.
+  const days = resolveTimeframe(search.days, "mtd");
   const bookIds = search.books;
   const navigate = useNavigate();
 
   const profiles = useProfiles();
   const marketplaces = useSpendSortedMarketplaces(days, bookIds);
-  const country = resolveCountry(search.country, marketplaces);
+  const freshness = useDataFreshness();
+  // Bare `/` also lands on the all-market view whenever FX rates are synced
+  // (the same latestRateDate gate the API uses for ratesAvailable); without
+  // rates the all-market totals would be zeroed, so fall back to the usual
+  // US-first resolution. An explicit ?country= always wins.
+  const fxSynced = freshness.data?.fxRates?.latestRateDate != null;
+  const country =
+    search.country === undefined && fxSynced
+      ? "all"
+      : resolveCountry(search.country, marketplaces);
   // "all" is the FX-converted all-market view: every enabled market at once,
   // figures in the single workspace display currency.
   const isAllMarkets = country === "all";
@@ -70,7 +80,6 @@ export function OverviewPage() {
     : (selectedMarketplace?.countryName ?? country);
 
   const summary = useDashboardSummary(days, country, bookIds);
-  const freshness = useDataFreshness();
   const status = useAmazonStatus();
   const top = useRecommendations({ state: "pending" }, bookIds);
 

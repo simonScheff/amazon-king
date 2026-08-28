@@ -29,7 +29,9 @@ minutes; the session itself lasts 7 days, rolling.
 ## 2. Tour the dashboard
 
 The overview (`/`) is the control room. Before any data exists it will be
-mostly empty — here's what each part is for.
+mostly empty — here's what each part is for. With no URL parameters it opens
+on month-to-date across **All markets** (once FX rates have synced; otherwise
+your US market), and both selectors write their choice into the URL.
 
 ![Dashboard overview in the All markets view with KPI cards in one display currency, daily performance charts, and top problems](/screenshots/overview.png)
 
