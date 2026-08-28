@@ -205,6 +205,30 @@ describe("retry policy (plan §8)", () => {
     expect((error as AmazonNetworkError).retryable).toBe(true);
     expect(delays).toHaveLength(2);
   });
+
+  it("includes the underlying network cause in the error message", async () => {
+    const cause = Object.assign(
+      new Error("connect ETIMEDOUT 203.0.113.10:443"),
+      {
+        code: "ETIMEDOUT",
+      },
+    );
+    const { http } = makeHttp({
+      handler: () => {
+        throw new TypeError("fetch failed", { cause });
+      },
+      sleep: async () => undefined,
+      retry: { maxAttempts: 2 },
+    });
+    const error = await http
+      .request({ method: "GET", path: "/x", context: TEST_CONTEXT })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(AmazonNetworkError);
+    expect((error as Error).message).toBe(
+      "Amazon request to /x failed after 2 attempts " +
+        "(last error: TypeError: fetch failed -> ETIMEDOUT)",
+    );
+  });
 });
 
 describe("observability", () => {

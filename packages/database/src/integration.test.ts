@@ -87,6 +87,11 @@ import {
   revokeApiToken,
   touchApiToken,
 } from "./repositories/api-tokens.js";
+import {
+  createSyncRun,
+  failOrphanedSyncRuns,
+  finishSyncRun,
+} from "./repositories/reports.js";
 
 /**
  * Integration tests against a real PostgreSQL database.
@@ -790,6 +795,37 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     const reclaimed = await claim(pool, "live-worker", ["test.reap"], 60);
     expect(reclaimed?.id).toBe(jobId);
     await complete(pool, jobId, "live-worker");
+  });
+
+  it("failOrphanedSyncRuns closes running rows and leaves finished ones alone", async () => {
+    const profileId = await seedProfile(pool);
+    const running = await createSyncRun(pool, profileId, "structure");
+    const completed = await createSyncRun(pool, profileId, "metrics");
+    await finishSyncRun(pool, completed, "complete");
+
+    const closed = await failOrphanedSyncRuns(pool, "worker restarted");
+    expect(closed).toBeGreaterThanOrEqual(1);
+
+    const rows = await pool.query<{
+      id: string;
+      status: string;
+      error: string | null;
+      finished_at: string | null;
+    }>(
+      `select id::text, status, error, finished_at::text from sync_runs
+       where id = any($1::bigint[])`,
+      [[running, completed]],
+    );
+    const byId = new Map(rows.rows.map((row) => [row.id, row]));
+    expect(byId.get(running)).toMatchObject({
+      status: "failed",
+      error: "worker restarted",
+    });
+    expect(byId.get(running)?.finished_at).not.toBeNull();
+    expect(byId.get(completed)).toMatchObject({ status: "complete" });
+
+    // A second sweep has nothing left to close.
+    expect(await failOrphanedSyncRuns(pool, "worker restarted")).toBe(0);
   });
 
   it("structure upserts are idempotent and record change history", async () => {

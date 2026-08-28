@@ -6,6 +6,7 @@ import {
   fail,
   heartbeat,
   reapExpiredLeases,
+  reports as reportsRepo,
 } from "@amazon-king/database";
 import type { Pool } from "@amazon-king/database";
 
@@ -62,6 +63,11 @@ export async function runWorkerLoop(
   // report), and a crashed worker's claimed jobs must not stay invisible that
   // long. Reap once up front so a restarted worker reclaims its own orphans.
   await reapOnce(options);
+  // Sync runs whose worker died mid-flight never reach finishSyncRun, and the
+  // retried job creates a fresh run — sweep them once at startup or they stay
+  // "running" forever. Startup-only, single-worker assumption: before the
+  // loop starts, no run can legitimately be in flight in this process.
+  await failOrphanedSyncRunsOnce(options);
   const reapTimer = setInterval(() => {
     void reapOnce(options);
   }, options.reapIntervalMs);
@@ -103,6 +109,23 @@ async function reapOnce(options: WorkerLoopOptions): Promise<void> {
     }
   } catch (error) {
     options.logger.error({ err: error }, "Lease reaping failed");
+  }
+}
+
+/** Fail sync runs orphaned by a dead worker; never throws into the caller. */
+async function failOrphanedSyncRunsOnce(
+  options: WorkerLoopOptions,
+): Promise<void> {
+  try {
+    const closed = await reportsRepo.failOrphanedSyncRuns(
+      options.pool,
+      "Interrupted: the worker restarted before this run finished",
+    );
+    if (closed > 0) {
+      options.logger.warn({ closed }, "Failed orphaned sync runs at startup");
+    }
+  } catch (error) {
+    options.logger.error({ err: error }, "Orphaned sync-run sweep failed");
   }
 }
 

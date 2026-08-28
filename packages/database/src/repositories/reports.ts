@@ -88,6 +88,26 @@ export async function createSyncRun(
   return result.rows[0]!.id;
 }
 
+/**
+ * Fail every sync run still marked running, returning the count closed.
+ * Meant to be called once at worker startup: a run whose worker process died
+ * mid-flight never reaches finishSyncRun, and the retried job creates a fresh
+ * run, so without this sweep the old row stays "running" forever. Assumes a
+ * single worker process — with two live workers this would also fail the
+ * other worker's legitimately in-flight run.
+ */
+export async function failOrphanedSyncRuns(
+  db: Db,
+  error: string,
+): Promise<number> {
+  const result = await db.query(
+    `update sync_runs set status = 'failed', finished_at = now(), error = $1
+     where status = 'running'`,
+    [error],
+  );
+  return result.rowCount ?? 0;
+}
+
 /** Finish a sync run; only call after reconciliation checks pass (§8 step 12). */
 export async function finishSyncRun(
   db: Db,

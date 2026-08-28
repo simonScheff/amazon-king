@@ -7,6 +7,7 @@ const queue = vi.hoisted(() => ({
   fail: vi.fn(),
   heartbeat: vi.fn(),
   reapExpiredLeases: vi.fn(),
+  reports: { failOrphanedSyncRuns: vi.fn() },
 }));
 
 vi.mock("@amazon-king/database", () => queue);
@@ -28,6 +29,8 @@ describe("runWorkerLoop", () => {
   it("keeps reaping expired leases while a long job occupies the loop", async () => {
     queue.claim.mockReset();
     queue.reapExpiredLeases.mockReset();
+    queue.reports.failOrphanedSyncRuns.mockReset();
+    queue.reports.failOrphanedSyncRuns.mockResolvedValue(0);
     queue.heartbeat.mockResolvedValue(true);
     queue.complete.mockResolvedValue(undefined);
     queue.reapExpiredLeases.mockResolvedValue([]);
@@ -76,6 +79,8 @@ describe("runWorkerLoop", () => {
   it("reaps once before claiming so a restarted worker reclaims its orphans", async () => {
     queue.claim.mockReset();
     queue.reapExpiredLeases.mockReset();
+    queue.reports.failOrphanedSyncRuns.mockReset();
+    queue.reports.failOrphanedSyncRuns.mockResolvedValue(0);
     queue.reapExpiredLeases.mockResolvedValue(["7"]);
     queue.claim.mockImplementation(async () => {
       // The up-front reap must already have run by the first claim.
@@ -100,5 +105,36 @@ describe("runWorkerLoop", () => {
     );
 
     expect(queue.reapExpiredLeases).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails orphaned sync runs once before claiming", async () => {
+    queue.claim.mockReset();
+    queue.reapExpiredLeases.mockReset();
+    queue.reports.failOrphanedSyncRuns.mockReset();
+    queue.reapExpiredLeases.mockResolvedValue([]);
+    queue.reports.failOrphanedSyncRuns.mockResolvedValue(3);
+    queue.claim.mockImplementation(async () => {
+      // The orphan sweep must already have run by the first claim.
+      expect(queue.reports.failOrphanedSyncRuns).toHaveBeenCalledTimes(1);
+      stopping = true;
+      return null;
+    });
+
+    let stopping = false;
+    await runWorkerLoop(
+      {
+        pool: {} as never,
+        workerId: "worker-1",
+        handlers: { slow: async () => undefined },
+        leaseSeconds: 120,
+        heartbeatMs: 10_000,
+        pollIntervalMs: 1,
+        reapIntervalMs: 60_000,
+        logger: silentLogger(),
+      },
+      () => stopping,
+    );
+
+    expect(queue.reports.failOrphanedSyncRuns).toHaveBeenCalledTimes(1);
   });
 });

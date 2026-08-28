@@ -26,6 +26,12 @@ inside the loop body. This is deliberate: a single `metrics_sync` can occupy the
 loop for hours, and a crashed worker's claimed jobs must not sit `running` and
 invisible for that long. Do not fold reaping back into the loop.
 
+Startup also fails every `sync_runs` row still marked `running`
+(`reports.failOrphanedSyncRuns`): a run whose worker died mid-flight never
+reaches `finishSyncRun`, and the retried job creates a fresh run, so the old
+row would zombie forever. This assumes a single worker process — it runs once
+before the loop starts, when nothing can legitimately be in flight.
+
 ## Handlers
 
 `src/jobs/` behind a type → handler map.

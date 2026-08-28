@@ -145,6 +145,30 @@ function buildHeaders(
   return headers;
 }
 
+/**
+ * One-line description of a fetch failure and its cause chain, preferring
+ * system error codes (ETIMEDOUT, ENOTFOUND, ...) over generic messages, so a
+ * stored sync-run error says WHY the request never got a response. Network
+ * stack messages carry host/IP detail only — never headers or tokens.
+ */
+function describeCauseChain(error: unknown): string {
+  const parts: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; depth < 3 && current != null; depth += 1) {
+    if (current instanceof Error) {
+      const code = (current as { code?: unknown }).code;
+      parts.push(
+        typeof code === "string" ? code : `${current.name}: ${current.message}`,
+      );
+      current = current.cause;
+    } else {
+      parts.push(String(current));
+      break;
+    }
+  }
+  return parts.join(" -> ");
+}
+
 export function createAdsHttpClient(
   options: AdsHttpClientOptions,
 ): AdsHttpClient {
@@ -212,7 +236,7 @@ export function createAdsHttpClient(
           continue;
         }
         throw new AmazonNetworkError(
-          `Amazon request to ${req.path} failed after ${retry.maxAttempts} attempts`,
+          `Amazon request to ${req.path} failed after ${retry.maxAttempts} attempts (last error: ${describeCauseChain(error)})`,
           { cause: error },
         );
       }
