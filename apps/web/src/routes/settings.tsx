@@ -1036,7 +1036,7 @@ export function SettingsPage() {
                   : "border-transparent text-zinc-400 hover:text-zinc-200"
               }`}
             >
-              {TAB_LABELS[settingsTab]}
+              {TAB_LABELS[settingsTab]}{" "}
               {settingsTab === "books" && economicsTotals.linked > 0 ? (
                 <span
                   className={`ml-2 rounded-full px-2 py-0.5 text-xs font-medium ${

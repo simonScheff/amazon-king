@@ -1,4 +1,4 @@
-FROM node:24-alpine AS application
+FROM node:26-alpine AS application
 
 ENV PNPM_HOME=/pnpm
 ENV COREPACK_HOME=/corepack
