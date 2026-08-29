@@ -24,8 +24,11 @@ recommendation or Change center draft.
 `/negatives` lists every synced negative keyword and product ASIN across the
 workspace: how many enabled campaigns currently block it, whether enabled
 campaigns still serve it (a coverage gap), and whether it sold before we first
-saw the negative. Amazon does not expose when a negative was created, so
-**first seen** is the date this app first synced it.
+saw the negative. A **Blocking** count of 0 means the negative is dormant —
+carried only by paused campaigns or paused negatives — and the cell says so
+with a **Paused** badge; the **dormant** insight chip filters the list to rows
+where nothing blocks and nothing serves. Amazon does not expose when a
+negative was created, so **first seen** is the date this app first synced it.
 
 Click a term or ASIN for the inner page (`/negatives/keyword/…` or
 `/negatives/product/…`): search-term KPIs, funnel, and a daily chart with a

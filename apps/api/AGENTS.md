@@ -111,6 +111,23 @@ settings-level writes: CSRF + WRITE rate limit, no recent-auth gate, no Amazon
 call; the audit trail is `kdp.royalty_import.create/apply` plus one
 `books.economics` event per applied row.
 
+A new (non-replayed) import also populates the phase-2 history tables
+(`kdp_monthly_book_sales` per book × profile × month of order date —
+eligible groups only, expanded-only months recorded with 0 standard units —
+and verbatim `kdp_sale_transactions`, with catalog ids whenever the ASIN link
+resolves even if the group is skipped for a currency mismatch; covered
+months' transactions are replaced, monthly rows upsert). Two read endpoints
+serve the `/kdp-history` page, plain session-authenticated GETs:
+`GET /api/kdp/history` returns per book × marketplace monthly series (KDP
+units from the aggregates, ad-attributed units computed at query time from
+the fact tables, `royaltyPerSale` from the effective-dated economics history)
+plus per-marketplace fulfillment stats (median/average order→ship days,
+standard-rate rows only), and `GET /api/kdp/transactions` is the per-sale
+browser (`bookId`/`profileId`/`month`/`limit`/`offset` query params, limit
+capped at 1000 with a 500 default, newest order date first, book title joined
+in when linked) returning `{ transactions, total }` — one page plus the
+filtered total across all pages, which drives the table's pagination.
+
 ## Campaign creation
 
 `POST /api/campaign-creation-change-sets` is human-approved campaign creation.
@@ -213,7 +230,11 @@ to the local `campaigns` mirror via `structure.updateCampaignAttributes`.
 idempotent create, preview, re-read Amazon and compare against the before-state,
 guardrails, per-item apply, then verify. Rollback is a compensating API action
 — never a DB undo — and covers verified app-created negative exact keywords.
-Negative ASIN targets are not rollbackable.
+Negative ASIN targets are not rollbackable. A verified negative removal
+(`remove_negative_exact` / `remove_negative_target`) writes through to the
+local mirror (deletes the `negative_keywords` / `negative_targets` row) and,
+like negative additions, enqueues a `structure_sync`, so the dashboard stops
+showing the exclusion immediately instead of waiting for the next sync.
 
 ## Authentication
 

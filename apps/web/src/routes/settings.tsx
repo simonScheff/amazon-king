@@ -18,6 +18,7 @@ import {
   useDeleteSearchTermExclusion,
   useEnqueueFxSync,
   useEnqueueSync,
+  useKdpRoyaltyImports,
   useMapAdvertisedBook,
   useProfiles,
   useSaveBookCover,
@@ -46,12 +47,19 @@ import {
   KdpImportReview,
 } from "../components/kdp-royalty-import";
 
-export const SETTINGS_TABS = ["profiles", "books", "asins", "audit"] as const;
+export const SETTINGS_TABS = [
+  "profiles",
+  "books",
+  "kdp",
+  "asins",
+  "audit",
+] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
 
 const TAB_LABELS: Record<SettingsTab, string> = {
   profiles: "Profiles & sync",
   books: "Books & economics",
+  kdp: "KDP imports",
   asins: "New ASINs",
   audit: "Audit log",
 };
@@ -823,6 +831,83 @@ function BooksCard() {
   );
 }
 
+/**
+ * Settings → KDP imports tab (plan decision 10): the operational surface only —
+ * the import button plus the import log. The analytics (trends, sales mix,
+ * fulfillment, per-sale browser) live on the /kdp-history page.
+ */
+function KdpImportsCard() {
+  const imports = useKdpRoyaltyImports();
+  const [kdpBatch, setKdpBatch] = useState<KdpRoyaltyImport | null>(null);
+  return (
+    <Card>
+      <CardHeader
+        title="KDP imports"
+        action={<KdpImportButton onImported={setKdpBatch} />}
+      />
+      {kdpBatch ? (
+        <KdpImportReview batch={kdpBatch} onClose={() => setKdpBatch(null)} />
+      ) : null}
+      {imports.isPending ? (
+        <Loading label="Loading import log…" />
+      ) : imports.error ? (
+        <ErrorState error={imports.error} />
+      ) : imports.data.length === 0 ? (
+        <EmptyState>
+          No KDP reports imported yet. Import a Royalties Estimator workbook to
+          recalibrate royalty per sale from actuals.
+        </EmptyState>
+      ) : (
+        <Table>
+          <thead>
+            <tr>
+              <Th>Period</Th>
+              <Th>File</Th>
+              <Th>Rows</Th>
+              <Th>Suggestions</Th>
+              <Th>Status</Th>
+              <Th>Imported</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {imports.data.map((batch) => (
+              <tr key={batch.id}>
+                <Td className="whitespace-nowrap text-sm">
+                  {formatDate(batch.periodStart)} –{" "}
+                  {formatDate(batch.periodEnd)}
+                </Td>
+                <Td className="max-w-64">
+                  <span className="block truncate font-mono text-xs text-zinc-400">
+                    {batch.fileName}
+                  </span>
+                </Td>
+                <Td className="whitespace-nowrap text-sm tabular-nums">
+                  {batch.rowCount}
+                </Td>
+                <Td className="whitespace-nowrap text-sm tabular-nums">
+                  {batch.suggestionCount}
+                </Td>
+                <Td className="whitespace-nowrap">
+                  {batch.appliedAt !== null ? (
+                    <Badge tone="success">
+                      Applied {formatDate(batch.appliedAt)}
+                    </Badge>
+                  ) : (
+                    <Badge tone="neutral">Not applied</Badge>
+                  )}
+                </Td>
+                <Td className="whitespace-nowrap text-xs text-zinc-500">
+                  {formatDate(batch.createdAt)}
+                </Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
+    </Card>
+  );
+}
+
 function NewAsinsCard() {
   const unmappedProducts = useUnmappedAdvertisedProducts();
   const advertisedBookGroups = groupAdvertisedBooks(
@@ -977,6 +1062,7 @@ export function SettingsPage() {
         </>
       ) : null}
       {tab === "books" ? <BooksCard /> : null}
+      {tab === "kdp" ? <KdpImportsCard /> : null}
       {tab === "asins" ? <NewAsinsCard /> : null}
       {tab === "audit" ? <AuditCard /> : null}
     </div>

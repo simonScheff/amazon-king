@@ -1908,6 +1908,15 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
               item.negativeKeywordId === t.amazonTargetId &&
               negativeIsLive(item.state),
           );
+          if (verified) {
+            // Write the verified removal through to the local mirror so the
+            // dashboard reflects it without waiting for the next sync.
+            await structure.deleteNegativeKeywordByAmazonId(
+              db,
+              set.profileId,
+              t.amazonTargetId,
+            );
+          }
         } else if (
           t.action.actionType === "remove_negative_target" &&
           t.amazonTargetId &&
@@ -1918,6 +1927,13 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
               item.negativeTargetId === t.amazonTargetId &&
               negativeIsLive(item.state),
           );
+          if (verified) {
+            await structure.deleteNegativeTargetByAmazonId(
+              db,
+              set.profileId,
+              t.amazonTargetId,
+            );
+          }
         } else if (
           (t.action.actionType === "update_campaign_state" ||
             t.action.actionType === "update_campaign_name") &&
@@ -1995,13 +2011,15 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
         (action) =>
           action.status === "applied" &&
           (action.actionType === "add_negative_exact" ||
-            action.actionType === "add_negative_target"),
+            action.actionType === "add_negative_target" ||
+            action.actionType === "remove_negative_exact" ||
+            action.actionType === "remove_negative_target"),
       );
       if (
         (set.kind === "campaign_creation" || appliedNegatives) &&
         (finalStatus === "applied" || finalStatus === "partially_applied")
       ) {
-        // Pull created entities and newly written negatives into the local
+        // Pull created entities and written/removed negatives into the local
         // mirror so the next recommendation run can see them.
         await enqueue(db, "structure_sync", { profileId: set.profileId });
       }

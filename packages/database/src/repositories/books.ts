@@ -586,6 +586,35 @@ export async function listLatestBookEconomicsByWorkspace(
   }));
 }
 
+/**
+ * Every economics row of a workspace, oldest effective date first — the
+ * effective-dated royalty history behind the /kdp-history trend chart (the
+ * chart reads the value in effect for each month; nothing is duplicated).
+ */
+export async function listBookEconomicsHistoryByWorkspace(
+  db: Db,
+  workspaceId: string,
+): Promise<WorkspaceBookEconomics[]> {
+  const result = await db.query<WorkspaceBookEconomicsRow>(
+    `select be.id, be.book_id, be.profile_id,
+            be.effective_from::text as effective_from,
+            be.currency, be.list_price, be.estimated_royalty_per_sale,
+            be.target_acos, be.goal_mode, be.max_spend_without_sale,
+            be.max_bid, be.max_daily_budget, be.notes, be.created_at,
+            p.profile_id as amazon_profile_id
+     from book_economics be
+     join books b on b.id = be.book_id
+     join amazon_profiles p on p.id = be.profile_id
+     where b.workspace_id = $1
+     order by be.book_id, be.profile_id, be.effective_from asc, be.id asc`,
+    [workspaceId],
+  );
+  return result.rows.map((row) => ({
+    ...toEconomics(row),
+    amazonProfileId: row.amazon_profile_id,
+  }));
+}
+
 export interface BookEconomicsInput {
   bookId: string;
   profileId: string;

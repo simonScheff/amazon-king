@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   mutation: vi.fn(),
   removeExclusion: vi.fn(),
   exclusions: [] as { term: string; createdAt: string }[],
+  kdpImports: [] as unknown[],
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -104,6 +105,11 @@ vi.mock("../api/endpoints", () => ({
     isPending: false,
     mutate: mocks.mutation,
   }),
+  useKdpRoyaltyImports: () => ({
+    isPending: false,
+    error: null,
+    data: mocks.kdpImports,
+  }),
   useUnmappedAdvertisedProducts: () => ({
     isPending: false,
     error: null,
@@ -144,6 +150,7 @@ describe("SettingsPage book mapping", () => {
     mocks.fxRates = undefined;
     mocks.freshnessOptions = [];
     mocks.exclusions = [];
+    mocks.kdpImports = [];
     mocks.removeExclusion.mockReset();
     mocks.search = { tab: "books" };
   });
@@ -480,6 +487,54 @@ describe("SettingsPage book mapping", () => {
         onError: expect.any(Function),
       }),
     );
+  });
+
+  it("renders the KDP import log with applied and not-applied statuses", () => {
+    mocks.search = { tab: "kdp" };
+    mocks.kdpImports = [
+      {
+        id: "imp-1",
+        fileName: "KDP_Royalties_Estimator-august.xlsx",
+        periodStart: "2026-08-01",
+        periodEnd: "2026-08-25",
+        rowCount: 60,
+        suggestionCount: 3,
+        createdAt: "2026-08-28T10:00:00.000Z",
+        appliedAt: "2026-08-28T11:00:00.000Z",
+      },
+      {
+        id: "imp-2",
+        fileName: "KDP_Royalties_Estimator-july.xlsx",
+        periodStart: "2026-07-01",
+        periodEnd: "2026-07-31",
+        rowCount: 42,
+        suggestionCount: 2,
+        createdAt: "2026-08-02T09:00:00.000Z",
+        appliedAt: null,
+      },
+    ];
+    render(<SettingsPage />);
+
+    expect(
+      screen.getByRole("heading", { name: "KDP imports" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Import from KDP report" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("KDP_Royalties_Estimator-august.xlsx"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Aug 1, 2026 – Aug 25, 2026")).toBeInTheDocument();
+    expect(screen.getByText("60")).toBeInTheDocument();
+    expect(screen.getByText("Applied Aug 28, 2026")).toBeInTheDocument();
+    expect(screen.getByText("Not applied")).toBeInTheDocument();
+  });
+
+  it("shows the empty state when no KDP report was imported yet", () => {
+    mocks.search = { tab: "kdp" };
+    render(<SettingsPage />);
+
+    expect(screen.getByText(/No KDP reports imported yet/)).toBeInTheDocument();
   });
 
   it("switches sections through the tab bar and the URL", () => {

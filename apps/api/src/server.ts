@@ -18,6 +18,7 @@ import {
   dashboardSummaryQuerySchema,
   kdpRoyaltyApplyInputSchema,
   kdpRoyaltyImportInputSchema,
+  kdpTransactionsQuerySchema,
   loginRequestSchema,
   metricWindowSchema,
   negativeKindSchema,
@@ -624,6 +625,17 @@ export async function buildServer(
   app.get("/api/kdp/imports", async (request) => {
     const auth = await authenticate(request);
     return services.read.listKdpRoyaltyImports(auth.workspaceId);
+  });
+
+  app.get("/api/kdp/history", async (request) => {
+    const auth = await authenticate(request);
+    return services.read.getKdpHistory(auth.workspaceId);
+  });
+
+  app.get("/api/kdp/transactions", async (request) => {
+    const auth = await authenticate(request);
+    const query = parse(kdpTransactionsQuerySchema, request.query);
+    return services.read.listKdpTransactions(auth.workspaceId, query);
   });
 
   app.post(

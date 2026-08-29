@@ -38,6 +38,8 @@ import {
 import {
   deleteKdpSaleTransactionsForMonths,
   insertKdpSaleTransactions,
+  listKdpAdUnitsByBookMonth,
+  listKdpFulfillmentStats,
   listKdpMonthlyBookSales,
   listKdpSaleTransactions,
   upsertKdpMonthlyBookSales,
@@ -53,6 +55,7 @@ import {
   listEntityChanges,
 } from "./repositories/structure.js";
 import {
+  listBookEconomicsHistoryByWorkspace,
   listLatestBookEconomicsByWorkspace,
   listUnmappedAdvertisedProducts,
   mapAdvertisedProductToBook,
@@ -177,6 +180,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       "0018",
       "0019",
       "0020",
+      "0021",
     ]);
     const again = await migrate(pool);
     expect(again).toEqual([]);
@@ -3036,6 +3040,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         marketplace: "Amazon.com",
         format: "paperback",
         royaltyType: "60%",
+        transactionType: "Standard - Paperback",
         orderDate: "2026-08-10",
         royaltyDate: "2026-08-13",
         netUnits: 1,
@@ -3051,6 +3056,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         marketplace: "Amazon.com",
         format: "paperback",
         royaltyType: "40%",
+        transactionType: "Expanded Distribution Channels",
         orderDate: "2026-08-11",
         royaltyDate: "2026-08-14",
         netUnits: 1,
@@ -3058,11 +3064,15 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         currency: "USD",
       },
     ]);
-    expect(await listKdpSaleTransactions(pool, workspaceId)).toHaveLength(2);
+    expect(
+      (await listKdpSaleTransactions(pool, workspaceId)).transactions,
+    ).toHaveLength(2);
 
     // Re-importing the month deletes the old rows before inserting the new.
     await deleteKdpSaleTransactionsForMonths(pool, workspaceId, ["2026-08-01"]);
-    expect(await listKdpSaleTransactions(pool, workspaceId)).toHaveLength(0);
+    expect(
+      (await listKdpSaleTransactions(pool, workspaceId)).transactions,
+    ).toHaveLength(0);
     await insertKdpSaleTransactions(pool, [
       {
         workspaceId,
@@ -3073,6 +3083,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         marketplace: "Amazon.com",
         format: "paperback",
         royaltyType: "60%",
+        transactionType: "Standard - Paperback",
         orderDate: "2026-08-22",
         royaltyDate: "2026-08-25",
         netUnits: 1,
@@ -3084,22 +3095,255 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     // Filters and date mapping (pg returns date columns as Date objects —
     // the repository casts to text so ISO strings cross the boundary).
     const all = await listKdpSaleTransactions(pool, workspaceId);
-    expect(all).toHaveLength(1);
-    expect(all[0]).toMatchObject({
+    expect(all.transactions).toHaveLength(1);
+    expect(all.total).toBe(1);
+    expect(all.transactions[0]).toMatchObject({
       importId: secondImport.import.id,
       bookId,
+      transactionType: "Standard - Paperback",
       orderDate: "2026-08-22",
       royaltyDate: "2026-08-25",
       royalty: "3.5000",
     });
+    // Paging past the end returns no rows but keeps the filtered total.
+    const pastEnd = await listKdpSaleTransactions(pool, workspaceId, {
+      limit: 1,
+      offset: 1,
+    });
+    expect(pastEnd.transactions).toHaveLength(0);
+    expect(pastEnd.total).toBe(1);
     expect(
       await listKdpSaleTransactions(pool, workspaceId, { month: "2026-08-01" }),
-    ).toHaveLength(1);
+    ).toMatchObject({ total: 1 });
     expect(
       await listKdpSaleTransactions(pool, workspaceId, { month: "2026-09-01" }),
-    ).toHaveLength(0);
+    ).toMatchObject({ total: 0 });
     expect(
       await listKdpSaleTransactions(pool, workspaceId, { bookId: "999999" }),
-    ).toHaveLength(0);
+    ).toMatchObject({ total: 0 });
+  });
+
+  it("kdp history reads: ad units by month, fulfillment stats, economics history", async () => {
+    const workspace = await pool.query<{ id: string }>(
+      `insert into workspaces (name) values ('kdp history reads') returning id`,
+    );
+    const workspaceId = workspace.rows[0]!.id;
+    const profile = await pool.query<{ id: string }>(
+      `with c as (
+         insert into amazon_connections
+           (workspace_id, encrypted_refresh_token, encryption_key_version, status)
+         values ($1, '\\xdeadbeef'::bytea, 1, 'connected')
+         returning id
+       )
+       insert into amazon_profiles
+         (connection_id, profile_id, region, country_code, currency_code)
+       select c.id, 'amzn-profile-kdp-reads', 'NA', 'US', 'USD' from c
+       returning id`,
+      [workspaceId],
+    );
+    const profileId = profile.rows[0]!.id;
+    const campaign = await upsertCampaign(pool, {
+      profileId,
+      amazonCampaignId: "amzn-campaign-kdp-reads",
+      name: "KDP reads campaign",
+      state: "enabled",
+    });
+    const adGroup = await upsertAdGroup(pool, {
+      profileId,
+      campaignId: campaign.id,
+      amazonAdGroupId: "amzn-ad-group-kdp-reads",
+      name: "KDP reads ad group",
+      state: "enabled",
+    });
+    await upsertAd(pool, {
+      profileId,
+      adGroupId: adGroup.id,
+      amazonAdId: "amzn-ad-kdp-reads",
+      asin: "B0KDPREADS1",
+      state: "enabled",
+    });
+    const book = await mapAdvertisedProductToBook(pool, {
+      workspaceId,
+      profileIds: [profileId],
+      asin: "B0KDPREADS1",
+      title: "Reads book",
+      format: "paperback",
+    });
+    const bookId = book!.id;
+
+    // Ad-attributed copies follow greatest(units_sold_clicks14d, purchases14d)
+    // and group by the fact's month.
+    await upsertAdvertisedProductMetrics(pool, [
+      {
+        profileId,
+        campaignId: "amzn-campaign-kdp-reads",
+        adGroupId: "amzn-ad-group-kdp-reads",
+        adId: "amzn-ad-kdp-reads",
+        metricDate: "2026-08-03",
+        impressions: 10,
+        clicks: 1,
+        cost: "0.5000",
+        sales: "10.0000",
+        orders: 1,
+        purchases7d: 1,
+        sales7d: "10.0000",
+        purchases14d: 1,
+        sales14d: "10.0000",
+        units: 2,
+        unitsSoldClicks7d: 2,
+        unitsSoldClicks14d: 2,
+        currency: "USD",
+      },
+      {
+        profileId,
+        campaignId: "amzn-campaign-kdp-reads",
+        adGroupId: "amzn-ad-group-kdp-reads",
+        adId: "amzn-ad-kdp-reads",
+        metricDate: "2026-08-20",
+        impressions: 5,
+        clicks: 1,
+        cost: "0.5000",
+        sales: "10.0000",
+        orders: 3,
+        purchases7d: 3,
+        sales7d: "10.0000",
+        purchases14d: 3,
+        sales14d: "10.0000",
+        units: 0,
+        unitsSoldClicks7d: 0,
+        unitsSoldClicks14d: 0,
+        currency: "USD",
+      },
+      {
+        profileId,
+        campaignId: "amzn-campaign-kdp-reads",
+        adGroupId: "amzn-ad-group-kdp-reads",
+        adId: "amzn-ad-kdp-reads",
+        metricDate: "2026-09-01",
+        impressions: 5,
+        clicks: 1,
+        cost: "0.5000",
+        sales: "10.0000",
+        orders: 1,
+        purchases7d: 1,
+        sales7d: "10.0000",
+        purchases14d: 1,
+        sales14d: "10.0000",
+        units: 1,
+        unitsSoldClicks7d: 1,
+        unitsSoldClicks14d: 1,
+        currency: "USD",
+      },
+    ]);
+    expect(await listKdpAdUnitsByBookMonth(pool, workspaceId)).toEqual([
+      // August: 2 copies (units win) + 3 copies (units 0 → orders).
+      { bookId, profileId, month: "2026-08-01", adUnits: 5 },
+      { bookId, profileId, month: "2026-09-01", adUnits: 1 },
+    ]);
+
+    // Fulfillment: standard-rate rows only, per month of order_date; the
+    // expanded-distribution row and the unlinked row are excluded.
+    const batch = await insertKdpRoyaltyImport(pool, {
+      workspaceId,
+      fileName: "kdp-reads.xlsx",
+      payloadSha256: "d".repeat(64),
+      periodStart: "2026-08-01",
+      periodEnd: "2026-08-31",
+      rowCount: 5,
+      suggestions: [],
+      skipped: [],
+    });
+    const tx = (
+      overrides: Partial<{
+        royaltyType: string;
+        transactionType: string;
+        orderDate: string;
+        royaltyDate: string;
+        bookId: string | null;
+        profileId: string | null;
+        netUnits: number;
+      }>,
+    ) => ({
+      workspaceId,
+      importId: batch.import.id,
+      bookId,
+      profileId,
+      asin: "B0KDPREADS1",
+      marketplace: "Amazon.com",
+      format: "paperback",
+      royaltyType: "60%",
+      transactionType: "Standard - Paperback",
+      orderDate: "2026-08-10",
+      royaltyDate: "2026-08-12",
+      netUnits: 1,
+      royalty: "3.50",
+      currency: "USD",
+      ...overrides,
+    });
+    await insertKdpSaleTransactions(pool, [
+      tx({ orderDate: "2026-08-10", royaltyDate: "2026-08-12" }), // lag 2
+      tx({ orderDate: "2026-08-11", royaltyDate: "2026-08-15" }), // lag 4
+      tx({ orderDate: "2026-08-12", royaltyDate: "2026-08-18" }), // lag 6
+      tx({ orderDate: "2026-09-02", royaltyDate: "2026-09-03" }), // lag 1
+      tx({
+        royaltyType: "40%",
+        transactionType: "Expanded Distribution Channels",
+        orderDate: "2026-08-10",
+        royaltyDate: "2026-08-30", // lag 20 — must not move the median
+      }),
+      tx({
+        bookId: null,
+        profileId: null,
+        orderDate: "2026-08-10",
+        royaltyDate: "2026-08-11",
+      }),
+    ]);
+    expect(await listKdpFulfillmentStats(pool, workspaceId)).toEqual([
+      {
+        profileId,
+        month: "2026-08-01",
+        medianDays: 4,
+        averageDays: 4,
+        standardUnits: 3,
+      },
+      {
+        profileId,
+        month: "2026-09-01",
+        medianDays: 1,
+        averageDays: 1,
+        standardUnits: 1,
+      },
+    ]);
+
+    // Economics history: every row of the workspace, oldest effective first.
+    await upsertBookEconomics(pool, {
+      bookId,
+      profileId,
+      effectiveFrom: "2026-08-15",
+      currency: "USD",
+      listPrice: "12.00",
+      estimatedRoyaltyPerSale: "3.60",
+      goalMode: "balanced",
+    });
+    await upsertBookEconomics(pool, {
+      bookId,
+      profileId,
+      effectiveFrom: "2026-07-01",
+      currency: "USD",
+      listPrice: "12.00",
+      estimatedRoyaltyPerSale: "3.40",
+      goalMode: "balanced",
+    });
+    const history = await listBookEconomicsHistoryByWorkspace(
+      pool,
+      workspaceId,
+    );
+    expect(
+      history.map((row) => [row.effectiveFrom, row.estimatedRoyaltyPerSale]),
+    ).toEqual([
+      ["2026-07-01", "3.4000"],
+      ["2026-08-15", "3.6000"],
+    ]);
+    expect(history[0]!.amazonProfileId).toBe("amzn-profile-kdp-reads");
   });
 });

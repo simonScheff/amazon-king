@@ -16,11 +16,14 @@ import type {
   DashboardSummary,
   DataFreshnessResponse,
   FxSyncResult,
+  KdpHistory,
   KdpRoyaltyApplyInput,
   KdpRoyaltyApplyResult,
   KdpRoyaltyImport,
   KdpRoyaltyImportInput,
   KdpRoyaltyImportSummary,
+  KdpTransactionsPage,
+  KdpTransactionsQuery,
   MetricWindow,
   ProfileUpdate,
   Recommendation,
@@ -226,6 +229,21 @@ export interface ReadService {
     input: KdpRoyaltyApplyInput,
     meta: RequestMeta,
   ): Promise<KdpRoyaltyApplyResult>;
+  /**
+   * KDP sales history for the /kdp-history page: per book × marketplace
+   * monthly series (KDP units, ad-attributed units computed at query time,
+   * royalty-per-sale from effective-dated economics) plus fulfillment-time
+   * stats per marketplace.
+   */
+  getKdpHistory(workspaceId: string): Promise<KdpHistory>;
+  /**
+   * One page of verbatim KDP sale transactions for the per-sale browser,
+   * newest first, plus the filtered total across all pages.
+   */
+  listKdpTransactions(
+    workspaceId: string,
+    query: KdpTransactionsQuery,
+  ): Promise<KdpTransactionsPage>;
   listRecommendations(
     workspaceId: string,
     filter: RecommendationFilter,

@@ -34,6 +34,15 @@ export function isoDate(value: string | Date): string {
   return `${year}-${month}-${day}`;
 }
 
+/** Extract the user-entered cover image URL from a book's `cover_json` blob. */
+export function coverImageUrlOf(coverJson: unknown): string | null {
+  if (coverJson && typeof coverJson === "object" && "imageUrl" in coverJson) {
+    const url = (coverJson as { imageUrl?: unknown }).imageUrl;
+    if (typeof url === "string") return url;
+  }
+  return null;
+}
+
 /**
  * Campaign Manager URL for a profile in the Amazon Ads console, anchored on
  * the profile's entity id (`accountInfo.id` from the profiles API) so it

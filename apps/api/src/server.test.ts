@@ -642,3 +642,174 @@ describe("POST /api/search-terms/:term/negatives", () => {
     expect(changes.createSearchTermNegativesChangeSets).not.toHaveBeenCalled();
   });
 });
+
+describe("GET /api/kdp history and transactions", () => {
+  let app: FastifyInstance | null = null;
+  afterEach(async () => {
+    await app?.close();
+    app = null;
+  });
+
+  const HISTORY = {
+    series: [
+      {
+        bookId: "7",
+        title: "Tractor",
+        profileId: "amz-us",
+        countryCode: "US",
+        currency: "USD",
+        coverImageUrl: null,
+        months: [
+          {
+            month: "2026-08-01",
+            kdpStandardUnits: 3,
+            kdpExpandedUnits: 1,
+            adUnits: 5,
+            royaltyPerSale: "3.6000",
+          },
+        ],
+      },
+    ],
+    fulfillment: [
+      {
+        profileId: "amz-us",
+        countryCode: "US",
+        months: [
+          {
+            month: "2026-08-01",
+            medianDays: 1.5,
+            averageDays: 1.5,
+            standardUnits: 2,
+          },
+        ],
+      },
+    ],
+  };
+  const TRANSACTION = {
+    id: "11",
+    bookId: "7",
+    title: "Tractor",
+    profileId: "amz-us",
+    asin: "B0TRCUS001",
+    marketplace: "Amazon.com",
+    format: "paperback",
+    royaltyType: "60%",
+    transactionType: "Standard - Paperback",
+    orderDate: "2026-08-22",
+    royaltyDate: "2026-08-25",
+    netUnits: 1,
+    royalty: "3.50",
+    currency: "USD",
+  };
+
+  async function start(options: { authenticated?: boolean } = {}) {
+    const session = {
+      authenticate: vi.fn(async () =>
+        options.authenticated === false ? null : AUTH,
+      ),
+      verifyCsrf: vi.fn(() => true),
+      isRecentAuth: vi.fn(() => true),
+    } as unknown as SessionService;
+    const read = {
+      getKdpHistory: vi.fn(async () => HISTORY),
+      listKdpTransactions: vi.fn(async () => ({
+        transactions: [TRANSACTION],
+        total: 1,
+      })),
+    };
+    const services = {
+      session,
+      changes: {},
+      amazon: {},
+      read,
+    } as unknown as ApiServices;
+    app = await buildServer({
+      config: testConfig(),
+      logger: createLogger("test", { level: "silent" }),
+      services,
+    });
+    return { read };
+  }
+
+  it("returns the history payload for the workspace", async () => {
+    const { read } = await start();
+
+    const response = await app!.inject({
+      method: "GET",
+      url: "/api/kdp/history",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(HISTORY);
+    expect(read.getKdpHistory).toHaveBeenCalledWith("1");
+  });
+
+  it("requires a session", async () => {
+    const { read } = await start({ authenticated: false });
+
+    const historyResponse = await app!.inject({
+      method: "GET",
+      url: "/api/kdp/history",
+    });
+    const transactionsResponse = await app!.inject({
+      method: "GET",
+      url: "/api/kdp/transactions",
+    });
+
+    expect(historyResponse.statusCode).toBe(401);
+    expect(transactionsResponse.statusCode).toBe(401);
+    expect(read.getKdpHistory).not.toHaveBeenCalled();
+    expect(read.listKdpTransactions).not.toHaveBeenCalled();
+  });
+
+  it("parses the transaction filters and defaults the paging params", async () => {
+    const { read } = await start();
+
+    const response = await app!.inject({
+      method: "GET",
+      url: "/api/kdp/transactions?bookId=7&profileId=amz-us&month=2026-08-01",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      transactions: [TRANSACTION],
+      total: 1,
+    });
+    expect(read.listKdpTransactions).toHaveBeenCalledWith("1", {
+      bookId: "7",
+      profileId: "amz-us",
+      month: "2026-08-01",
+      limit: 500,
+      offset: 0,
+    });
+
+    const pagedResponse = await app!.inject({
+      method: "GET",
+      url: "/api/kdp/transactions?limit=50&offset=100",
+    });
+
+    expect(pagedResponse.statusCode).toBe(200);
+    expect(read.listKdpTransactions).toHaveBeenLastCalledWith("1", {
+      limit: 50,
+      offset: 100,
+    });
+  });
+
+  it("rejects an over-cap limit and a malformed month", async () => {
+    const { read } = await start();
+
+    const limitResponse = await app!.inject({
+      method: "GET",
+      url: "/api/kdp/transactions?limit=5000",
+    });
+    const monthResponse = await app!.inject({
+      method: "GET",
+      url: "/api/kdp/transactions?month=2026-08",
+    });
+
+    expect(limitResponse.statusCode).toBe(400);
+    expect(limitResponse.json().error.code).toBe("VALIDATION_ERROR");
+    expect(monthResponse.statusCode).toBe(400);
+    expect(read.listKdpTransactions).not.toHaveBeenCalled();
+  });
+});

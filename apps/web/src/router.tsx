@@ -27,6 +27,7 @@ import { SearchTermsPage } from "./routes/search-terms";
 import { SearchTermDetailPage } from "./routes/search-term-detail";
 import { NegativesPage } from "./routes/negatives";
 import { NegativeDetailPage } from "./routes/negative-detail";
+import { KdpHistoryPage } from "./routes/kdp-history";
 import { ChangesPage } from "./routes/changes";
 import {
   SETTINGS_TABS,
@@ -229,6 +230,18 @@ const negativeDetailRoute = createRoute({
   component: NegativeDetailPage,
 });
 
+const kdpHistoryRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/kdp-history",
+  // `?book=<bookId>` keeps the sales-mix book selector in the URL; bare
+  // /kdp-history sums units across all books.
+  validateSearch: (search: Record<string, unknown>): { book?: string } => {
+    const book = typeof search.book === "string" ? search.book.trim() : "";
+    return book !== "" ? { book } : {};
+  },
+  component: KdpHistoryPage,
+});
+
 const changesRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/changes",
@@ -281,6 +294,7 @@ const routeTree = rootRoute.addChildren([
     searchTermDetailRoute,
     negativesRoute,
     negativeDetailRoute,
+    kdpHistoryRoute,
     changesRoute,
     connectRoute,
     settingsRoute,

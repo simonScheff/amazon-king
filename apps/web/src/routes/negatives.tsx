@@ -51,7 +51,7 @@ type SortKey =
   | "profit"
   | "lastServed";
 
-type InsightFilter = "all" | "leaking" | "sold" | "catalog";
+type InsightFilter = "all" | "leaking" | "dormant" | "sold" | "catalog";
 
 function sortValue(row: NegativeListRow, key: SortKey): number | string | null {
   switch (key) {
@@ -123,12 +123,22 @@ export function NegativesPage() {
   const leakingCount = rows.filter(
     (row) => row.stillServingCampaignCount > 0,
   ).length;
+  const dormantCount = rows.filter(
+    (row) =>
+      row.blockingCampaignCount === 0 && row.stillServingCampaignCount === 0,
+  ).length;
   const soldCount = rows.filter((row) => row.before.orders > 0).length;
   const catalogCount = rows.filter((row) => row.catalogBookId !== null).length;
 
   const filteredRows = rows.filter((row) => {
     if (kindFilter && row.kind !== kindFilter) return false;
     if (insight === "leaking" && row.stillServingCampaignCount === 0) {
+      return false;
+    }
+    if (
+      insight === "dormant" &&
+      (row.blockingCampaignCount > 0 || row.stillServingCampaignCount > 0)
+    ) {
       return false;
     }
     if (insight === "sold" && row.before.orders === 0) return false;
@@ -223,6 +233,11 @@ export function NegativesPage() {
               active={insight === "leaking"}
               tone={leakingCount > 0 ? "warning" : undefined}
               onClick={() => setInsight("leaking")}
+            />
+            <InsightChip
+              label={`${formatCount(dormantCount)} dormant`}
+              active={insight === "dormant"}
+              onClick={() => setInsight("dormant")}
             />
             <InsightChip
               label={`${formatCount(soldCount)} used to sell`}
@@ -412,6 +427,16 @@ export function NegativesPage() {
                     </Td>
                     <Td className="text-right">
                       {formatCount(row.blockingCampaignCount)}
+                      {row.blockingCampaignCount === 0 &&
+                      row.pausedCampaignCount > 0 ? (
+                        <Badge
+                          tone="neutral"
+                          className="ml-1"
+                          title="Only carried by paused campaigns or paused negatives — not blocking anywhere right now."
+                        >
+                          Paused
+                        </Badge>
+                      ) : null}
                     </Td>
                     <Td className="text-right">
                       {row.stillServingCampaignCount > 0 ? (

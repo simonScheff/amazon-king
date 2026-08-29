@@ -62,6 +62,14 @@ const NegativesIcon = makeIcon(
     <path d="M8 12h8" />
   </>,
 );
+const KdpHistoryIcon = makeIcon(
+  <>
+    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" />
+    <path d="m9 7 2.5 2.5L15 6" />
+    <path d="M9 12.5h6" />
+  </>,
+);
 const ChangesIcon = makeIcon(
   <>
     <path d="M17 3h4v4" />
@@ -113,6 +121,7 @@ const navItems = [
   { to: "/campaigns", label: "Campaigns", Icon: CampaignsIcon },
   { to: "/search-terms", label: "Search terms", Icon: SearchTermsIcon },
   { to: "/negatives", label: "Negatives", Icon: NegativesIcon },
+  { to: "/kdp-history", label: "KDP history", Icon: KdpHistoryIcon },
   { to: "/changes", label: "Change center", Icon: ChangesIcon },
   { to: "/connect", label: "Connection", Icon: ConnectIcon },
   { to: "/settings", label: "Settings", Icon: SettingsIcon },

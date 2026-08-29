@@ -93,7 +93,8 @@ economics that were in force at the time.
 Instead of hand-calculating royalty per sale, you can recalibrate it from
 actuals once a month. Download the **Royalties Estimator** workbook (.xlsx)
 from your KDP dashboard for last month, then click **Import from KDP report**
-on **Settings → Books & economics**. The file is parsed in your browser and
+on **Settings → Books & economics** (the same button lives on
+**Settings → KDP imports**). The file is parsed in your browser and
 never leaves your own deployment.
 
 amazon-king derives a suggested royalty per copy per book and market from
@@ -118,6 +119,34 @@ KDP reports carry no ad attribution and arrive with a processing lag of
 several days, so this is a monthly recalibration ritual — download a few days
 into the new month — not a per-day truth. Per-day profit figures continue to
 come from your synced ads data valued with these economics.
+
+**Settings → KDP imports** keeps the operational record: every imported
+batch with its report period, file name, row and suggestion counts, status
+(**Applied** with the date, or **Not applied**), and when it was imported.
+
+## KDP history
+
+Every import also stores what it saw: monthly per-book, per-marketplace
+unit and royalty totals, plus the individual sale rows. Re-importing a month
+replaces that month's stored data, so overlapping files never double-count.
+The **KDP history** page in the sidebar turns that into four views:
+
+- **Royalty per sale — trend.** One line per book and market, drawn from
+  your effective-dated economics history. Each line is labeled with its own
+  currency — values are never converted or summed across markets.
+- **Sales mix by month.** Ad-attributed copies (from your synced ads data)
+  against the rest of what KDP recorded, per book. The two never align
+  perfectly — attribution windows and order dates differ — so the organic
+  bar is clamped at zero rather than going negative.
+- **Fulfillment time.** Median and average order-to-ship days per
+  marketplace, over standard-rate print sales only. Expanded-distribution
+  sales are excluded — Amazon doesn't print those, so their lag measures a
+  third party.
+- **Individual sales.** Every stored sale with book, marketplace, and month
+  filters and a ship-lag column — useful when one month's numbers look off.
+
+A skipped month simply shows as a gap; there is no catch-up requirement,
+because the last applied economics keep applying until the next import.
 
 ## What changes when economics are present
 

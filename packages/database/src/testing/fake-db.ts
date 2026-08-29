@@ -43,6 +43,8 @@ export interface FakeTables {
   searchTermExclusions: FakeRow[];
   fxRates: FakeRow[];
   kdpRoyaltyImports: FakeRow[];
+  kdpMonthlyBookSales: FakeRow[];
+  kdpSaleTransactions: FakeRow[];
 }
 
 function emptyTables(): FakeTables {
@@ -80,6 +82,8 @@ function emptyTables(): FakeTables {
     searchTermExclusions: [],
     fxRates: [],
     kdpRoyaltyImports: [],
+    kdpMonthlyBookSales: [],
+    kdpSaleTransactions: [],
   };
 }
 
@@ -95,6 +99,17 @@ interface Handler {
 
 function norm(sql: string): string {
   return sql.replace(/\s+/g, " ").trim();
+}
+
+/** Normalize a date column value (pg may hand back Date objects) to YYYY-MM-DD. */
+function dateOnly(value: unknown): string {
+  if (value instanceof Date) {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+  return String(value).slice(0, 10);
 }
 
 let idCounter = 1000;
@@ -449,6 +464,47 @@ export class FakeDb {
       ...overrides,
     };
     this.tables.kdpRoyaltyImports.push(row);
+    return row;
+  }
+
+  seedKdpMonthlyBookSale(overrides: Partial<FakeRow> = {}): FakeRow {
+    const row = {
+      id: nextId(),
+      workspace_id: "1",
+      import_id: "1",
+      book_id: "1",
+      profile_id: "1",
+      month: "2026-08-01",
+      standard_units: 3,
+      expanded_units: 1,
+      royalty: "10.2900",
+      currency: "USD",
+      ...overrides,
+    };
+    this.tables.kdpMonthlyBookSales.push(row);
+    return row;
+  }
+
+  seedKdpSaleTransaction(overrides: Partial<FakeRow> = {}): FakeRow {
+    const row = {
+      id: nextId(),
+      workspace_id: "1",
+      import_id: "1",
+      book_id: "1",
+      profile_id: "1",
+      asin: "B012345678",
+      marketplace: "Amazon.com",
+      format: "paperback",
+      royalty_type: "60%",
+      transaction_type: "Standard - Paperback",
+      order_date: "2026-08-20",
+      royalty_date: "2026-08-23",
+      net_units: 1,
+      royalty: "3.43",
+      currency: "USD",
+      ...overrides,
+    };
+    this.tables.kdpSaleTransactions.push(row);
     return row;
   }
 
@@ -1502,6 +1558,28 @@ export class FakeDb {
       },
 
       {
+        match: "delete from negative_keywords",
+        handle: (p) => {
+          const before = t.negativeKeywords.length;
+          t.negativeKeywords = t.negativeKeywords.filter(
+            (n) =>
+              !(n.profile_id === p[0] && n.amazon_negative_keyword_id === p[1]),
+          );
+          return { rows: [], rowCount: before - t.negativeKeywords.length };
+        },
+      },
+      {
+        match: "delete from negative_targets",
+        handle: (p) => {
+          const before = t.negativeTargets.length;
+          t.negativeTargets = t.negativeTargets.filter(
+            (n) =>
+              !(n.profile_id === p[0] && n.amazon_negative_target_id === p[1]),
+          );
+          return { rows: [], rowCount: before - t.negativeTargets.length };
+        },
+      },
+      {
         match: "and amazon_negative_keyword_id = $2",
         handle: (p) => {
           const row = t.negativeKeywords.find(
@@ -1798,6 +1876,42 @@ export class FakeDb {
         },
       },
       {
+        // listBooks (workspace filter) — must precede the getBook handler,
+        // whose match "from books b" would capture this query otherwise.
+        match: "b.workspace_id = $1 group by b.id",
+        handle: (p) =>
+          this.ok(
+            t.books
+              .filter((b) => b.workspace_id === p[0])
+              .sort((a, b) => Number(a.id) - Number(b.id))
+              .map((b) => ({
+                ...b,
+                profile_ids: t.bookProfileLinks
+                  .filter((l) => l.book_id === b.id && l.enabled === true)
+                  .map(
+                    (l) =>
+                      t.amazonProfiles.find((ap) => ap.id === l.profile_id)
+                        ?.profile_id,
+                  )
+                  .filter((id) => id !== undefined)
+                  .sort(),
+                marketplace_asins: t.bookProfileLinks
+                  .filter((l) => l.book_id === b.id && l.enabled === true)
+                  .map((l) => ({
+                    profileId: t.amazonProfiles.find(
+                      (ap) => ap.id === l.profile_id,
+                    )?.profile_id,
+                    asin: l.marketplace_asin,
+                  }))
+                  .sort((left, right) =>
+                    String(left.profileId).localeCompare(
+                      String(right.profileId),
+                    ),
+                  ),
+              })),
+          ),
+      },
+      {
         match: "from books b",
         handle: (p) =>
           this.ok(
@@ -1886,6 +2000,292 @@ export class FakeDb {
             t.kdpRoyaltyImports
               .filter((r) => r.workspace_id === p[0])
               .sort((a, b) => Number(b.id) - Number(a.id)),
+          ),
+      },
+
+      // -- kdp sales history ------------------------------------------------
+      {
+        match: "insert into kdp_monthly_book_sales",
+        handle: (p) => {
+          const existing = t.kdpMonthlyBookSales.find(
+            (row) =>
+              row.book_id === p[2] &&
+              row.profile_id === p[3] &&
+              dateOnly(row.month) === p[4],
+          );
+          // ON CONFLICT (book_id, profile_id, month) DO UPDATE: latest wins.
+          if (existing) {
+            existing.import_id = p[1];
+            existing.standard_units = p[5];
+            existing.expanded_units = p[6];
+            existing.royalty = p[7];
+            existing.currency = p[8];
+            return { rows: [], rowCount: 1 };
+          }
+          t.kdpMonthlyBookSales.push({
+            id: nextId(),
+            workspace_id: p[0],
+            import_id: p[1],
+            book_id: p[2],
+            profile_id: p[3],
+            month: p[4],
+            standard_units: p[5],
+            expanded_units: p[6],
+            royalty: p[7],
+            currency: p[8],
+          });
+          return { rows: [], rowCount: 1 };
+        },
+      },
+      {
+        match: "from kdp_monthly_book_sales where workspace_id = $1",
+        handle: (p) =>
+          this.ok(
+            t.kdpMonthlyBookSales
+              .filter((row) => row.workspace_id === p[0])
+              .sort(
+                (a, b) =>
+                  dateOnly(a.month).localeCompare(dateOnly(b.month)) ||
+                  String(a.book_id).localeCompare(
+                    String(b.book_id),
+                    undefined,
+                    {
+                      numeric: true,
+                    },
+                  ) ||
+                  String(a.profile_id).localeCompare(
+                    String(b.profile_id),
+                    undefined,
+                    { numeric: true },
+                  ),
+              ),
+          ),
+      },
+      {
+        match: "delete from kdp_sale_transactions",
+        handle: (p) => {
+          const months = p[1] as string[];
+          const kept = t.kdpSaleTransactions.filter(
+            (row) =>
+              !(
+                row.workspace_id === p[0] &&
+                months.includes(`${dateOnly(row.order_date).slice(0, 7)}-01`)
+              ),
+          );
+          const removed = t.kdpSaleTransactions.length - kept.length;
+          t.kdpSaleTransactions.splice(
+            0,
+            t.kdpSaleTransactions.length,
+            ...kept,
+          );
+          return { rows: [], rowCount: removed };
+        },
+      },
+      {
+        match: "insert into kdp_sale_transactions",
+        handle: (p) => {
+          t.kdpSaleTransactions.push({
+            id: nextId(),
+            workspace_id: p[0],
+            import_id: p[1],
+            book_id: p[2],
+            profile_id: p[3],
+            asin: p[4],
+            marketplace: p[5],
+            format: p[6],
+            royalty_type: p[7],
+            transaction_type: p[8],
+            order_date: p[9],
+            royalty_date: p[10],
+            net_units: p[11],
+            royalty: p[12],
+            currency: p[13],
+          });
+          return { rows: [], rowCount: 1 };
+        },
+      },
+      {
+        match: "select count(*)::int as total from kdp_sale_transactions",
+        handle: (p) =>
+          this.ok([
+            {
+              total: t.kdpSaleTransactions.filter(
+                (row) =>
+                  row.workspace_id === p[0] &&
+                  (p[1] === null || row.book_id === p[1]) &&
+                  (p[2] === null || row.profile_id === p[2]) &&
+                  (p[3] === null ||
+                    `${dateOnly(row.order_date).slice(0, 7)}-01` === p[3]),
+              ).length,
+            },
+          ]),
+      },
+      {
+        match:
+          "from kdp_sale_transactions where workspace_id = $1 and ($2::bigint",
+        handle: (p) =>
+          this.ok(
+            t.kdpSaleTransactions
+              .filter(
+                (row) =>
+                  row.workspace_id === p[0] &&
+                  (p[1] === null || row.book_id === p[1]) &&
+                  (p[2] === null || row.profile_id === p[2]) &&
+                  (p[3] === null ||
+                    `${dateOnly(row.order_date).slice(0, 7)}-01` === p[3]),
+              )
+              .sort(
+                (a, b) =>
+                  dateOnly(b.order_date).localeCompare(
+                    dateOnly(a.order_date),
+                  ) || Number(b.id) - Number(a.id),
+              )
+              .slice(
+                (p[5] as number) ?? 0,
+                ((p[5] as number) ?? 0) + (p[4] as number),
+              ),
+          ),
+      },
+      {
+        // Ad-attributed copies per linked book × profile × month:
+        // fact ad_id → ads.asin → book_profile_links, greatest() convention.
+        match: "from advertised_product_metrics_daily m join ads a",
+        handle: (p, db) => {
+          const totals = new Map<string, number>();
+          for (const m of t.advertisedProductMetricsDaily) {
+            const ad = t.ads.find(
+              (a) =>
+                a.profile_id === m.profile_id && a.amazon_ad_id === m.ad_id,
+            );
+            if (!ad) continue;
+            const link = t.bookProfileLinks.find(
+              (l) =>
+                l.profile_id === m.profile_id &&
+                l.marketplace_asin === ad.asin &&
+                l.enabled === true,
+            );
+            if (!link) continue;
+            const profile = t.amazonProfiles.find(
+              (ap) => ap.id === m.profile_id,
+            );
+            if (!profile || !db.profileForConnectionWorkspace(p[0], profile)) {
+              continue;
+            }
+            const month = `${dateOnly(m.metric_date).slice(0, 7)}-01`;
+            const copies = Math.max(
+              Number(m.units_sold_clicks14d ?? 0),
+              Number(m.purchases14d ?? 0),
+            );
+            const key = `${link.book_id} ${link.profile_id} ${month}`;
+            totals.set(key, (totals.get(key) ?? 0) + copies);
+          }
+          const rows = [...totals.entries()]
+            .map(([key, adUnits]) => {
+              const [book_id, profile_id, month] = key.split(" ") as [
+                string,
+                string,
+                string,
+              ];
+              return { book_id, profile_id, month, ad_units: String(adUnits) };
+            })
+            .sort((a, b) => a.month.localeCompare(b.month));
+          return this.ok(rows);
+        },
+      },
+      {
+        // Fulfillment lag per profile × month, standard-rate rows only.
+        match: "percentile_cont",
+        handle: (p) => {
+          const lagsByKey = new Map<string, number[]>();
+          const unitsByKey = new Map<string, number>();
+          for (const row of t.kdpSaleTransactions) {
+            if (row.workspace_id !== p[0]) continue;
+            if (row.profile_id === null) continue;
+            if (["40%", "50%"].includes(String(row.royalty_type))) continue;
+            if (
+              String(row.transaction_type)
+                .toLowerCase()
+                .startsWith("expanded distribution")
+            ) {
+              continue;
+            }
+            const month = `${dateOnly(row.order_date).slice(0, 7)}-01`;
+            const lag =
+              (Date.parse(dateOnly(row.royalty_date)) -
+                Date.parse(dateOnly(row.order_date))) /
+              86_400_000;
+            const key = `${row.profile_id} ${month}`;
+            const lags = lagsByKey.get(key);
+            if (lags) {
+              lags.push(lag);
+            } else {
+              lagsByKey.set(key, [lag]);
+            }
+            unitsByKey.set(
+              key,
+              (unitsByKey.get(key) ?? 0) + Number(row.net_units),
+            );
+          }
+          const rows = [...lagsByKey.entries()]
+            .map(([key, lags]) => {
+              const [profile_id, month] = key.split(" ") as [string, string];
+              const sorted = [...lags].sort((a, b) => a - b);
+              const rank = 0.5 * (sorted.length - 1);
+              const lower = Math.floor(rank);
+              const median =
+                sorted.length % 2 === 1
+                  ? sorted[lower]!
+                  : (sorted[lower]! + sorted[lower + 1]!) / 2;
+              const average =
+                sorted.reduce((sum, value) => sum + value, 0) / sorted.length;
+              return {
+                profile_id,
+                month,
+                median_days: median,
+                average_days: average,
+                standard_units: String(unitsByKey.get(key) ?? 0),
+              };
+            })
+            .sort((a, b) => a.month.localeCompare(b.month));
+          return this.ok(rows);
+        },
+      },
+      {
+        // Full effective-dated economics history of the workspace.
+        match: "order by be.book_id, be.profile_id, be.effective_from asc",
+        handle: (p) =>
+          this.ok(
+            t.bookEconomics
+              .filter(
+                (row) =>
+                  t.books.find((b) => b.id === row.book_id)?.workspace_id ===
+                  p[0],
+              )
+              .sort(
+                (a, b) =>
+                  String(a.book_id).localeCompare(
+                    String(b.book_id),
+                    undefined,
+                    {
+                      numeric: true,
+                    },
+                  ) ||
+                  String(a.profile_id).localeCompare(
+                    String(b.profile_id),
+                    undefined,
+                    { numeric: true },
+                  ) ||
+                  dateOnly(a.effective_from).localeCompare(
+                    dateOnly(b.effective_from),
+                  ) ||
+                  Number(a.id) - Number(b.id),
+              )
+              .map((row) => ({
+                ...row,
+                amazon_profile_id:
+                  t.amazonProfiles.find((ap) => ap.id === row.profile_id)
+                    ?.profile_id ?? null,
+              })),
           ),
       },
       {

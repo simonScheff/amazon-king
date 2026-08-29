@@ -356,6 +356,24 @@ export async function deleteMissingNegativeKeywords(
   return result.rowCount ?? 0;
 }
 
+/**
+ * Drop one mirrored negative after a verified removal apply. Deleting matches
+ * the snapshot-absence semantics of `deleteMissingNegativeKeywords`, so the
+ * read side stops showing it without waiting for the next structure sync.
+ */
+export async function deleteNegativeKeywordByAmazonId(
+  db: Db,
+  profileId: string,
+  amazonNegativeKeywordId: string,
+): Promise<number> {
+  const result = await db.query(
+    `delete from negative_keywords
+     where profile_id = $1 and amazon_negative_keyword_id = $2`,
+    [profileId, amazonNegativeKeywordId],
+  );
+  return result.rowCount ?? 0;
+}
+
 export interface NegativeTargetUpsertInput {
   profileId: string;
   campaignId: string; // internal campaigns.id
@@ -410,6 +428,20 @@ export async function deleteMissingNegativeTargets(
      where profile_id = $1
        and not (amazon_negative_target_id = any($2::text[]))`,
     [profileId, amazonNegativeTargetIds],
+  );
+  return result.rowCount ?? 0;
+}
+
+/** Same write-through as `deleteNegativeKeywordByAmazonId`, for negative ASIN targets. */
+export async function deleteNegativeTargetByAmazonId(
+  db: Db,
+  profileId: string,
+  amazonNegativeTargetId: string,
+): Promise<number> {
+  const result = await db.query(
+    `delete from negative_targets
+     where profile_id = $1 and amazon_negative_target_id = $2`,
+    [profileId, amazonNegativeTargetId],
   );
   return result.rowCount ?? 0;
 }

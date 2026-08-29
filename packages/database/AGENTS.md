@@ -103,8 +103,17 @@ To add a migration, use the `add-migration` skill.
   `deleteKdpSaleTransactionsForMonths` clears the covered months' transactions
   before the new file's rows are inserted, so overlapping files never
   double-count. Unlinked-ASIN transactions keep null `book_id`/`profile_id`.
-  The ad side of the sales mix is never stored here — it is computed at query
-  time from the fact tables.
+  Transactions carry `transaction_type` (migration 0021) because the
+  fulfillment stats exclude Expanded Distribution rows on the same
+  royalty-type + transaction-type classification the import uses.
+  `listKdpAdUnitsByBookMonth` computes the ad side of the sales mix at query
+  time from `advertised_product_metrics_daily` (fact ad_id → `ads.asin` →
+  `book_profile_links`, `greatest(units_sold_clicks14d, purchases14d)` copies)
+  — it is never snapshotted. `listKdpFulfillmentStats` uses `percentile_cont`
+  for the median lag per profile × month of order_date, standard-rate rows
+  only. The royalty trend reads `books.listBookEconomicsHistoryByWorkspace`
+  (every effective-dated row, `effective_from::text`) — never duplicated
+  storage.
 - The converting dashboard queries (`convertedDailyTotals`,
   `convertedDailySeries`, `convertedRoyaltySeries`, `convertedCountrySpend` in
   `repositories/dashboard.ts`) serve the `country=all` view: each fact is

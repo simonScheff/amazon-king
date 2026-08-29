@@ -1484,6 +1484,72 @@ describe("negative removal (re-include)", () => {
     );
   });
 
+  it("clears the mirrored negative and enqueues a structure sync after a verified removal", async () => {
+    const { db, profile } = setupRemoval();
+    db.seedNegativeTarget({
+      profile_id: profile.id,
+      campaign_id: "10",
+      amazon_negative_target_id: "neg-target-1",
+      expression_asin: "B0BLOCKED1",
+    });
+    const set = db.seedChangeSet({
+      profile_id: profile.id,
+      status: "previewed",
+    });
+    db.seedChangeAction({
+      change_set_id: set.id,
+      action_type: "remove_negative_target",
+      campaign_id: "10",
+      ad_group_id: null,
+      target_id: null,
+      search_term: "B0BLOCKED1",
+      before_value: null,
+      after_value: null,
+      amazon_entity_id: "neg-target-1",
+      before_state: {
+        scope: "campaign",
+        targetType: "ASIN_SAME_AS",
+        present: true,
+      },
+      after_state: {
+        scope: "campaign",
+        targetType: "ASIN_SAME_AS",
+        present: false,
+      },
+    });
+    const gateway = removalGateway({
+      syncCampaignStructure: vi
+        .fn()
+        .mockResolvedValueOnce(snapshotWithNegativeTarget(true))
+        .mockResolvedValueOnce(snapshotWithNegativeTarget(false)),
+      applyActions: vi.fn(
+        async (changeSet: {
+          actions: Array<{ actionId: string; kind: string }>;
+        }) =>
+          changeSet.actions.map((item) => ({
+            actionId: item.actionId,
+            status: "applied" as const,
+            code: "SUCCESS",
+          })),
+      ),
+    });
+    const service = removalService(db, gateway);
+
+    const applied = await service.applyChangeSet(
+      authFixture(),
+      set.id as string,
+      META,
+    );
+
+    expect(applied.actions[0]).toMatchObject({ status: "applied" });
+    // The write-through removed the mirrored row, and a structure sync was
+    // queued to reconcile anything else that drifted.
+    expect(db.tables.negativeTargets).toHaveLength(0);
+    expect(db.tables.jobQueue).toContainEqual(
+      expect.objectContaining({ type: "structure_sync" }),
+    );
+  });
+
   it("blocks the apply when the live negative target no longer matches", async () => {
     const { db, profile } = setupRemoval();
     const set = db.seedChangeSet({

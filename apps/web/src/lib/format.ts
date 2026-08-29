@@ -109,6 +109,15 @@ export function formatDateTime(iso: string | null | undefined): string {
   });
 }
 
+/** First-of-month ISO date ("2026-08-01") as a month label ("Aug 2026"). */
+export function formatMonth(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!dateOnly) return iso;
+  const d = new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, 1);
+  return d.toLocaleDateString("en-US", { year: "numeric", month: "short" });
+}
+
 /** Human label for a recommendation type enum value. */
 export function labelize(value: string): string {
   return value

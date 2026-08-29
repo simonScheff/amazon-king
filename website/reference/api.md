@@ -602,6 +602,76 @@ profile.
 
 ---
 
+## KDP royalty imports
+
+The import flow for a KDP Royalties Estimator workbook. The .xlsx is parsed
+in the browser; the API only ever sees normalized JSON rows. See
+[Book economics](/guide/book-economics#importing-royalty-from-a-kdp-report).
+
+### `POST /api/kdp/imports`
+
+Creates an import batch from browser-parsed rows and returns the derived
+royalty-per-copy suggestions.
+
+- **Auth:** session + CSRF. **Rate:** WRITE.
+- Body: `{ fileName, periodStart, periodEnd, rows: [...] }` — rows carry
+  `format`, `orderDate`, `royaltyDate`, `asin`, `title`, `marketplace`,
+  `royaltyType`, `transactionType`, `netUnits`, `royalty`, `currency`.
+- Response `201`: the batch with `suggestions` and `skipped` rows (with
+  reasons). Re-uploading the identical file replays the existing batch with
+  `200` and `alreadyExisted: true`.
+
+A new (non-replayed) import also stores the sales history: monthly per-book ×
+per-marketplace aggregates, and the verbatim sale rows (covered months are
+replaced, so overlapping files never double-count).
+
+### `GET /api/kdp/imports`
+
+- **Auth:** session.
+- Response `200`: recent batches (summaries only — period, file, row and
+  suggestion counts, `appliedAt`).
+
+### `POST /api/kdp/imports/:id/apply`
+
+Writes the selected suggestions into effective-dated `book_economics`,
+preserving every other field from the book's latest economics row.
+
+- **Auth:** session + CSRF. **Rate:** WRITE.
+- Body: `{ selections: [{ bookId, profileId }], effectiveFrom? }` (default:
+  the apply date).
+- Response `200`: `{ applied, skipped }` — `skipped` lists selections refused
+  with a reason (`unknown_selection`, `no_existing_economics`). Errors:
+  `409 KDP_IMPORT_ALREADY_APPLIED` on a second apply.
+
+### `GET /api/kdp/history`
+
+Monthly sales history per book × marketplace, feeding the KDP history page.
+
+- **Auth:** session.
+- Response `200`: `{ series, fulfillment }`. Each series entry is
+  `{ bookId, title, profileId, countryCode, currency, coverImageUrl, months }`
+  with months of `{ month, kdpStandardUnits, kdpExpandedUnits, adUnits,
+  royaltyPerSale }` — `adUnits` computed at query time from the synced
+  advertised-product facts (never snapshotted), `royaltyPerSale` the
+  effective-dated economics value in force at month end (`null` when none).
+  `fulfillment` holds per-marketplace months of
+  `{ month, medianDays, averageDays, standardUnits }` — order-to-ship days
+  over standard-rate sales only.
+
+### `GET /api/kdp/transactions?bookId&profileId&month&limit&offset`
+
+The individual stored sale rows, newest order date first.
+
+- **Auth:** session.
+- `limit` defaults to 500, max 1000; `offset` defaults to 0. All filters
+  optional.
+- Response `200`: `{ transactions, total }` — one page of transaction rows
+  (title joined in when the ASIN is linked to a catalog book; unlinked rows
+  carry null book/profile ids) plus the total row count matching the filters
+  across all pages.
+
+---
+
 ## Recommendations
 
 ### `GET /api/recommendations?type&state&books`

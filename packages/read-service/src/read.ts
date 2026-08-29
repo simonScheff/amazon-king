@@ -47,6 +47,7 @@ import {
 } from "@amazon-king/database";
 import { z } from "zod";
 import { ApiError, conflict, notFound } from "./errors.js";
+import { getKdpHistory, listKdpTransactions } from "./kdp-history.js";
 import {
   applyKdpRoyaltyImport,
   createKdpRoyaltyImport,
@@ -54,6 +55,7 @@ import {
 } from "./kdp-royalty.js";
 import {
   amazonConsoleUrl,
+  coverImageUrlOf,
   isoDate,
   isoDateTime,
   toContractAuditEvent,
@@ -89,15 +91,6 @@ const DAY_MS = 86_400_000;
  * every window before it can be raised again.
  */
 const REJECTION_SUPPRESSION_DAYS = 60;
-
-/** Extract the user-entered cover image URL from a book's `cover_json` blob. */
-function coverImageUrlOf(coverJson: unknown): string | null {
-  if (coverJson && typeof coverJson === "object" && "imageUrl" in coverJson) {
-    const url = (coverJson as { imageUrl?: unknown }).imageUrl;
-    if (typeof url === "string") return url;
-  }
-  return null;
-}
 
 /**
  * Inputs `evaluateHighCtrPoorConversion` stores. Only the measurements the
@@ -2382,6 +2375,14 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
 
     async applyKdpRoyaltyImport(auth, importId, input, meta) {
       return applyKdpRoyaltyImport(deps, auth, importId, input, meta);
+    },
+
+    async getKdpHistory(workspaceId) {
+      return getKdpHistory(db, workspaceId);
+    },
+
+    async listKdpTransactions(workspaceId, query) {
+      return listKdpTransactions(db, workspaceId, query);
     },
 
     async listRecommendations(workspaceId, filter) {

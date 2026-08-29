@@ -25,9 +25,11 @@ import {
   dashboardSummarySchema,
   dataFreshnessResponseSchema,
   fxSyncResultSchema,
+  kdpHistorySchema,
   kdpRoyaltyApplyResultSchema,
   kdpRoyaltyImportSchema,
   kdpRoyaltyImportSummarySchema,
+  kdpTransactionsPageSchema,
   maxCpcChangeSetResultSchema,
   recommendationSchema,
   searchTermDetailSchema,
@@ -1016,6 +1018,53 @@ export function useKdpRoyaltyImports() {
   });
 }
 
+/**
+ * Phase-2 sales history for the /kdp-history page (docs/kdp-royalty-import-plan.md
+ * §6): per book × market monthly series plus fulfillment-time stats. Whole
+ * history is one query at single-owner scale.
+ */
+export function useKdpHistory() {
+  return useQuery({
+    queryKey: ["kdp-history"],
+    queryFn: () => apiFetch("/api/kdp/history", { schema: kdpHistorySchema }),
+  });
+}
+
+/** Page size of the per-sale transaction browser on /kdp-history. */
+export const KDP_SALES_PAGE_SIZE = 50;
+
+/** Per-sale transaction browser. Query key carries the filters and page. */
+export function useKdpSaleTransactions(filters: {
+  bookId?: string;
+  profileId?: string;
+  month?: string;
+  /** Zero-based page index; each page holds KDP_SALES_PAGE_SIZE rows. */
+  page?: number;
+}) {
+  const { bookId, profileId, month, page = 0 } = filters;
+  return useQuery({
+    queryKey: [
+      "kdp-sale-transactions",
+      bookId ?? null,
+      profileId ?? null,
+      month ?? null,
+      page,
+    ],
+    queryFn: () =>
+      apiFetch("/api/kdp/transactions", {
+        query: {
+          bookId,
+          profileId,
+          month,
+          limit: KDP_SALES_PAGE_SIZE,
+          offset: page * KDP_SALES_PAGE_SIZE,
+        },
+        schema: kdpTransactionsPageSchema,
+      }),
+    placeholderData: keepPreviousData,
+  });
+}
+
 export function useCreateKdpRoyaltyImport() {
   const qc = useQueryClient();
   return useMutation({
@@ -1028,6 +1077,8 @@ export function useCreateKdpRoyaltyImport() {
     onSuccess: async () => {
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["kdp-royalty-imports"] }),
+        qc.invalidateQueries({ queryKey: ["kdp-history"] }),
+        qc.invalidateQueries({ queryKey: ["kdp-sale-transactions"] }),
         qc.invalidateQueries({ queryKey: ["audit-events"] }),
       ]);
     },
@@ -1047,6 +1098,7 @@ export function useApplyKdpRoyaltyImport() {
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["books"] }),
         qc.invalidateQueries({ queryKey: ["kdp-royalty-imports"] }),
+        qc.invalidateQueries({ queryKey: ["kdp-history"] }),
         qc.invalidateQueries({ queryKey: ["audit-events"] }),
         qc.invalidateQueries({ queryKey: ["dashboard-summary"] }),
       ]);

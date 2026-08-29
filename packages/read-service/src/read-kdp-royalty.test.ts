@@ -389,3 +389,165 @@ describe("kdp royalty import listing", () => {
     expect(list[0]!.periodEnd).toBe("2026-08-25");
   });
 });
+
+describe("kdp sales history population", () => {
+  it("populates monthly aggregates and verbatim transactions on a new import", async () => {
+    const db = new FakeDb();
+    seedCatalog(db);
+    const service = makeService(db);
+
+    await service.createKdpRoyaltyImport(
+      auth,
+      input([
+        // August: two standard sales + one expanded-distribution sale.
+        row(),
+        row({ royalty: "3.50" }),
+        row({
+          royaltyType: "40%",
+          transactionType: "Expanded Distribution Channels",
+          royalty: "1.10",
+        }),
+        // September: one standard sale → its own monthly row.
+        row({ orderDate: "2026-09-02", royaltyDate: "2026-09-05" }),
+      ]),
+      meta,
+    );
+
+    expect(db.tables.kdpMonthlyBookSales).toEqual([
+      expect.objectContaining({
+        book_id: "b1",
+        profile_id: "p1",
+        month: "2026-08-01",
+        standard_units: 2,
+        expanded_units: 1,
+        royalty: "6.93",
+        currency: "USD",
+      }),
+      expect.objectContaining({
+        month: "2026-09-01",
+        standard_units: 1,
+        expanded_units: 0,
+        royalty: "3.43",
+      }),
+    ]);
+    expect(db.tables.kdpSaleTransactions).toHaveLength(4);
+    expect(
+      db.tables.kdpSaleTransactions.every(
+        (tx) => tx.book_id === "b1" && tx.profile_id === "p1",
+      ),
+    ).toBe(true);
+    expect(db.tables.kdpSaleTransactions[2]).toMatchObject({
+      royalty_type: "40%",
+      transaction_type: "Expanded Distribution Channels",
+    });
+  });
+
+  it("records a monthly row with zero royalty for a month of only expanded rows", async () => {
+    const db = new FakeDb();
+    seedCatalog(db);
+    const service = makeService(db);
+
+    const result = await service.createKdpRoyaltyImport(
+      auth,
+      input([
+        row({
+          royaltyType: "40%",
+          transactionType: "Expanded Distribution Channels",
+          royalty: "1.10",
+        }),
+      ]),
+      meta,
+    );
+
+    expect(result.skipped[0]!.reason).toBe("no_standard_rows");
+    expect(db.tables.kdpMonthlyBookSales).toEqual([
+      expect.objectContaining({
+        month: "2026-08-01",
+        standard_units: 0,
+        expanded_units: 1,
+        royalty: "0",
+      }),
+    ]);
+  });
+
+  it("keeps linked ids on transactions of a currency-mismatch group, without monthly rows", async () => {
+    const db = new FakeDb();
+    seedCatalog(db);
+    const service = makeService(db);
+
+    await service.createKdpRoyaltyImport(
+      auth,
+      input([
+        row({ currency: "EUR" }), // currency_mismatch, but the ASIN is linked
+        row({ asin: "B0UNKNOWN1" }), // unlinked ASIN
+      ]),
+      meta,
+    );
+
+    expect(db.tables.kdpMonthlyBookSales).toHaveLength(0);
+    expect(db.tables.kdpSaleTransactions).toHaveLength(2);
+    expect(db.tables.kdpSaleTransactions[0]).toMatchObject({
+      book_id: "b1",
+      profile_id: "p1",
+    });
+    expect(db.tables.kdpSaleTransactions[1]).toMatchObject({
+      book_id: null,
+      profile_id: null,
+      asin: "B0UNKNOWN1",
+    });
+  });
+
+  it("does not re-populate history on a replayed upload", async () => {
+    const db = new FakeDb();
+    seedCatalog(db);
+    const service = makeService(db);
+    const payload = input([row()]);
+
+    await service.createKdpRoyaltyImport(auth, payload, meta);
+    const second = await service.createKdpRoyaltyImport(auth, payload, meta);
+
+    expect(second.alreadyExisted).toBe(true);
+    expect(db.tables.kdpMonthlyBookSales).toHaveLength(1);
+    expect(db.tables.kdpSaleTransactions).toHaveLength(1);
+  });
+
+  it("replaces a month's history when a different file covers it again", async () => {
+    const db = new FakeDb();
+    seedCatalog(db);
+    const service = makeService(db);
+
+    // Partial-month file.
+    await service.createKdpRoyaltyImport(
+      auth,
+      input([row({ orderDate: "2026-08-10", royaltyDate: "2026-08-12" })]),
+      meta,
+    );
+    // Later full-month file: three sales, one of them in September.
+    await service.createKdpRoyaltyImport(
+      auth,
+      input([
+        row(),
+        row({ royalty: "3.50" }),
+        row({ orderDate: "2026-09-01", royaltyDate: "2026-09-04" }),
+      ]),
+      meta,
+    );
+
+    // The August monthly row is overwritten by the newer import; the
+    // September row comes only from the second file.
+    expect(db.tables.kdpMonthlyBookSales).toHaveLength(2);
+    const august = db.tables.kdpMonthlyBookSales.find(
+      (entry) => entry.month === "2026-08-01",
+    )!;
+    expect(august).toMatchObject({ standard_units: 2, royalty: "6.93" });
+    // August's transactions were deleted before re-insert: the partial
+    // file's 2026-08-10 row is gone, not duplicated.
+    const augustTransactions = db.tables.kdpSaleTransactions.filter((tx) =>
+      String(tx.order_date).startsWith("2026-08"),
+    );
+    expect(augustTransactions).toHaveLength(2);
+    expect(
+      augustTransactions.some((tx) => tx.order_date === "2026-08-10"),
+    ).toBe(false);
+  });
+});

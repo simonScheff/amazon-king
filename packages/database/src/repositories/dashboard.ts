@@ -46,8 +46,11 @@ function toTotals(row: RawTotals): TotalsRow {
  * imported before it; since Amazon never reports fewer units than orders,
  * taking the greater of the two degrades to orders on those rows instead of
  * reporting no royalty at all.
+ *
+ * Exported for the other browser-facing per-copy queries (KDP sales history)
+ * so the convention cannot drift.
  */
-function royaltyCopies(alias: string): string {
+export function royaltyCopies(alias: string): string {
   return `greatest(${alias}.units_sold_clicks14d, ${alias}.purchases14d)`;
 }
 

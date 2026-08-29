@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { coverImageUrlSchema } from "./books.js";
 import {
   currencyCodeSchema,
   decimalStringSchema,
@@ -143,3 +144,112 @@ export const kdpRoyaltyApplyResultSchema = z.object({
   skipped: z.array(kdpRoyaltyApplySkipSchema),
 });
 export type KdpRoyaltyApplyResult = z.infer<typeof kdpRoyaltyApplyResultSchema>;
+
+/**
+ * GET /api/kdp/history — phase-2 sales history for the /kdp-history page
+ * (docs/kdp-royalty-import-plan.md §6): per book × marketplace monthly series
+ * for the sales-mix and royalty-trend charts, plus fulfillment-time stats.
+ * KDP units come from the stored monthly aggregates; ad units are computed
+ * from the fact tables at query time (decision 11); royaltyPerSale is the
+ * effective-dated book_economics value in effect for that month (decision 10
+ * — read from history, never duplicated). Each series is single-currency by
+ * construction.
+ */
+
+/** One month of a book × marketplace history series. */
+export const kdpHistoryMonthSchema = z.object({
+  /** First of the month (ISO date). */
+  month: isoDateSchema,
+  /** KDP standard-rate net units (can go negative on refund-heavy months). */
+  kdpStandardUnits: z.number().int(),
+  /** KDP expanded-distribution net units. */
+  kdpExpandedUnits: z.number().int(),
+  /** Ad-attributed copies on the 14-day click-attribution window. */
+  adUnits: z.number().int().nonnegative(),
+  /**
+   * estimated_royalty_per_sale in effect at the end of the month; null when
+   * no economics row covered it.
+   */
+  royaltyPerSale: nonNegativeDecimalStringSchema.nullable(),
+});
+export type KdpHistoryMonth = z.infer<typeof kdpHistoryMonthSchema>;
+
+export const kdpHistorySeriesSchema = z.object({
+  bookId: z.string(),
+  title: z.string(),
+  /** Amazon Ads profile id. */
+  profileId: z.string(),
+  countryCode: z.string().length(2),
+  currency: currencyCodeSchema,
+  coverImageUrl: coverImageUrlSchema.nullable(),
+  months: z.array(kdpHistoryMonthSchema),
+});
+export type KdpHistorySeries = z.infer<typeof kdpHistorySeriesSchema>;
+
+/** One month of fulfillment time (order → ship) for one marketplace. */
+export const kdpFulfillmentMonthSchema = z.object({
+  month: isoDateSchema,
+  /** Median royalty_date − order_date in days (percentile_cont; fractional). */
+  medianDays: z.number().nonnegative(),
+  averageDays: z.number().nonnegative(),
+  /** Standard-rate net units the stats are computed over. */
+  standardUnits: z.number().int(),
+});
+export type KdpFulfillmentMonth = z.infer<typeof kdpFulfillmentMonthSchema>;
+
+export const kdpFulfillmentSeriesSchema = z.object({
+  /** Amazon Ads profile id. */
+  profileId: z.string(),
+  countryCode: z.string().length(2),
+  months: z.array(kdpFulfillmentMonthSchema),
+});
+export type KdpFulfillmentSeries = z.infer<typeof kdpFulfillmentSeriesSchema>;
+
+export const kdpHistorySchema = z.object({
+  series: z.array(kdpHistorySeriesSchema),
+  fulfillment: z.array(kdpFulfillmentSeriesSchema),
+});
+export type KdpHistory = z.infer<typeof kdpHistorySchema>;
+
+/** GET /api/kdp/transactions query params (per-sale browser). */
+export const kdpTransactionsQuerySchema = z.object({
+  bookId: z.string().min(1).optional(),
+  /** Amazon Ads profile id. */
+  profileId: z.string().min(1).optional(),
+  /** First-of-month ISO date; matches on order_date's month. */
+  month: isoDateSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(1000).default(500),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type KdpTransactionsQuery = z.infer<typeof kdpTransactionsQuerySchema>;
+
+/** One stored KDP sale transaction, newest order date first. */
+export const kdpSaleTransactionSchema = z.object({
+  id: z.string(),
+  /** Null when the row's ASIN is not linked to a catalog book/profile. */
+  bookId: z.string().nullable(),
+  /** Catalog book title when linked; null for unlinked rows. */
+  title: z.string().nullable(),
+  /** Amazon Ads profile id when linked; null for unlinked rows. */
+  profileId: z.string().nullable(),
+  asin: z.string(),
+  marketplace: z.string(),
+  format: kdpRoyaltyRowFormatSchema,
+  royaltyType: z.string(),
+  transactionType: z.string(),
+  orderDate: isoDateSchema,
+  royaltyDate: isoDateSchema,
+  netUnits: z.number().int(),
+  /** Signed (refunds are negative), native currency. */
+  royalty: decimalStringSchema,
+  currency: currencyCodeSchema,
+});
+export type KdpSaleTransaction = z.infer<typeof kdpSaleTransactionSchema>;
+
+/** GET /api/kdp/transactions response: one page plus the filtered total. */
+export const kdpTransactionsPageSchema = z.object({
+  transactions: z.array(kdpSaleTransactionSchema),
+  /** Total rows matching the filters, across all pages. */
+  total: z.number().int().nonnegative(),
+});
+export type KdpTransactionsPage = z.infer<typeof kdpTransactionsPageSchema>;

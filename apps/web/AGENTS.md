@@ -165,10 +165,15 @@ on either screen.
 
 ## Settings page
 
-`src/routes/settings.tsx` is split into four URL-backed tabs
-(`?tab=profiles|books|asins|audit`, validated in `src/router.tsx`):
-profiles & sync, books & economics, new-ASIN identification, and the audit
-log. Tab badges surface outstanding setup work (unconfigured economics, new
+`src/routes/settings.tsx` is split into five URL-backed tabs
+(`?tab=profiles|books|kdp|asins|audit`, validated in `src/router.tsx`):
+profiles & sync, books & economics, KDP imports, new-ASIN identification,
+and the audit log. The KDP imports tab is the operational surface for the
+KDP royalty import: the same **Import from KDP report** button as on Books &
+economics, plus the read-only import log (period, file, row and suggestion
+counts, Applied/Not applied status, imported date) — rows do not link to a
+batch review because `GET /api/kdp/imports` returns summaries only.
+Tab badges surface outstanding setup work (unconfigured economics, new
 ASINs). The profiles tab leads with the Workspace card (display currency plus
 the FX rates status row and its **Sync rates now** manual trigger — see the
 FX section above) and carries the **Excluded search terms** card: the
@@ -188,7 +193,34 @@ shows the derived royalty-per-copy suggestions with per-row checkboxes (low
 evidence and >15% deviation are badge-flagged; books without economics are
 disabled), the skipped-row reasons, and an effective-from date. Apply goes
 through `useApplyKdpRoyaltyImport` and only ever changes royalty per sale.
-The import log UI is phase 2 of `docs/kdp-royalty-import-plan.md`.
+The same button plus the import log also live on the KDP imports tab (above).
+
+## KDP history page
+
+`src/routes/kdp-history.tsx` (`/kdp-history`, sidebar "KDP history" between
+Negatives and Change center) is the analytics surface for KDP royalty
+imports (phase 2 of `docs/kdp-royalty-import-plan.md`, decision 10). It shows
+the royalty-per-sale trend (one line per book × market, each labeled with
+its own currency — lines are never converted or summed) rendered as gradient
+areas with the y-axis zoomed to the data range, compact legend chips, and a
+latest-value stat tile per series with the month-over-month delta; the monthly
+sales-mix stacked bars (ad `#a078ff` vs. organic `#71717a`, organic clamped
+≥ 0, URL-backed `?book=` selector), the fulfillment-time card (median and
+average order→ship days per marketplace, standard-rate sales only), and the
+individual-sales transaction browser (book/marketplace/month filters plus a
+computed ship-lag column). The empty state links to Settings.
+
+Data comes from `useKdpHistory` (key `["kdp-history"]` →
+`GET /api/kdp/history`) and `useKdpSaleTransactions` (key
+`["kdp-sale-transactions", bookId, profileId, month, page]` →
+`GET /api/kdp/transactions`). The transaction browser is server-side
+paginated at `KDP_SALES_PAGE_SIZE` (50) rows: the hook sends
+`limit`/`offset`, the API answers `{ transactions, total }`, and the card
+renders Previous/Next controls once the filtered total exceeds one page —
+changing any filter resets to page 0. Ad units are computed at query time from
+advertised-product facts via the linked ASIN — never snapshotted — so a
+re-synced ad account rewrites the mix. The import create/apply mutations
+invalidate both keys.
 
 ## New-campaign wizard
 
@@ -293,7 +325,11 @@ exists (its `useCreateSearchTermNegatives` hook remains) but no longer has a
 UI entry point.
 
 `/negatives` (`src/routes/negatives.tsx`) is the workspace inventory of synced
-negative keywords and product ASINs. `/negatives/$kind/$value`
+negative keywords and product ASINs. A Blocking count of 0 always means the
+negative is dormant — carried only by paused campaigns or paused negatives —
+so the cell adds a **Paused** badge with that explanation (the API's
+`pausedCampaignCount` disambiguates it), and the **dormant** insight chip
+filters to rows where nothing blocks and nothing serves. `/negatives/$kind/$value`
 (`src/routes/negative-detail.tsx`, `kind` is `keyword` | `product`) is the
 working view: search-term evidence for that value plus two campaign tables —
 "Negative applied on" (campaigns carrying the negative, with a **This term**

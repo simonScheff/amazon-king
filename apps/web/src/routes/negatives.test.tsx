@@ -197,6 +197,33 @@ describe("NegativesPage", () => {
     expect(rowTexts()).toEqual(["B0CATALOG1"]);
   });
 
+  it("flags negatives only paused campaigns carry and filters dormant rows", () => {
+    mocks.useNegatives.mockReturnValue({
+      isPending: false,
+      error: null,
+      data: [
+        negative("free books", {
+          blockingCampaignCount: 1,
+          stillServingCampaignCount: 1,
+        }),
+        negative("plane colouring book", {
+          blockingCampaignCount: 0,
+          pausedCampaignCount: 1,
+          stillServingCampaignCount: 0,
+        }),
+      ],
+    });
+    render(<NegativesPage />);
+
+    expect(screen.getByText("Paused")).toHaveAttribute(
+      "title",
+      "Only carried by paused campaigns or paused negatives — not blocking anywhere right now.",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "1 dormant" }));
+    expect(rowTexts()).toEqual(["plane colouring book"]);
+  });
+
   it("filters keywords vs products", () => {
     const navigate = vi.fn();
     mocks.useNavigate.mockReturnValue(navigate);
