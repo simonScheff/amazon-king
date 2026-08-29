@@ -391,7 +391,7 @@ describe("kdp royalty import listing", () => {
 });
 
 describe("kdp sales history population", () => {
-  it("populates monthly aggregates and verbatim transactions on a new import", async () => {
+  it("populates verbatim transactions and stores the report rows on a new import", async () => {
     const db = new FakeDb();
     seedCatalog(db);
     const service = makeService(db);
@@ -399,7 +399,6 @@ describe("kdp sales history population", () => {
     await service.createKdpRoyaltyImport(
       auth,
       input([
-        // August: two standard sales + one expanded-distribution sale.
         row(),
         row({ royalty: "3.50" }),
         row({
@@ -407,29 +406,11 @@ describe("kdp sales history population", () => {
           transactionType: "Expanded Distribution Channels",
           royalty: "1.10",
         }),
-        // September: one standard sale → its own monthly row.
         row({ orderDate: "2026-09-02", royaltyDate: "2026-09-05" }),
       ]),
       meta,
     );
 
-    expect(db.tables.kdpMonthlyBookSales).toEqual([
-      expect.objectContaining({
-        book_id: "b1",
-        profile_id: "p1",
-        month: "2026-08-01",
-        standard_units: 2,
-        expanded_units: 1,
-        royalty: "6.93",
-        currency: "USD",
-      }),
-      expect.objectContaining({
-        month: "2026-09-01",
-        standard_units: 1,
-        expanded_units: 0,
-        royalty: "3.43",
-      }),
-    ]);
     expect(db.tables.kdpSaleTransactions).toHaveLength(4);
     expect(
       db.tables.kdpSaleTransactions.every(
@@ -440,37 +421,11 @@ describe("kdp sales history population", () => {
       royalty_type: "40%",
       transaction_type: "Expanded Distribution Channels",
     });
+    // The stored rows are what scripts/rebuild-kdp-history.ts replays.
+    expect(db.tables.kdpRoyaltyImports[0]!.rows).toHaveLength(4);
   });
 
-  it("records a monthly row with zero royalty for a month of only expanded rows", async () => {
-    const db = new FakeDb();
-    seedCatalog(db);
-    const service = makeService(db);
-
-    const result = await service.createKdpRoyaltyImport(
-      auth,
-      input([
-        row({
-          royaltyType: "40%",
-          transactionType: "Expanded Distribution Channels",
-          royalty: "1.10",
-        }),
-      ]),
-      meta,
-    );
-
-    expect(result.skipped[0]!.reason).toBe("no_standard_rows");
-    expect(db.tables.kdpMonthlyBookSales).toEqual([
-      expect.objectContaining({
-        month: "2026-08-01",
-        standard_units: 0,
-        expanded_units: 1,
-        royalty: "0",
-      }),
-    ]);
-  });
-
-  it("keeps linked ids on transactions of a currency-mismatch group, without monthly rows", async () => {
+  it("keeps linked ids on transactions of skipped groups", async () => {
     const db = new FakeDb();
     seedCatalog(db);
     const service = makeService(db);
@@ -484,7 +439,6 @@ describe("kdp sales history population", () => {
       meta,
     );
 
-    expect(db.tables.kdpMonthlyBookSales).toHaveLength(0);
     expect(db.tables.kdpSaleTransactions).toHaveLength(2);
     expect(db.tables.kdpSaleTransactions[0]).toMatchObject({
       book_id: "b1",
@@ -507,47 +461,66 @@ describe("kdp sales history population", () => {
     const second = await service.createKdpRoyaltyImport(auth, payload, meta);
 
     expect(second.alreadyExisted).toBe(true);
-    expect(db.tables.kdpMonthlyBookSales).toHaveLength(1);
     expect(db.tables.kdpSaleTransactions).toHaveLength(1);
   });
 
-  it("replaces a month's history when a different file covers it again", async () => {
+  it("merges an overlapping later file instead of replacing the month", async () => {
     const db = new FakeDb();
     seedCatalog(db);
     const service = makeService(db);
 
-    // Partial-month file.
+    // Partial August file.
     await service.createKdpRoyaltyImport(
       auth,
       input([row({ orderDate: "2026-08-10", royaltyDate: "2026-08-12" })]),
       meta,
     );
-    // Later full-month file: three sales, one of them in September.
+    // Later file: two August sales plus a July-order tail whose royalty
+    // posted in August (every KDP monthly file carries such a tail).
     await service.createKdpRoyaltyImport(
       auth,
       input([
         row(),
         row({ royalty: "3.50" }),
-        row({ orderDate: "2026-09-01", royaltyDate: "2026-09-04" }),
+        row({ orderDate: "2026-07-31", royaltyDate: "2026-08-02" }),
       ]),
       meta,
     );
 
-    // The August monthly row is overwritten by the newer import; the
-    // September row comes only from the second file.
-    expect(db.tables.kdpMonthlyBookSales).toHaveLength(2);
-    const august = db.tables.kdpMonthlyBookSales.find(
-      (entry) => entry.month === "2026-08-01",
-    )!;
-    expect(august).toMatchObject({ standard_units: 2, royalty: "6.93" });
-    // August's transactions were deleted before re-insert: the partial
-    // file's 2026-08-10 row is gone, not duplicated.
-    const augustTransactions = db.tables.kdpSaleTransactions.filter((tx) =>
-      String(tx.order_date).startsWith("2026-08"),
-    );
-    expect(augustTransactions).toHaveLength(2);
+    // Every row of both files survives; nothing is deleted or duplicated.
+    expect(db.tables.kdpSaleTransactions).toHaveLength(4);
     expect(
-      augustTransactions.some((tx) => tx.order_date === "2026-08-10"),
-    ).toBe(false);
+      db.tables.kdpSaleTransactions.some(
+        (tx) => tx.order_date === "2026-08-10",
+      ),
+    ).toBe(true);
+    expect(
+      db.tables.kdpSaleTransactions.some(
+        (tx) => tx.order_date === "2026-07-31",
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps true duplicate rows with their multiplicity", async () => {
+    const db = new FakeDb();
+    seedCatalog(db);
+    const service = makeService(db);
+
+    // Two identical one-copy sales on the same day (observed in real KDP
+    // files) are two transactions, not one.
+    await service.createKdpRoyaltyImport(auth, input([row(), row()]), meta);
+    expect(db.tables.kdpSaleTransactions).toHaveLength(2);
+
+    // A later file that reports the same day again replaces the matching
+    // multiset with its own: the two identical rows plus a new sale.
+    await service.createKdpRoyaltyImport(
+      auth,
+      input([row(), row(), row({ royalty: "3.50" })]),
+      meta,
+    );
+    expect(db.tables.kdpSaleTransactions).toHaveLength(3);
+    expect(
+      db.tables.kdpSaleTransactions.filter((tx) => tx.royalty === "3.43"),
+    ).toHaveLength(2);
   });
 });

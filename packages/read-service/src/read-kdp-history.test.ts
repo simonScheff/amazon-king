@@ -83,21 +83,46 @@ describe("kdp history", () => {
   it("returns per-book monthly series with ad units and effective-dated royalty", async () => {
     const db = new FakeDb();
     seedCatalog(db);
-    db.seedKdpMonthlyBookSale({
+    // July: two standard sales. August: three standard sales — one ordered
+    // July 31, counted in its royalty month like the KDP dashboard does —
+    // plus one expanded-distribution sale.
+    db.seedKdpSaleTransaction({
       book_id: "b1",
       profile_id: "p1",
-      month: "2026-07-01",
-      standard_units: 2,
-      expanded_units: 0,
-      royalty: "6.80",
+      order_date: "2026-07-10",
+      royalty_date: "2026-07-13",
     });
-    db.seedKdpMonthlyBookSale({
+    db.seedKdpSaleTransaction({
       book_id: "b1",
       profile_id: "p1",
-      month: "2026-08-01",
-      standard_units: 3,
-      expanded_units: 1,
-      royalty: "10.29",
+      order_date: "2026-07-12",
+      royalty_date: "2026-07-15",
+    });
+    db.seedKdpSaleTransaction({
+      book_id: "b1",
+      profile_id: "p1",
+      order_date: "2026-07-31",
+      royalty_date: "2026-08-02",
+    });
+    db.seedKdpSaleTransaction({
+      book_id: "b1",
+      profile_id: "p1",
+      order_date: "2026-08-10",
+      royalty_date: "2026-08-13",
+    });
+    db.seedKdpSaleTransaction({
+      book_id: "b1",
+      profile_id: "p1",
+      order_date: "2026-08-12",
+      royalty_date: "2026-08-15",
+    });
+    db.seedKdpSaleTransaction({
+      book_id: "b1",
+      profile_id: "p1",
+      royalty_type: "40%",
+      transaction_type: "Expanded Distribution Channels",
+      order_date: "2026-08-11",
+      royalty_date: "2026-08-20",
     });
     // August ad facts: 2 copies (units win) + 3 copies (units 0 → orders).
     db.seedAdvertisedProductMetric({
@@ -167,10 +192,9 @@ describe("kdp history", () => {
     const db = new FakeDb();
     seedCatalog(db);
     db.tables.bookEconomics.splice(0); // no economics at all
-    db.seedKdpMonthlyBookSale({
+    db.seedKdpSaleTransaction({
       book_id: "b1",
       profile_id: "p1",
-      month: "2026-08-01",
     });
     const service = makeService(db);
 
@@ -256,11 +280,6 @@ describe("kdp history", () => {
       book_id: "b9",
       profile_id: "p9",
       marketplace_asin: "B0OTHER001",
-    });
-    db.seedKdpMonthlyBookSale({
-      workspace_id: "2",
-      book_id: "b9",
-      profile_id: "p9",
     });
     db.seedKdpSaleTransaction({
       workspace_id: "2",

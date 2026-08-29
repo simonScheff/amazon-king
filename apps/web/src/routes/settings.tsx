@@ -43,6 +43,7 @@ import { countryNameForCode, marketplaceOptions } from "../lib/marketplaces";
 import { LinkBookToMarketsForm } from "../components/link-book-to-markets";
 import { DisplayCurrencySelect } from "../components/display-currency-select";
 import {
+  KdpDropZone,
   KdpImportButton,
   KdpImportReview,
 } from "../components/kdp-royalty-import";
@@ -840,71 +841,74 @@ function KdpImportsCard() {
   const imports = useKdpRoyaltyImports();
   const [kdpBatch, setKdpBatch] = useState<KdpRoyaltyImport | null>(null);
   return (
-    <Card>
-      <CardHeader
-        title="KDP imports"
-        action={<KdpImportButton onImported={setKdpBatch} />}
-      />
-      {kdpBatch ? (
-        <KdpImportReview batch={kdpBatch} onClose={() => setKdpBatch(null)} />
-      ) : null}
-      {imports.isPending ? (
-        <Loading label="Loading import log…" />
-      ) : imports.error ? (
-        <ErrorState error={imports.error} />
-      ) : imports.data.length === 0 ? (
-        <EmptyState>
-          No KDP reports imported yet. Import a Royalties Estimator workbook to
-          recalibrate royalty per sale from actuals.
-        </EmptyState>
-      ) : (
-        <Table>
-          <thead>
-            <tr>
-              <Th>Period</Th>
-              <Th>File</Th>
-              <Th>Rows</Th>
-              <Th>Suggestions</Th>
-              <Th>Status</Th>
-              <Th>Imported</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {imports.data.map((batch) => (
-              <tr key={batch.id}>
-                <Td className="whitespace-nowrap text-sm">
-                  {formatDate(batch.periodStart)} –{" "}
-                  {formatDate(batch.periodEnd)}
-                </Td>
-                <Td className="max-w-64">
-                  <span className="block truncate font-mono text-xs text-zinc-400">
-                    {batch.fileName}
-                  </span>
-                </Td>
-                <Td className="whitespace-nowrap text-sm tabular-nums">
-                  {batch.rowCount}
-                </Td>
-                <Td className="whitespace-nowrap text-sm tabular-nums">
-                  {batch.suggestionCount}
-                </Td>
-                <Td className="whitespace-nowrap">
-                  {batch.appliedAt !== null ? (
-                    <Badge tone="success">
-                      Applied {formatDate(batch.appliedAt)}
-                    </Badge>
-                  ) : (
-                    <Badge tone="neutral">Not applied</Badge>
-                  )}
-                </Td>
-                <Td className="whitespace-nowrap text-xs text-zinc-500">
-                  {formatDate(batch.createdAt)}
-                </Td>
+    <KdpDropZone onImported={setKdpBatch}>
+      <Card>
+        <CardHeader
+          title="KDP imports"
+          description="Drag a KDP Royalties Estimator .xlsx onto this card to import it."
+          action={<KdpImportButton onImported={setKdpBatch} />}
+        />
+        {kdpBatch ? (
+          <KdpImportReview batch={kdpBatch} onClose={() => setKdpBatch(null)} />
+        ) : null}
+        {imports.isPending ? (
+          <Loading label="Loading import log…" />
+        ) : imports.error ? (
+          <ErrorState error={imports.error} />
+        ) : imports.data.length === 0 ? (
+          <EmptyState>
+            No KDP reports imported yet. Import a Royalties Estimator workbook
+            to recalibrate royalty per sale from actuals.
+          </EmptyState>
+        ) : (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Period</Th>
+                <Th>File</Th>
+                <Th>Rows</Th>
+                <Th>Suggestions</Th>
+                <Th>Status</Th>
+                <Th>Imported</Th>
               </tr>
-            ))}
-          </tbody>
-        </Table>
-      )}
-    </Card>
+            </thead>
+            <tbody>
+              {imports.data.map((batch) => (
+                <tr key={batch.id}>
+                  <Td className="whitespace-nowrap text-sm">
+                    {formatDate(batch.periodStart)} –{" "}
+                    {formatDate(batch.periodEnd)}
+                  </Td>
+                  <Td className="max-w-64">
+                    <span className="block truncate font-mono text-xs text-zinc-400">
+                      {batch.fileName}
+                    </span>
+                  </Td>
+                  <Td className="whitespace-nowrap text-sm tabular-nums">
+                    {batch.rowCount}
+                  </Td>
+                  <Td className="whitespace-nowrap text-sm tabular-nums">
+                    {batch.suggestionCount}
+                  </Td>
+                  <Td className="whitespace-nowrap">
+                    {batch.appliedAt !== null ? (
+                      <Badge tone="success">
+                        Applied {formatDate(batch.appliedAt)}
+                      </Badge>
+                    ) : (
+                      <Badge tone="neutral">Not applied</Badge>
+                    )}
+                  </Td>
+                  <Td className="whitespace-nowrap text-xs text-zinc-500">
+                    {formatDate(batch.createdAt)}
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
+      </Card>
+    </KdpDropZone>
   );
 }
 

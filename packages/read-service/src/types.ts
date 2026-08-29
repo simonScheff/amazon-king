@@ -17,6 +17,8 @@ import type {
   DataFreshnessResponse,
   FxSyncResult,
   KdpHistory,
+  KdpDailyProfit,
+  KdpDailyProfitQuery,
   KdpRoyaltyApplyInput,
   KdpRoyaltyApplyResult,
   KdpRoyaltyImport,
@@ -244,6 +246,18 @@ export interface ReadService {
     workspaceId: string,
     query: KdpTransactionsQuery,
   ): Promise<KdpTransactionsPage>;
+  /**
+   * Daily profitability of one calendar month (ads + organic) for the
+   * /kdp-history organic tab: real KDP royalty per order date next to the
+   * estimated ad-attributed royalty and the ad spend, all markets converted
+   * per day into the workspace display currency. organic = max(0, total −
+   * ad); profit = total − spend needs no book economics — only the split
+   * does.
+   */
+  kdpDailyProfit(
+    workspaceId: string,
+    query: KdpDailyProfitQuery,
+  ): Promise<KdpDailyProfit>;
   listRecommendations(
     workspaceId: string,
     filter: RecommendationFilter,

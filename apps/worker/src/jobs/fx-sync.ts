@@ -12,16 +12,26 @@ import { isoDateString, type JobDeps } from "./types.js";
  * nothing here is profile-scoped.
  *
  * Stored rows are immutable (ON CONFLICT DO NOTHING), so the `from` parameter
- * makes daily top-up and first-run backfill the same code path: top-up starts
- * the day after the latest stored fixing; the first run covers the oldest
- * stored fact date so historical views convert immediately (plan safety
- * section). A bad upstream payload writes nothing and fails terminally —
- * retrying cannot fix a shape change; HTTP 5xx and network errors stay
- * retryable.
+ * makes daily top-up and backfill the same code path. Top-up starts the day
+ * after the latest stored fixing; the first run covers the oldest stored
+ * fact date so historical views convert immediately (plan safety section).
+ * A third case heals a historical **gap**: when facts predate the oldest
+ * stored fixing (a wiped-and-rebuilt fx_rates, or KDP sales imported after
+ * the first sync), top-up alone never reaches them, so the fetch restarts
+ * just before the earliest fact instead — after which the oldest fixing sits
+ * before the earliest fact and the gap stays closed. A bad upstream payload
+ * writes nothing and fails terminally — retrying cannot fix a shape change;
+ * HTTP 5xx and network errors stay retryable.
  */
 
 /** First run on a workspace without facts backfills this many days. */
 const DEFAULT_BACKFILL_DAYS = 30;
+/**
+ * A backfill starts this many days before the earliest fact: conversion
+ * falls back to the latest fixing at-or-before the fact date, so a fact
+ * landing on a weekend or holiday needs the previous business day's fixing.
+ */
+const BACKFILL_LOOKBACK_DAYS = 4;
 
 /**
  * Frankfurter v2 `GET /v2/rates?base=USD&from=YYYY-MM-DD` returns a flat
@@ -44,13 +54,23 @@ export function createFxSyncHandler(deps: JobDeps): JobHandler {
     const now = deps.now();
     const today = formatIsoDate(now.getTime());
 
-    const latest = await deps.store.getLatestFxRateDate();
+    const [latest, earliestRate, earliestFact] = await Promise.all([
+      deps.store.getLatestFxRateDate(),
+      deps.store.getEarliestFxRateDate(),
+      deps.store.getEarliestFactDate(),
+    ]);
     let from: string;
-    if (latest !== null) {
+    if (
+      earliestFact !== null &&
+      (earliestRate === null || earliestFact < earliestRate)
+    ) {
+      // First run (no rates at all) or a historical gap: cover from just
+      // before the oldest fact.
+      from = addDays(earliestFact as IsoDate, -BACKFILL_LOOKBACK_DAYS);
+    } else if (latest !== null) {
       from = addDays(latest as IsoDate, 1);
     } else {
-      const earliestFact = await deps.store.getEarliestFactDate();
-      from = earliestFact ?? addDays(today, -DEFAULT_BACKFILL_DAYS);
+      from = addDays(today, -DEFAULT_BACKFILL_DAYS);
     }
     if (from > today) {
       logger.info({ latest }, "FX rates already up to date");

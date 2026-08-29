@@ -222,11 +222,13 @@ export async function parseKdpRoyaltyReport(
     throw new KdpReportParseError("No sales rows found in the period");
   }
 
-  const orderDates = rows.map((row) => row.orderDate);
+  const royaltyDates = rows.map((row) => row.royaltyDate);
   return {
     fileName,
-    periodStart: orderDates.reduce((min, date) => (date < min ? date : min)),
-    periodEnd: orderDates.reduce((max, date) => (date > max ? date : max)),
+    // The report period is royalty-date based, matching how KDP itself
+    // scopes and displays the file ("August" = royalties posted in August).
+    periodStart: royaltyDates.reduce((min, date) => (date < min ? date : min)),
+    periodEnd: royaltyDates.reduce((max, date) => (date > max ? date : max)),
     rows,
   };
 }

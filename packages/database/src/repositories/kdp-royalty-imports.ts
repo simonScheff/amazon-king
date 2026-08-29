@@ -3,7 +3,10 @@ import type { Db } from "../db.js";
 /**
  * KDP royalty import batches (migration 0019). Each row is one uploaded
  * Royalties Estimator workbook with its derived suggestions; the payload hash
- * makes re-uploading the same file an idempotent replay.
+ * makes re-uploading the same file an idempotent replay. The normalized
+ * report rows are stored too (migration 0022) so the KDP history tables can
+ * be rebuilt from the database alone — batches predating that column carry
+ * an empty array and become rebuildable only by re-uploading the file.
  */
 
 export interface KdpRoyaltyImport {
@@ -59,6 +62,8 @@ export interface KdpRoyaltyImportInput {
   rowCount: number;
   suggestions: unknown[];
   skipped: unknown[];
+  /** Normalized report rows (KdpRoyaltyRow[]), stored for history rebuilds. */
+  rows: unknown[];
 }
 
 /**
@@ -72,8 +77,8 @@ export async function insertKdpRoyaltyImport(
   const inserted = await db.query<KdpRoyaltyImportRow>(
     `insert into kdp_royalty_imports
        (workspace_id, file_name, payload_sha256, period_start, period_end,
-        row_count, suggestions, skipped)
-     values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb)
+        row_count, suggestions, skipped, rows)
+     values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb)
      on conflict (workspace_id, payload_sha256) do nothing
      returning *`,
     [
@@ -85,6 +90,7 @@ export async function insertKdpRoyaltyImport(
       input.rowCount,
       JSON.stringify(input.suggestions),
       JSON.stringify(input.skipped),
+      JSON.stringify(input.rows),
     ],
   );
   if (inserted.rows[0]) {
@@ -126,6 +132,43 @@ export async function listKdpRoyaltyImports(
     [workspaceId, limit],
   );
   return result.rows.map(toImport);
+}
+
+export interface KdpRoyaltyImportPayload {
+  id: string;
+  fileName: string;
+  /** Normalized report rows; empty for batches imported before migration 0022. */
+  rows: unknown[];
+  createdAt: string;
+}
+
+/**
+ * Every batch's stored report rows, oldest first — the input of
+ * scripts/rebuild-kdp-history.ts. Not part of the API surface; the rows can
+ * be large (up to 20k per batch) and never leave the backend.
+ */
+export async function listKdpRoyaltyImportPayloads(
+  db: Db,
+  workspaceId: string,
+): Promise<KdpRoyaltyImportPayload[]> {
+  const result = await db.query<{
+    id: string;
+    file_name: string;
+    rows: unknown[];
+    created_at: string;
+  }>(
+    `select id, file_name, rows, created_at
+     from kdp_royalty_imports
+     where workspace_id = $1
+     order by created_at asc, id asc`,
+    [workspaceId],
+  );
+  return result.rows.map((row) => ({
+    id: row.id,
+    fileName: row.file_name,
+    rows: row.rows,
+    createdAt: row.created_at,
+  }));
 }
 
 /**

@@ -139,14 +139,88 @@ function unitsOf(rows: KdpRoyaltyRow[]): number {
   return rows.reduce((total, row) => total + row.netUnits, 0);
 }
 
-/** First-of-month ISO date of a row's order date (history tables' grain). */
-function monthOf(row: KdpRoyaltyRow): string {
-  return `${row.orderDate.slice(0, 7)}-01`;
-}
-
 /** Case-insensitive lookup key matching linkByProfileAsin's ASIN handling. */
 function rowKey(marketplace: string, asin: string): string {
   return `${marketplace} ${asin.toUpperCase()}`;
+}
+
+/**
+ * Resolve report rows to catalog book × profile pairs via the marketplace →
+ * country → profile and ASIN link chain. Rows that resolve keep their
+ * book/profile ids on the stored transaction even when their group is later
+ * skipped for a suggestion (e.g. currency mismatch). Exported for
+ * scripts/rebuild-kdp-history.ts, which replays stored rows through the same
+ * resolution.
+ */
+export function resolveKdpTransactionLinks(
+  profileList: profiles.AmazonProfileRow[],
+  links: books.WorkspaceBookLink[],
+  rows: KdpRoyaltyRow[],
+): Map<string, { bookId: string; profilePk: string }> {
+  const profileByCountry = new Map(
+    profileList.map((profile) => [profile.countryCode, profile]),
+  );
+  const linkByProfileAsin = new Map(
+    links.map((link) => [
+      `${link.profilePk} ${link.marketplaceAsin.toUpperCase()}`,
+      link,
+    ]),
+  );
+  const resolved = new Map<string, { bookId: string; profilePk: string }>();
+  for (const row of rows) {
+    const key = rowKey(row.marketplace, row.asin);
+    if (resolved.has(key)) {
+      continue;
+    }
+    const countryCode = KDP_MARKETPLACE_COUNTRIES[row.marketplace];
+    if (!countryCode) {
+      continue;
+    }
+    const profile =
+      profileByCountry.get(countryCode) ??
+      (PROFILE_COUNTRY_ALIASES[countryCode]
+        ? profileByCountry.get(PROFILE_COUNTRY_ALIASES[countryCode])
+        : undefined);
+    if (!profile) {
+      continue;
+    }
+    const link = linkByProfileAsin.get(
+      `${profile.id} ${row.asin.toUpperCase()}`,
+    );
+    if (!link) {
+      continue;
+    }
+    resolved.set(key, { bookId: link.bookId, profilePk: profile.id });
+  }
+  return resolved;
+}
+
+/** Verbatim transaction rows for the history table, with resolved links. */
+export function toKdpTransactionInputs(
+  workspaceId: string,
+  importId: string,
+  rows: KdpRoyaltyRow[],
+  links: Map<string, { bookId: string; profilePk: string }>,
+): kdpSales.KdpSaleTransactionInput[] {
+  return rows.map((row) => {
+    const link = links.get(rowKey(row.marketplace, row.asin));
+    return {
+      workspaceId,
+      importId,
+      bookId: link?.bookId ?? null,
+      profileId: link?.profilePk ?? null,
+      asin: row.asin,
+      marketplace: row.marketplace,
+      format: row.format,
+      royaltyType: row.royaltyType,
+      transactionType: row.transactionType,
+      orderDate: row.orderDate,
+      royaltyDate: row.royaltyDate,
+      netUnits: row.netUnits,
+      royalty: row.royalty,
+      currency: row.currency,
+    };
+  });
 }
 
 export async function createKdpRoyaltyImport(
@@ -181,15 +255,14 @@ export async function createKdpRoyaltyImport(
 
   const suggestions: KdpRoyaltySuggestion[] = [];
   const skipped: KdpRoyaltySkippedRow[] = [];
-  // Phase-2 history population (plan §6): verbatim transactions carry the
-  // catalog ids whenever the ASIN link resolves — even when the group is
-  // later skipped for another reason, like a currency mismatch — and monthly
-  // aggregates are recorded for every fully eligible group.
-  const transactionLinks = new Map<
-    string,
-    { bookId: string; profilePk: string }
-  >();
-  const monthlyRows: Omit<kdpSales.KdpMonthlyBookSaleInput, "importId">[] = [];
+  // Phase-2 history population: verbatim transactions carry the catalog ids
+  // whenever the ASIN link resolves — even when the group is later skipped
+  // for another reason, like a currency mismatch.
+  const transactionLinks = resolveKdpTransactionLinks(
+    profileList,
+    links,
+    input.rows,
+  );
 
   for (const group of groupRows(input.rows)) {
     const skip = (reason: KdpRoyaltySkippedRow["reason"]) =>
@@ -222,43 +295,9 @@ export async function createKdpRoyaltyImport(
       skip("asin_not_linked");
       continue;
     }
-    transactionLinks.set(rowKey(group.marketplace, group.asin), {
-      bookId: link.bookId,
-      profilePk: profile.id,
-    });
     if (group.rows.some((row) => row.currency !== profile.currencyCode)) {
       skip("currency_mismatch");
       continue;
-    }
-
-    // Monthly history rows per covered month. A month whose rows are all
-    // expanded-distribution still records a row (0 standard units, "0"
-    // royalty) so the expanded units show in history; the suggestion below
-    // is the only thing that requires standard-rate rows.
-    const rowsByMonth = new Map<string, KdpRoyaltyRow[]>();
-    for (const row of group.rows) {
-      const month = monthOf(row);
-      const bucket = rowsByMonth.get(month);
-      if (bucket) {
-        bucket.push(row);
-      } else {
-        rowsByMonth.set(month, [row]);
-      }
-    }
-    for (const [month, monthRows] of rowsByMonth) {
-      const standard = monthRows.filter(isStandardRow);
-      monthlyRows.push({
-        workspaceId,
-        bookId: link.bookId,
-        profileId: profile.id,
-        month,
-        standardUnits: unitsOf(standard),
-        expandedUnits: unitsOf(monthRows) - unitsOf(standard),
-        royalty: toDecimalString(
-          standard.reduce((total, row) => total + Number(row.royalty), 0),
-        ),
-        currency: profile.currencyCode,
-      });
     }
 
     const standardRows = group.rows.filter(isStandardRow);
@@ -308,40 +347,23 @@ export async function createKdpRoyaltyImport(
       rowCount: input.rows.length,
       suggestions,
       skipped,
+      rows: input.rows,
     });
 
   if (created) {
-    // Populate the phase-2 history tables. A replayed upload must not
-    // re-populate — the batch insert is the idempotency gate. The covered
-    // months' transactions are replaced (delete-then-insert) so an
-    // overlapping later file never double-counts; monthly rows upsert.
-    const months = [...new Set(input.rows.map(monthOf))];
-    await kdpSales.deleteKdpSaleTransactionsForMonths(db, workspaceId, months);
-    await kdpSales.insertKdpSaleTransactions(
+    // Populate the history table. A replayed upload must not re-populate —
+    // the batch insert is the idempotency gate. The merge is additive:
+    // rows identical to the incoming ones are replaced and everything else
+    // is left alone, so an overlapping later file (every KDP file carries a
+    // previous-month order tail) can never destroy another import's data.
+    await kdpSales.mergeKdpSaleTransactions(
       db,
-      input.rows.map((row) => {
-        const link = transactionLinks.get(rowKey(row.marketplace, row.asin));
-        return {
-          workspaceId,
-          importId: batch.id,
-          bookId: link?.bookId ?? null,
-          profileId: link?.profilePk ?? null,
-          asin: row.asin,
-          marketplace: row.marketplace,
-          format: row.format,
-          royaltyType: row.royaltyType,
-          transactionType: row.transactionType,
-          orderDate: row.orderDate,
-          royaltyDate: row.royaltyDate,
-          netUnits: row.netUnits,
-          royalty: row.royalty,
-          currency: row.currency,
-        };
-      }),
-    );
-    await kdpSales.upsertKdpMonthlyBookSales(
-      db,
-      monthlyRows.map((row) => ({ ...row, importId: batch.id })),
+      toKdpTransactionInputs(
+        workspaceId,
+        batch.id,
+        input.rows,
+        transactionLinks,
+      ),
     );
   }
 

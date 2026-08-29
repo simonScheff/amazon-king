@@ -621,9 +621,14 @@ royalty-per-copy suggestions.
   reasons). Re-uploading the identical file replays the existing batch with
   `200` and `alreadyExisted: true`.
 
-A new (non-replayed) import also stores the sales history: monthly per-book ×
-per-marketplace aggregates, and the verbatim sale rows (covered months are
-replaced, so overlapping files never double-count).
+A new (non-replayed) import also stores the sales history: the verbatim sale
+rows, merged additively — rows identical to an incoming one are replaced and
+everything else is left alone, so overlapping files (every KDP report
+carries a tail of previous-month orders) can never destroy each other's
+data. Monthly aggregates are derived from those rows at read time, grouped
+by KDP report month (`royaltyDate`), matching the KDP dashboard's display.
+The batch also keeps its normalized rows, so the history can be rebuilt from
+the database alone (`scripts/rebuild-kdp-history.ts`).
 
 ### `GET /api/kdp/imports`
 
@@ -651,12 +656,13 @@ Monthly sales history per book × marketplace, feeding the KDP history page.
 - Response `200`: `{ series, fulfillment }`. Each series entry is
   `{ bookId, title, profileId, countryCode, currency, coverImageUrl, months }`
   with months of `{ month, kdpStandardUnits, kdpExpandedUnits, adUnits,
-  royaltyPerSale }` — `adUnits` computed at query time from the synced
-  advertised-product facts (never snapshotted), `royaltyPerSale` the
-  effective-dated economics value in force at month end (`null` when none).
-  `fulfillment` holds per-marketplace months of
+  royaltyPerSale }` — `month` the first of the KDP report month (the month
+  of `royaltyDate`, like the KDP dashboard), `adUnits` computed at query
+  time from the synced advertised-product facts (never snapshotted),
+  `royaltyPerSale` the effective-dated economics value in force at month end
+  (`null` when none). `fulfillment` holds per-marketplace months of
   `{ month, medianDays, averageDays, standardUnits }` — order-to-ship days
-  over standard-rate sales only.
+  over standard-rate sales only, grouped by order month.
 
 ### `GET /api/kdp/transactions?bookId&profileId&month&limit&offset`
 
@@ -664,11 +670,36 @@ The individual stored sale rows, newest order date first.
 
 - **Auth:** session.
 - `limit` defaults to 500, max 1000; `offset` defaults to 0. All filters
-  optional.
+  optional; `month` matches the KDP report month (the month of
+  `royaltyDate`).
 - Response `200`: `{ transactions, total }` — one page of transaction rows
   (title joined in when the ASIN is linked to a catalog book; unlinked rows
   carry null book/profile ids) plus the total row count matching the filters
   across all pages.
+
+### `GET /api/kdp/daily-profit?month&book`
+
+Daily profitability of one calendar month — the organic tab's "Daily profit"
+chart. Per order day: the ad spend and estimated ad-attributed royalty next
+to the real summed KDP royalty (organic included), all markets converted per
+day into the workspace display currency (same USD-pivot convention as the
+all-market dashboard summary).
+
+- **Auth:** session.
+- `month` is a required first-of-month ISO date; `book` is an optional
+  catalog book id (absent sums every book, including unlinked-ASIN sales).
+- Response `200`: `{ month, currency, ratesAvailable, economicsMissing,
+  kdpImported, daily }` with days of `{ date, adSpend, adRoyalty,
+  organicRoyalty, totalRoyalty, profit }`, zero-filled over the month (the
+  current month capped at today). `organicRoyalty = max(0, totalRoyalty −
+  adRoyalty)` — ad-driven sales are in the KDP total too, so the clamp avoids
+  double counting; `profit = totalRoyalty − adSpend` is real money and works
+  without book economics (only the split needs them; missing economics nulls
+  `adRoyalty`/`organicRoyalty` and sets `economicsMissing`). A month with no
+  KDP import returns null `totalRoyalty`/`organicRoyalty`/`profit` with
+  `kdpImported: false`; an empty `fx_rates` table returns
+  `ratesAvailable: false` with an empty series. Errors: `409
+  FX_RATES_INCOMPLETE` when stored rates don't cover a day.
 
 ---
 

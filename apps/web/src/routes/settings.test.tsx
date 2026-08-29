@@ -4,6 +4,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FxRatesStatus } from "@amazon-king/contracts";
@@ -27,11 +28,16 @@ const mocks = vi.hoisted(() => ({
   removeExclusion: vi.fn(),
   exclusions: [] as { term: string; createdAt: string }[],
   kdpImports: [] as unknown[],
+  parseKdpReport: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
   useSearch: () => mocks.search,
   useNavigate: () => mocks.navigate,
+}));
+
+vi.mock("../lib/kdp-report", () => ({
+  parseKdpRoyaltyReport: mocks.parseKdpReport,
 }));
 
 vi.mock("../api/endpoints", () => ({
@@ -151,6 +157,7 @@ describe("SettingsPage book mapping", () => {
     mocks.freshnessOptions = [];
     mocks.exclusions = [];
     mocks.kdpImports = [];
+    mocks.parseKdpReport.mockReset();
     mocks.removeExclusion.mockReset();
     mocks.search = { tab: "books" };
   });
@@ -535,6 +542,40 @@ describe("SettingsPage book mapping", () => {
     render(<SettingsPage />);
 
     expect(screen.getByText(/No KDP reports imported yet/)).toBeInTheDocument();
+  });
+
+  it("imports a KDP report dropped onto the imports card", async () => {
+    mocks.search = { tab: "kdp" };
+    const report = { fileName: "KDP_Royalties_Estimator.xlsx" };
+    mocks.parseKdpReport.mockResolvedValue(report);
+    render(<SettingsPage />);
+
+    const file = new File(["xlsx"], "KDP_Royalties_Estimator.xlsx");
+    // jsdom's File has no arrayBuffer(); real browsers do.
+    file.arrayBuffer = vi.fn().mockResolvedValue(new ArrayBuffer(4));
+    fireEvent.drop(screen.getByTestId("kdp-drop-zone"), {
+      dataTransfer: { files: [file] },
+    });
+
+    await waitFor(() =>
+      expect(mocks.mutation).toHaveBeenCalledWith(
+        report,
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      ),
+    );
+  });
+
+  it("rejects a dropped file that is not an .xlsx workbook", () => {
+    mocks.search = { tab: "kdp" };
+    render(<SettingsPage />);
+
+    const file = new File(["text"], "notes.txt");
+    fireEvent.drop(screen.getByTestId("kdp-drop-zone"), {
+      dataTransfer: { files: [file] },
+    });
+
+    expect(mocks.parseKdpReport).not.toHaveBeenCalled();
+    expect(mocks.mutation).not.toHaveBeenCalled();
   });
 
   it("switches sections through the tab bar and the URL", () => {

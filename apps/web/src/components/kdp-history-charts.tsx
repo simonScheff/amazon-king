@@ -39,7 +39,7 @@ const TREND_LINE_COLORS = [
 ];
 
 const AD_UNITS_COLOR = "#a078ff";
-const ORGANIC_UNITS_COLOR = "#71717a";
+const ORGANIC_UNITS_COLOR = "#34d399";
 
 interface RoyaltyTrendLine {
   /** Series identity: `${bookId}:${profileId}`; the datum key. */
@@ -117,6 +117,32 @@ export function buildSalesMix(
     }
     return { month, ad, organic };
   });
+}
+
+/** Headline sums over the visible months, for the stat tiles. */
+export function buildSalesTotals(points: readonly SalesMixPoint[]): {
+  total: number;
+  ad: number;
+  organic: number;
+} {
+  let ad = 0;
+  let organic = 0;
+  for (const point of points) {
+    ad += point.ad;
+    organic += point.organic;
+  }
+  return { total: ad + organic, ad, organic };
+}
+
+/** Part of the total as a fraction; null when there is no base. */
+export function unitShare(part: number, total: number): number | null {
+  if (total <= 0) return null;
+  return part / total;
+}
+
+/** First-of-month ISO date of the (UTC) month containing `now`. */
+export function currentMonth(now: Date = new Date()): string {
+  return `${now.toISOString().slice(0, 7)}-01`;
 }
 
 const TOOLTIP_STYLE = {
@@ -407,7 +433,7 @@ function SalesMixTooltip({
       <p style={{ margin: 0, color: AD_UNITS_COLOR }}>
         Ad-attributed units: {formatCount(point.ad)}
       </p>
-      <p style={{ margin: 0, color: "#d4d4d8" }}>
+      <p style={{ margin: 0, color: ORGANIC_UNITS_COLOR }}>
         Organic units: {formatCount(point.organic)}
       </p>
     </div>

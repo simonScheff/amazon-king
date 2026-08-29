@@ -111,15 +111,21 @@ settings-level writes: CSRF + WRITE rate limit, no recent-auth gate, no Amazon
 call; the audit trail is `kdp.royalty_import.create/apply` plus one
 `books.economics` event per applied row.
 
-A new (non-replayed) import also populates the phase-2 history tables
-(`kdp_monthly_book_sales` per book × profile × month of order date —
-eligible groups only, expanded-only months recorded with 0 standard units —
-and verbatim `kdp_sale_transactions`, with catalog ids whenever the ASIN link
-resolves even if the group is skipped for a currency mismatch; covered
-months' transactions are replaced, monthly rows upsert). Two read endpoints
+A new (non-replayed) import also populates the phase-2 history table:
+verbatim `kdp_sale_transactions`, with catalog ids whenever the ASIN link
+resolves even if the group is skipped for a currency mismatch. The merge is
+additive — rows identical to an incoming one are replaced, everything else is
+left alone — because every KDP file carries a tail of previous-month orders
+and must never destroy another import's data (the 2026-08-29 incident: the
+old delete-covered-months model wiped July when the August file arrived).
+The batch also stores the normalized report rows (`kdp_royalty_imports.rows`)
+so the history can be rebuilt without the original file
+(`scripts/rebuild-kdp-history.ts`). Monthly aggregates are not stored: they
+derive from the transactions at read time, grouped by KDP report month
+(royalty_date, matching the KDP dashboard's display). Two read endpoints
 serve the `/kdp-history` page, plain session-authenticated GETs:
 `GET /api/kdp/history` returns per book × marketplace monthly series (KDP
-units from the aggregates, ad-attributed units computed at query time from
+units from the derived aggregates, ad-attributed units computed at query time from
 the fact tables, `royaltyPerSale` from the effective-dated economics history)
 plus per-marketplace fulfillment stats (median/average order→ship days,
 standard-rate rows only), and `GET /api/kdp/transactions` is the per-sale
@@ -127,6 +133,18 @@ browser (`bookId`/`profileId`/`month`/`limit`/`offset` query params, limit
 capped at 1000 with a 500 default, newest order date first, book title joined
 in when linked) returning `{ transactions, total }` — one page plus the
 filtered total across all pages, which drives the table's pagination.
+`GET /api/kdp/daily-profit` (`month` first-of-month ISO, optional `book`)
+serves the organic tab's daily profit chart: per order day of the month,
+the ad spend and estimated ad-attributed royalty (the converting dashboard
+queries) next to the real summed KDP royalty (`listKdpDailyRoyalty` over the
+verbatim transactions, unlinked-ASIN rows included unless a book filter is
+given), all markets converted per day into the workspace display currency —
+empty `fx_rates` returns `ratesAvailable: false`, partial coverage a 409
+`FX_RATES_INCOMPLETE`. organic = max(0, total − ad) avoids double counting
+ad-driven sales; profit = total − spend needs no book economics — only the
+split does (`economicsMissing` flags days without it). Days are zero-filled
+over the month, the current month capped at today; an unimported month
+returns null KDP figures with `kdpImported: false`.
 
 ## Campaign creation
 

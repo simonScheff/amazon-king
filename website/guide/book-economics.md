@@ -126,9 +126,11 @@ batch with its report period, file name, row and suggestion counts, status
 
 ## KDP history
 
-Every import also stores what it saw: monthly per-book, per-marketplace
-unit and royalty totals, plus the individual sale rows. Re-importing a month
-replaces that month's stored data, so overlapping files never double-count.
+Every import also stores what it saw: the individual sale rows, merged
+additively — re-uploading or overlapping files (every KDP report carries a
+tail of previous-month orders) can never destroy or duplicate earlier data.
+Monthly totals are derived from those rows, grouped by **KDP report month** —
+the month the royalty posted, exactly like your KDP dashboard displays it.
 The **KDP history** page in the sidebar turns that into four views:
 
 - **Royalty per sale — trend.** One line per book and market, drawn from

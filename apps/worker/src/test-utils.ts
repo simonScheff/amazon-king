@@ -335,6 +335,15 @@ export class FakeStore implements WorkerStore {
     }
     return latest;
   }
+  async getEarliestFxRateDate() {
+    let earliest: string | null = null;
+    for (const row of this.fxRates) {
+      if (earliest === null || row.rateDate < earliest) {
+        earliest = row.rateDate;
+      }
+    }
+    return earliest;
+  }
   async getEarliestFactDate() {
     let earliest: string | null = null;
     for (const facts of Object.values(this.facts)) {

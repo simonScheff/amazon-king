@@ -54,13 +54,21 @@ Rebuild from sources, in this order:
    and the KDP history tables to the real profile ids and delete the stale
    ones (country match; note Amazon reports the UK as `UK`, KDP as `GB`).
 3. **Sync:** `POST /api/profiles/:profileId/syncs` per enabled profile, then
-   wait for structure + metrics. Re-run FX backfill if facts predate the
-   earliest stored rate (the incremental `fx_sync` job only fetches
-   `latest+1`; see `tmp/backfill-fx.ts` for the one-off pattern).
+   wait for structure + metrics. FX coverage heals itself: `fx_sync`
+   backfills from just before the earliest fact (KDP order dates included)
+   whenever facts predate the oldest stored rate — trigger it immediately
+   from Settings → Workspace (**Sync rates now**) instead of waiting for the
+   daily schedule.
 4. **KDP economics:** re-upload the workbooks from `docs/` via Settings →
    Books & economics, or rebuild programmatically — `tmp/restore-local-data.ts`
    is a worked example that parses a workbook, seeds books/economics, and
-   replays the import through the real read-service path.
+   replays the import through the real read-service path. When the import
+   batches survive but only the KDP sales history is damaged or stale
+   (`kdp_sale_transactions`), don't re-upload: every batch stores its
+   normalized rows (migration 0022), so
+   `set -a; source .env; set +a; pnpm exec tsx scripts/rebuild-kdp-history.ts`
+   wipes and replays the history from the database alone. Imports are
+   additive, so re-uploading overlapping files is always safe.
 5. **Accept the hand-entered loss.** Max CPC, exclusions, dismissals, and
    custom guardrails are not recoverable without a dump. Ask the owner for
    the values and bulk-insert them rather than clicking through the UI.

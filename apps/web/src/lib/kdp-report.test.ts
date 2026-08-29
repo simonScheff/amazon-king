@@ -42,11 +42,13 @@ describe("parseKdpRoyaltyReport", () => {
     expect(report.rows.some((row) => row.royalty === "999.99")).toBe(false);
   });
 
-  it("reports the period as the min and max order date", async () => {
+  it("reports the period as the min and max royalty date", async () => {
     const report = await parseMainFixture();
 
-    expect(report.periodStart).toBe("2026-06-28");
-    expect(report.periodEnd).toBe("2026-07-17");
+    // Royalty dates, matching how KDP scopes the file ("July" = royalties
+    // posted in July) — order dates run a few days earlier.
+    expect(report.periodStart).toBe("2026-07-01");
+    expect(report.periodEnd).toBe("2026-07-20");
   });
 
   it("keeps marketplace, currency, and royalty type per row", async () => {

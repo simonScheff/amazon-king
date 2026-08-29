@@ -4,8 +4,11 @@ import type { KdpHistorySeries } from "@amazon-king/contracts";
 import {
   buildRoyaltyTrend,
   buildSalesMix,
+  buildSalesTotals,
+  currentMonth,
   RoyaltyTrendChart,
   SalesMixChart,
+  unitShare,
 } from "./kdp-history-charts";
 
 function series(
@@ -105,6 +108,30 @@ describe("buildSalesMix", () => {
       series({ bookId: "book-2", title: "Other Book" }),
     ]);
     expect(data).toEqual([{ month: "2026-07-01", ad: 16, organic: 8 }]);
+  });
+});
+
+describe("buildSalesTotals", () => {
+  it("sums ad and organic units over the visible months", () => {
+    expect(
+      buildSalesTotals([
+        { month: "2026-07-01", ad: 8, organic: 4 },
+        { month: "2026-08-01", ad: 10, organic: 6 },
+      ]),
+    ).toEqual({ total: 28, ad: 18, organic: 10 });
+  });
+});
+
+describe("unitShare", () => {
+  it("returns the fraction of the total, null without a base", () => {
+    expect(unitShare(18, 28)).toBeCloseTo(18 / 28);
+    expect(unitShare(0, 0)).toBeNull();
+  });
+});
+
+describe("currentMonth", () => {
+  it("is the first-of-month ISO date of the given instant (UTC)", () => {
+    expect(currentMonth(new Date("2026-08-29T10:00:00Z"))).toBe("2026-08-01");
   });
 });
 

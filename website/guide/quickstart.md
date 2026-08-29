@@ -62,6 +62,24 @@ analysis), `/negatives` (synced exclusions across campaigns), `/changes` (the
 change center: every change set and its status),
 `/connect`, and `/settings`.
 
+### KDP history
+
+`/kdp-history` is the analytics surface for your KDP royalty imports, split
+into four tabs:
+
+- **Organic data** — the **Total sales — ads + organic** card: monthly unit
+  sales split into ad-attributed and organic copies, as headline stat tiles
+  plus a stacked bar chart over the full imported history. The grain is the
+  calendar month; the current month is marked **month to date** because its
+  KDP side is still incomplete. The book selector drives tiles and chart
+  together, and unit counts need no currency conversion. Until you import a
+  KDP report the page links to **Settings → KDP imports**.
+- **Royalty trend** — net royalty per sale per book × market over time, each
+  line labeled with its own currency (never converted or summed).
+- **Fulfillment** — median and average order→ship days per marketplace.
+- **Individual sales** — the per-transaction browser with book, marketplace,
+  and month filters.
+
 ## 3. Connect your Amazon account
 
 Go to `/connect`. Starting the connection sends you through Login With Amazon

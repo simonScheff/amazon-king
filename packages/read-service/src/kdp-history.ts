@@ -11,8 +11,9 @@ import { coverImageUrlOf, isoDate } from "./serialize.js";
 
 /**
  * KDP sales history reads (docs/kdp-royalty-import-plan.md §6) behind
- * GET /api/kdp/history and GET /api/kdp/transactions. The KDP side comes from
- * the stored monthly aggregates and verbatim transactions; the ad side of the
+ * GET /api/kdp/history and GET /api/kdp/transactions. The KDP side derives at
+ * read time from the verbatim transactions, grouped by KDP report month
+ * (royalty_date — matching the KDP dashboard's display); the ad side of the
  * sales mix is computed at query time from the fact tables (decision 11) and
  * royalty-per-sale reads the effective-dated book_economics history
  * (decision 10 — never duplicated).

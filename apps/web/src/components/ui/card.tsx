@@ -21,9 +21,11 @@ export function CardHeader({
   action?: ReactNode;
   description?: ReactNode;
 }) {
+  // Stacked on narrow screens so a long title/description never gets crushed
+  // beside the action; selects inside the action go full-width there.
   return (
-    <div className="flex items-center justify-between gap-2 border-b border-zinc-800 px-5 py-3.5">
-      <div>
+    <div className="flex flex-col gap-3 border-b border-zinc-800 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+      <div className="min-w-0">
         <h2 className="text-sm font-semibold text-zinc-100">{title}</h2>
         {description ? (
           <p className="mt-0.5 text-xs font-normal text-zinc-500">
@@ -31,7 +33,11 @@ export function CardHeader({
           </p>
         ) : null}
       </div>
-      {action}
+      {action ? (
+        <div className="shrink-0 max-sm:w-full max-sm:[&_select]:w-full">
+          {action}
+        </div>
+      ) : null}
     </div>
   );
 }

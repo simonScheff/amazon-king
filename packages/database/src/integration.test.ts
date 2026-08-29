@@ -32,17 +32,16 @@ import { enqueue, claim, reapExpiredLeases, complete, fail } from "./queue.js";
 import {
   getKdpRoyaltyImport,
   insertKdpRoyaltyImport,
+  listKdpRoyaltyImportPayloads,
   listKdpRoyaltyImports,
   markKdpRoyaltyImportApplied,
 } from "./repositories/kdp-royalty-imports.js";
 import {
-  deleteKdpSaleTransactionsForMonths,
-  insertKdpSaleTransactions,
   listKdpAdUnitsByBookMonth,
   listKdpFulfillmentStats,
   listKdpMonthlyBookSales,
   listKdpSaleTransactions,
-  upsertKdpMonthlyBookSales,
+  mergeKdpSaleTransactions,
 } from "./repositories/kdp-sales.js";
 import {
   upsertAd,
@@ -181,6 +180,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       "0019",
       "0020",
       "0021",
+      "0022",
     ]);
     const again = await migrate(pool);
     expect(again).toEqual([]);
@@ -408,6 +408,39 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
 
     // The oldest date wins regardless of which fact table holds it.
     expect(await getEarliestFactDate(pool, workspaceId)).toBe("2026-03-02");
+
+    // KDP sale transactions count as conversion-relevant facts too (the
+    // /kdp-history daily profit chart converts royalty per order date).
+    const kdpBatch = await insertKdpRoyaltyImport(pool, {
+      workspaceId,
+      fileName: "kdp-fx.xlsx",
+      payloadSha256: "e".repeat(64),
+      periodStart: "2026-02-01",
+      periodEnd: "2026-02-28",
+      rowCount: 1,
+      suggestions: [],
+      skipped: [],
+      rows: [],
+    });
+    await mergeKdpSaleTransactions(pool, [
+      {
+        workspaceId,
+        importId: kdpBatch.import.id,
+        bookId: null,
+        profileId: null,
+        asin: "B0FX000001",
+        marketplace: "Amazon.com",
+        format: "paperback",
+        royaltyType: "60%",
+        transactionType: "Standard - Paperback",
+        orderDate: "2026-02-20",
+        royaltyDate: "2026-02-24",
+        netUnits: 1,
+        royalty: "3.50",
+        currency: "USD",
+      },
+    ]);
+    expect(await getEarliestFactDate(pool, workspaceId)).toBe("2026-02-20");
   });
 
   /** Seed one workspace with a US (USD) and a DE (EUR) profile. */
@@ -2898,6 +2931,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       rowCount: 2,
       suggestions: [{ bookId: "1", suggestedRoyaltyPerSale: "3.43" }],
       skipped: [],
+      rows: [{ asin: "B0TEST", royalty: "3.43" }],
     };
 
     const first = await insertKdpRoyaltyImport(pool, input);
@@ -2909,6 +2943,11 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     const listed = await listKdpRoyaltyImports(pool, kdpWorkspaceId);
     expect(listed).toHaveLength(1);
     expect(listed[0]!.suggestions).toEqual(input.suggestions);
+
+    // The stored report rows are what scripts/rebuild-kdp-history.ts replays.
+    const payloads = await listKdpRoyaltyImportPayloads(pool, kdpWorkspaceId);
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0]!.rows).toEqual(input.rows);
 
     const marked = await markKdpRoyaltyImportApplied(
       pool,
@@ -2927,7 +2966,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     ).toBeNull();
   });
 
-  it("kdp sales history: monthly upsert replaces, transactions re-import cleanly", async () => {
+  it("kdp sales history: additive merge, derived monthly, royalty-month filters", async () => {
     const workspace = await pool.query<{ id: string }>(
       `insert into workspaces (name) values ('kdp history') returning id`,
     );
@@ -2963,6 +3002,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       rowCount: 1,
       suggestions: [],
       skipped: [],
+      rows: [],
     });
     const secondImport = await insertKdpRoyaltyImport(pool, {
       workspaceId,
@@ -2973,154 +3013,144 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       rowCount: 2,
       suggestions: [],
       skipped: [],
+      rows: [],
     });
 
-    // Monthly aggregates: the later full-month file replaces the partial one.
-    await upsertKdpMonthlyBookSales(pool, [
-      {
-        workspaceId,
-        importId: firstImport.import.id,
-        bookId,
-        profileId,
-        month: "2026-08-01",
-        standardUnits: 10,
-        expandedUnits: 1,
-        royalty: "35.00",
-        currency: "USD",
-      },
-    ]);
-    await upsertKdpMonthlyBookSales(pool, [
-      {
-        workspaceId,
-        importId: secondImport.import.id,
-        bookId,
-        profileId,
-        month: "2026-08-01",
-        standardUnits: 12,
-        expandedUnits: 2,
-        royalty: "42.00",
-        currency: "USD",
-      },
-    ]);
-    const monthly = await listKdpMonthlyBookSales(pool, workspaceId);
-    expect(monthly).toHaveLength(1);
-    expect(monthly[0]).toMatchObject({
-      importId: secondImport.import.id,
-      month: "2026-08-01",
-      standardUnits: 12,
-      expandedUnits: 2,
-      royalty: "42.0000",
+    const tx = (
+      importId: string,
+      overrides: Partial<{
+        bookId: string | null;
+        profileId: string | null;
+        royaltyType: string;
+        transactionType: string;
+        orderDate: string;
+        royaltyDate: string;
+        netUnits: number;
+        royalty: string;
+      }> = {},
+    ) => ({
+      workspaceId,
+      importId,
+      bookId,
+      profileId,
+      asin: "B0KDPHIST1",
+      marketplace: "Amazon.com",
+      format: "paperback",
+      royaltyType: "60%",
+      transactionType: "Standard - Paperback",
+      orderDate: "2026-07-20",
+      royaltyDate: "2026-07-22",
+      netUnits: 1,
+      royalty: "3.50",
+      currency: "USD",
+      ...overrides,
     });
 
-    // The month column rejects anything but the first of the month.
-    await expect(
-      upsertKdpMonthlyBookSales(pool, [
-        {
-          workspaceId,
-          importId: secondImport.import.id,
-          bookId,
-          profileId,
-          month: "2026-08-15",
-          standardUnits: 1,
-          expandedUnits: 0,
-          royalty: "3.50",
-          currency: "USD",
-        },
-      ]),
-    ).rejects.toThrow();
-
-    // Transactions: one linked row and one unlinked (ASIN not mapped).
-    await insertKdpSaleTransactions(pool, [
-      {
-        workspaceId,
-        importId: firstImport.import.id,
-        bookId,
-        profileId,
-        asin: "B0KDPHIST1",
-        marketplace: "Amazon.com",
-        format: "paperback",
-        royaltyType: "60%",
-        transactionType: "Standard - Paperback",
-        orderDate: "2026-08-10",
-        royaltyDate: "2026-08-13",
-        netUnits: 1,
-        royalty: "3.50",
-        currency: "USD",
-      },
-      {
-        workspaceId,
-        importId: firstImport.import.id,
-        bookId: null,
-        profileId: null,
-        asin: "B0UNKNOWN99",
-        marketplace: "Amazon.com",
-        format: "paperback",
+    // The July file: a linked standard sale reported twice (two identical
+    // one-copy orders — multiplicity must survive the merge), a linked
+    // expanded-distribution row, and an unlinked-ASIN row.
+    const julyFile = [
+      tx(firstImport.import.id),
+      tx(firstImport.import.id),
+      tx(firstImport.import.id, {
         royaltyType: "40%",
         transactionType: "Expanded Distribution Channels",
-        orderDate: "2026-08-11",
-        royaltyDate: "2026-08-14",
-        netUnits: 1,
-        royalty: "1.10",
-        currency: "USD",
-      },
+        orderDate: "2026-07-21",
+        royaltyDate: "2026-07-25",
+        netUnits: 2,
+        royalty: "2.20",
+      }),
+      tx(firstImport.import.id, {
+        bookId: null,
+        profileId: null,
+        orderDate: "2026-07-22",
+        royaltyDate: "2026-07-26",
+      }),
+    ];
+    await mergeKdpSaleTransactions(pool, julyFile);
+    expect(
+      (await listKdpSaleTransactions(pool, workspaceId)).transactions,
+    ).toHaveLength(4);
+
+    // Re-importing the identical file is a no-op: same rows, same count.
+    await mergeKdpSaleTransactions(pool, julyFile);
+    expect(
+      (await listKdpSaleTransactions(pool, workspaceId)).transactions,
+    ).toHaveLength(4);
+
+    // The August file carries a one-row July-order tail (its royalty posted
+    // in August). The merge must leave every July-file row untouched — the
+    // 2026-08-29 incident was the old delete-covered-months model wiping
+    // exactly these rows.
+    await mergeKdpSaleTransactions(pool, [
+      tx(secondImport.import.id, {
+        orderDate: "2026-07-31",
+        royaltyDate: "2026-08-02",
+      }),
+      tx(secondImport.import.id, {
+        orderDate: "2026-08-10",
+        royaltyDate: "2026-08-13",
+      }),
     ]);
     expect(
       (await listKdpSaleTransactions(pool, workspaceId)).transactions,
-    ).toHaveLength(2);
+    ).toHaveLength(6);
 
-    // Re-importing the month deletes the old rows before inserting the new.
-    await deleteKdpSaleTransactionsForMonths(pool, workspaceId, ["2026-08-01"]);
-    expect(
-      (await listKdpSaleTransactions(pool, workspaceId)).transactions,
-    ).toHaveLength(0);
-    await insertKdpSaleTransactions(pool, [
+    // Monthly aggregates derive from the transactions at read time, grouped
+    // by the KDP report month (royalty_date): the July-31 order counts as
+    // August, the unlinked row is excluded, and royalty sums standard rows.
+    expect(await listKdpMonthlyBookSales(pool, workspaceId)).toEqual([
       {
-        workspaceId,
-        importId: secondImport.import.id,
         bookId,
         profileId,
-        asin: "B0KDPHIST1",
-        marketplace: "Amazon.com",
-        format: "paperback",
-        royaltyType: "60%",
-        transactionType: "Standard - Paperback",
-        orderDate: "2026-08-22",
-        royaltyDate: "2026-08-25",
-        netUnits: 1,
-        royalty: "3.50",
+        month: "2026-07-01",
+        standardUnits: 2,
+        expandedUnits: 2,
+        royalty: "7.0000",
+        currency: "USD",
+      },
+      {
+        bookId,
+        profileId,
+        month: "2026-08-01",
+        standardUnits: 2,
+        expandedUnits: 0,
+        royalty: "7.0000",
         currency: "USD",
       },
     ]);
 
-    // Filters and date mapping (pg returns date columns as Date objects —
-    // the repository casts to text so ISO strings cross the boundary).
-    const all = await listKdpSaleTransactions(pool, workspaceId);
-    expect(all.transactions).toHaveLength(1);
-    expect(all.total).toBe(1);
-    expect(all.transactions[0]).toMatchObject({
-      importId: secondImport.import.id,
-      bookId,
-      transactionType: "Standard - Paperback",
-      orderDate: "2026-08-22",
-      royaltyDate: "2026-08-25",
-      royalty: "3.5000",
-    });
-    // Paging past the end returns no rows but keeps the filtered total.
-    const pastEnd = await listKdpSaleTransactions(pool, workspaceId, {
-      limit: 1,
-      offset: 1,
-    });
-    expect(pastEnd.transactions).toHaveLength(0);
-    expect(pastEnd.total).toBe(1);
+    // The transactions month filter is the KDP report month (royalty_date).
+    expect(
+      await listKdpSaleTransactions(pool, workspaceId, { month: "2026-07-01" }),
+    ).toMatchObject({ total: 4 });
     expect(
       await listKdpSaleTransactions(pool, workspaceId, { month: "2026-08-01" }),
-    ).toMatchObject({ total: 1 });
+    ).toMatchObject({ total: 2 });
     expect(
       await listKdpSaleTransactions(pool, workspaceId, { month: "2026-09-01" }),
     ).toMatchObject({ total: 0 });
     expect(
       await listKdpSaleTransactions(pool, workspaceId, { bookId: "999999" }),
     ).toMatchObject({ total: 0 });
+
+    // Date mapping (pg returns date columns as Date objects — the repository
+    // casts to text so ISO strings cross the boundary) and paging: past the
+    // end returns no rows but keeps the filtered total.
+    const all = await listKdpSaleTransactions(pool, workspaceId);
+    expect(all.total).toBe(6);
+    expect(all.transactions[0]).toMatchObject({
+      importId: secondImport.import.id,
+      orderDate: "2026-08-10",
+      royaltyDate: "2026-08-13",
+      royalty: "3.5000",
+    });
+    const pastEnd = await listKdpSaleTransactions(pool, workspaceId, {
+      limit: 1,
+      offset: 6,
+    });
+    expect(pastEnd.transactions).toHaveLength(0);
+    expect(pastEnd.total).toBe(6);
   });
 
   it("kdp history reads: ad units by month, fulfillment stats, economics history", async () => {
@@ -3252,6 +3282,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       rowCount: 5,
       suggestions: [],
       skipped: [],
+      rows: [],
     });
     const tx = (
       overrides: Partial<{
@@ -3280,7 +3311,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       currency: "USD",
       ...overrides,
     });
-    await insertKdpSaleTransactions(pool, [
+    await mergeKdpSaleTransactions(pool, [
       tx({ orderDate: "2026-08-10", royaltyDate: "2026-08-12" }), // lag 2
       tx({ orderDate: "2026-08-11", royaltyDate: "2026-08-15" }), // lag 4
       tx({ orderDate: "2026-08-12", royaltyDate: "2026-08-18" }), // lag 6

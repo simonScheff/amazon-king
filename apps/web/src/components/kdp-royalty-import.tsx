@@ -1,4 +1,10 @@
-import { useRef, useState, type ChangeEvent } from "react";
+import {
+  useRef,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+  type ReactNode,
+} from "react";
 import type {
   KdpRoyaltyImport,
   KdpRoyaltySkipReason,
@@ -31,16 +37,11 @@ const SKIP_REASON_LABELS: Record<KdpRoyaltySkipReason, string> = {
   no_standard_rows: "No standard-rate sales in the period",
 };
 
-export function KdpImportButton({
-  onImported,
-}: {
-  onImported: (batch: KdpRoyaltyImport) => void;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
+function useKdpImport(onImported: (batch: KdpRoyaltyImport) => void) {
   const create = useCreateKdpRoyaltyImport();
   const toast = useToast();
 
-  async function onFile(file: File) {
+  async function importFile(file: File) {
     try {
       const buffer = await file.arrayBuffer();
       const report = await parseKdpRoyaltyReport(buffer, file.name);
@@ -63,9 +64,20 @@ export function KdpImportButton({
     }
   }
 
+  return { importFile, isPending: create.isPending };
+}
+
+export function KdpImportButton({
+  onImported,
+}: {
+  onImported: (batch: KdpRoyaltyImport) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { importFile, isPending } = useKdpImport(onImported);
+
   function onChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
-    if (file) void onFile(file);
+    if (file) void importFile(file);
     // Allow re-picking the same file.
     event.target.value = "";
   }
@@ -84,12 +96,65 @@ export function KdpImportButton({
         type="button"
         size="sm"
         variant="primary"
-        disabled={create.isPending}
+        disabled={isPending}
         onClick={() => inputRef.current?.click()}
       >
-        {create.isPending ? "Importing…" : "Import from KDP report"}
+        {isPending ? "Importing…" : "Import from KDP report"}
       </Button>
     </>
+  );
+}
+
+/**
+ * Drop zone around a card: dropping a KDP Royalties Estimator .xlsx anywhere
+ * on it imports the file, exactly like the Import button.
+ */
+export function KdpDropZone({
+  onImported,
+  children,
+}: {
+  onImported: (batch: KdpRoyaltyImport) => void;
+  children: ReactNode;
+}) {
+  const { importFile, isPending } = useKdpImport(onImported);
+  const toast = useToast();
+  const [dragDepth, setDragDepth] = useState(0);
+
+  function onDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setDragDepth(0);
+    const file = event.dataTransfer.files[0];
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".xlsx")) {
+      toast("Drop a KDP Royalties Estimator .xlsx file", "error");
+      return;
+    }
+    void importFile(file);
+  }
+
+  return (
+    <div
+      data-testid="kdp-drop-zone"
+      className="relative"
+      onDragEnter={(event) => {
+        event.preventDefault();
+        setDragDepth((depth) => depth + 1);
+      }}
+      onDragOver={(event) => event.preventDefault()}
+      onDragLeave={() => setDragDepth((depth) => Math.max(0, depth - 1))}
+      onDrop={onDrop}
+    >
+      {children}
+      {dragDepth > 0 ? (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-sky-500 bg-zinc-950/70">
+          <p className="text-sm font-semibold text-sky-300">
+            {isPending
+              ? "Importing…"
+              : "Drop the KDP Royalties Estimator .xlsx to import it"}
+          </p>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

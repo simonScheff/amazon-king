@@ -701,6 +701,23 @@ describe("GET /api/kdp history and transactions", () => {
     royalty: "3.50",
     currency: "USD",
   };
+  const DAILY_PROFIT = {
+    month: "2026-08-01",
+    currency: "USD",
+    ratesAvailable: true,
+    economicsMissing: false,
+    kdpImported: true,
+    daily: [
+      {
+        date: "2026-08-01",
+        adSpend: "10.0000",
+        adRoyalty: "6.8000",
+        organicRoyalty: "1.2000",
+        totalRoyalty: "8.0000",
+        profit: "-2.0000",
+      },
+    ],
+  };
 
   async function start(options: { authenticated?: boolean } = {}) {
     const session = {
@@ -716,6 +733,7 @@ describe("GET /api/kdp history and transactions", () => {
         transactions: [TRANSACTION],
         total: 1,
       })),
+      kdpDailyProfit: vi.fn(async () => DAILY_PROFIT),
     };
     const services = {
       session,
@@ -811,5 +829,35 @@ describe("GET /api/kdp history and transactions", () => {
     expect(limitResponse.json().error.code).toBe("VALIDATION_ERROR");
     expect(monthResponse.statusCode).toBe(400);
     expect(read.listKdpTransactions).not.toHaveBeenCalled();
+  });
+
+  it("serves the daily-profit month for the workspace", async () => {
+    const { read } = await start();
+
+    const response = await app!.inject({
+      method: "GET",
+      url: "/api/kdp/daily-profit?month=2026-08-01&book=7",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(DAILY_PROFIT);
+    expect(read.kdpDailyProfit).toHaveBeenCalledWith("1", {
+      month: "2026-08-01",
+      book: "7",
+    });
+
+    const badMonth = await app!.inject({
+      method: "GET",
+      url: "/api/kdp/daily-profit?month=2026-08",
+    });
+    expect(badMonth.statusCode).toBe(400);
+
+    const unauthenticated = await start({ authenticated: false });
+    const unauthorized = await app!.inject({
+      method: "GET",
+      url: "/api/kdp/daily-profit?month=2026-08-01",
+    });
+    expect(unauthorized.statusCode).toBe(401);
+    expect(unauthenticated.read.kdpDailyProfit).not.toHaveBeenCalled();
   });
 });

@@ -93,7 +93,7 @@ describe("fx_sync", () => {
     ]);
   });
 
-  it("backfills from the earliest fact date on the first run", async () => {
+  it("backfills from just before the earliest fact date on the first run", async () => {
     const store = new FakeStore();
     store.facts.campaign.push(fact("2026-07-15"), fact("2026-08-10"));
     const { fetchImpl, calls } = fakeFetch([
@@ -101,10 +101,69 @@ describe("fx_sync", () => {
     ]);
     await runHandler(createFxSyncHandler(fxDeps(store, fetchImpl)), {});
 
+    // The lookback covers a fact whose date falls on a weekend or holiday:
+    // conversion needs the previous business day's fixing.
     expect(calls).toEqual([
-      "https://api.frankfurter.dev/v2/rates?base=USD&from=2026-07-15",
+      "https://api.frankfurter.dev/v2/rates?base=USD&from=2026-07-11",
     ]);
     expect(store.fxRates).toHaveLength(1);
+  });
+
+  it("closes a historical gap when facts predate the oldest stored rate", async () => {
+    // Rates exist (so plain top-up would only ever fetch forward), but the
+    // workspace has facts from before the oldest stored fixing — the
+    // 2026-08-29 June gap: fx_rates started 2026-06-29 with June facts live.
+    const store = new FakeStore();
+    store.fxRates.push({
+      rateDate: "2026-06-29",
+      baseCurrency: "USD",
+      quoteCurrency: "EUR",
+      rate: "0.85",
+      source: "frankfurter",
+      fetchedAt: "2026-06-29T17:00:00.000Z",
+    });
+    store.facts.campaign.push(fact("2026-06-05"), fact("2026-08-10"));
+    const { fetchImpl, calls } = fakeFetch([
+      { date: "2026-06-01", base: "USD", quote: "EUR", rate: 0.86 },
+    ]);
+    await runHandler(createFxSyncHandler(fxDeps(store, fetchImpl)), {});
+
+    expect(calls).toEqual([
+      "https://api.frankfurter.dev/v2/rates?base=USD&from=2026-06-01",
+    ]);
+    expect(store.fxRates).toHaveLength(2);
+  });
+
+  it("does not re-backfill once the oldest rate predates the earliest fact", async () => {
+    const store = new FakeStore();
+    store.fxRates.push(
+      {
+        rateDate: "2026-06-01",
+        baseCurrency: "USD",
+        quoteCurrency: "EUR",
+        rate: "0.86",
+        source: "frankfurter",
+        fetchedAt: "2026-06-01T17:00:00.000Z",
+      },
+      {
+        rateDate: "2026-08-19",
+        baseCurrency: "USD",
+        quoteCurrency: "EUR",
+        rate: "0.85",
+        source: "frankfurter",
+        fetchedAt: "2026-08-19T17:00:00.000Z",
+      },
+    );
+    store.facts.campaign.push(fact("2026-06-05"));
+    const { fetchImpl, calls } = fakeFetch([
+      { date: "2026-08-20", base: "USD", quote: "EUR", rate: 0.8512 },
+    ]);
+    await runHandler(createFxSyncHandler(fxDeps(store, fetchImpl)), {});
+
+    // Plain top-up from the day after the latest fixing.
+    expect(calls).toEqual([
+      "https://api.frankfurter.dev/v2/rates?base=USD&from=2026-08-20",
+    ]);
   });
 
   it("falls back to a 30-day window when the workspace has no facts yet", async () => {

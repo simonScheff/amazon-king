@@ -27,7 +27,11 @@ import { SearchTermsPage } from "./routes/search-terms";
 import { SearchTermDetailPage } from "./routes/search-term-detail";
 import { NegativesPage } from "./routes/negatives";
 import { NegativeDetailPage } from "./routes/negative-detail";
-import { KdpHistoryPage } from "./routes/kdp-history";
+import {
+  KDP_HISTORY_TABS,
+  KdpHistoryPage,
+  type KdpHistoryTab,
+} from "./routes/kdp-history";
 import { ChangesPage } from "./routes/changes";
 import {
   SETTINGS_TABS,
@@ -233,11 +237,29 @@ const negativeDetailRoute = createRoute({
 const kdpHistoryRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/kdp-history",
-  // `?book=<bookId>` keeps the sales-mix book selector in the URL; bare
-  // /kdp-history sums units across all books.
-  validateSearch: (search: Record<string, unknown>): { book?: string } => {
+  // `?tab=` keeps the active section in the URL (bare /kdp-history lands on
+  // the organic-data tab); `?book=<bookId>` keeps the organic-data book
+  // selector in the URL; "all" sums units across every book. `?month=`
+  // (first-of-month ISO date) keeps the daily-profit month in the URL.
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { book?: string; tab?: KdpHistoryTab; month?: string } => {
     const book = typeof search.book === "string" ? search.book.trim() : "";
-    return book !== "" ? { book } : {};
+    const tab =
+      typeof search.tab === "string" &&
+      (KDP_HISTORY_TABS as readonly string[]).includes(search.tab)
+        ? (search.tab as KdpHistoryTab)
+        : undefined;
+    const month =
+      typeof search.month === "string" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(search.month)
+        ? search.month
+        : undefined;
+    return {
+      ...(book !== "" ? { book } : {}),
+      ...(tab ? { tab } : {}),
+      ...(month ? { month } : {}),
+    };
   },
   component: KdpHistoryPage,
 });

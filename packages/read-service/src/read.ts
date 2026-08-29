@@ -48,6 +48,7 @@ import {
 import { z } from "zod";
 import { ApiError, conflict, notFound } from "./errors.js";
 import { getKdpHistory, listKdpTransactions } from "./kdp-history.js";
+import { getKdpDailyProfit } from "./daily-profit.js";
 import {
   applyKdpRoyaltyImport,
   createKdpRoyaltyImport,
@@ -2383,6 +2384,10 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
 
     async listKdpTransactions(workspaceId, query) {
       return listKdpTransactions(db, workspaceId, query);
+    },
+
+    async kdpDailyProfit(workspaceId, query) {
+      return getKdpDailyProfit(db, workspaceId, query, now);
     },
 
     async listRecommendations(workspaceId, filter) {

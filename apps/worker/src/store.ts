@@ -290,6 +290,8 @@ export interface WorkerStore {
   upsertFxRates(rows: readonly FxRateRow[]): Promise<number>;
   /** Latest stored fixing date; null when no rates have been synced yet. */
   getLatestFxRateDate(): Promise<string | null>;
+  /** Oldest stored rate_date (historical-gap detection for fx backfill). */
+  getEarliestFxRateDate(): Promise<string | null>;
   /** Oldest metric date across the workspace's fact tables (fx backfill depth). */
   getEarliestFactDate(): Promise<string | null>;
 
@@ -641,6 +643,9 @@ export function createDbStore(pool: Pool): WorkerStore {
 
     getLatestFxRateDate() {
       return fxRepo.getLatestRateDate(db);
+    },
+    getEarliestFxRateDate() {
+      return fxRepo.getEarliestRateDate(db);
     },
 
     async getEarliestFactDate() {

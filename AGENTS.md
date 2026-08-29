@@ -35,6 +35,7 @@ to read directly.
 | `update-website-screenshots` | Refresh the docs screenshots with the current UI      |
 | `live-amazon-validation`     | Gate any run against real Amazon credentials          |
 | `expose-localhost`           | Share the local dev server over a public HTTPS tunnel |
+| `stitch-design`              | Generate UI screens with Stitch, incl. timeout fix    |
 
 ## Project overview
 

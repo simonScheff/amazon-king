@@ -43,7 +43,6 @@ export interface FakeTables {
   searchTermExclusions: FakeRow[];
   fxRates: FakeRow[];
   kdpRoyaltyImports: FakeRow[];
-  kdpMonthlyBookSales: FakeRow[];
   kdpSaleTransactions: FakeRow[];
 }
 
@@ -82,7 +81,6 @@ function emptyTables(): FakeTables {
     searchTermExclusions: [],
     fxRates: [],
     kdpRoyaltyImports: [],
-    kdpMonthlyBookSales: [],
     kdpSaleTransactions: [],
   };
 }
@@ -459,29 +457,12 @@ export class FakeDb {
       row_count: 0,
       suggestions: [],
       skipped: [],
+      rows: [],
       created_at: new Date(),
       applied_at: null,
       ...overrides,
     };
     this.tables.kdpRoyaltyImports.push(row);
-    return row;
-  }
-
-  seedKdpMonthlyBookSale(overrides: Partial<FakeRow> = {}): FakeRow {
-    const row = {
-      id: nextId(),
-      workspace_id: "1",
-      import_id: "1",
-      book_id: "1",
-      profile_id: "1",
-      month: "2026-08-01",
-      standard_units: 3,
-      expanded_units: 1,
-      royalty: "10.2900",
-      currency: "USD",
-      ...overrides,
-    };
-    this.tables.kdpMonthlyBookSales.push(row);
     return row;
   }
 
@@ -1955,6 +1936,7 @@ export class FakeDb {
             row_count: p[5],
             suggestions: JSON.parse(String(p[6])),
             skipped: JSON.parse(String(p[7])),
+            rows: JSON.parse(String(p[8])),
             created_at: new Date(),
             applied_at: null,
           };
@@ -1994,6 +1976,11 @@ export class FakeDb {
           ),
       },
       {
+        match: "select id, file_name, rows, created_at",
+        handle: (p) =>
+          this.ok(t.kdpRoyaltyImports.filter((r) => r.workspace_id === p[0])),
+      },
+      {
         match: "from kdp_royalty_imports",
         handle: (p) =>
           this.ok(
@@ -2005,72 +1992,99 @@ export class FakeDb {
 
       // -- kdp sales history ------------------------------------------------
       {
-        match: "insert into kdp_monthly_book_sales",
+        // Derived monthly aggregates over the transactions
+        // (listKdpMonthlyBookSales): royalty_date month, standard/expanded
+        // split on the same classification as the SQL.
+        match: "coalesce(sum(net_units) filter",
         handle: (p) => {
-          const existing = t.kdpMonthlyBookSales.find(
-            (row) =>
-              row.book_id === p[2] &&
-              row.profile_id === p[3] &&
-              dateOnly(row.month) === p[4],
-          );
-          // ON CONFLICT (book_id, profile_id, month) DO UPDATE: latest wins.
-          if (existing) {
-            existing.import_id = p[1];
-            existing.standard_units = p[5];
-            existing.expanded_units = p[6];
-            existing.royalty = p[7];
-            existing.currency = p[8];
-            return { rows: [], rowCount: 1 };
+          const standard = (row: FakeRow) =>
+            !["40%", "50%"].includes(String(row.royalty_type)) &&
+            !String(row.transaction_type)
+              .toLowerCase()
+              .startsWith("expanded distribution");
+          interface MonthlyGroup {
+            book_id: unknown;
+            profile_id: unknown;
+            month: string;
+            standard_units: number;
+            expanded_units: number;
+            royalty: number;
+            currency: unknown;
           }
-          t.kdpMonthlyBookSales.push({
-            id: nextId(),
-            workspace_id: p[0],
-            import_id: p[1],
-            book_id: p[2],
-            profile_id: p[3],
-            month: p[4],
-            standard_units: p[5],
-            expanded_units: p[6],
-            royalty: p[7],
-            currency: p[8],
-          });
-          return { rows: [], rowCount: 1 };
-        },
-      },
-      {
-        match: "from kdp_monthly_book_sales where workspace_id = $1",
-        handle: (p) =>
-          this.ok(
-            t.kdpMonthlyBookSales
-              .filter((row) => row.workspace_id === p[0])
+          const groups = new Map<string, MonthlyGroup>();
+          for (const row of t.kdpSaleTransactions) {
+            if (row.workspace_id !== p[0]) continue;
+            if (row.book_id === null || row.profile_id === null) continue;
+            const month = `${dateOnly(row.royalty_date).slice(0, 7)}-01`;
+            const key = `${row.book_id} ${row.profile_id} ${month}`;
+            const group = groups.get(key) ?? {
+              book_id: row.book_id,
+              profile_id: row.profile_id,
+              month,
+              standard_units: 0,
+              expanded_units: 0,
+              royalty: 0,
+              currency: row.currency,
+            };
+            if (standard(row)) {
+              group.standard_units += Number(row.net_units);
+              group.royalty += Number(row.royalty);
+            } else {
+              group.expanded_units += Number(row.net_units);
+            }
+            groups.set(key, group);
+          }
+          return this.ok(
+            [...groups.values()]
               .sort(
                 (a, b) =>
-                  dateOnly(a.month).localeCompare(dateOnly(b.month)) ||
+                  String(a.month).localeCompare(String(b.month)) ||
                   String(a.book_id).localeCompare(
                     String(b.book_id),
                     undefined,
-                    {
-                      numeric: true,
-                    },
+                    { numeric: true },
                   ) ||
                   String(a.profile_id).localeCompare(
                     String(b.profile_id),
                     undefined,
                     { numeric: true },
                   ),
-              ),
-          ),
+              )
+              .map((group) => ({
+                ...group,
+                royalty: Number(group.royalty).toFixed(4),
+              })),
+          );
+        },
       },
       {
+        // mergeKdpSaleTransactions: delete rows identical to the incoming
+        // ones on every report field; the caller then re-inserts them.
         match: "delete from kdp_sale_transactions",
         handle: (p) => {
-          const months = p[1] as string[];
+          const count = (p[1] as string[]).length;
+          const matches = (row: FakeRow): boolean => {
+            for (let i = 0; i < count; i += 1) {
+              if (
+                row.asin === (p[1] as string[])[i] &&
+                row.marketplace === (p[2] as string[])[i] &&
+                dateOnly(row.order_date) === dateOnly((p[3] as unknown[])[i]) &&
+                dateOnly(row.royalty_date) ===
+                  dateOnly((p[4] as unknown[])[i]) &&
+                row.royalty_type === (p[5] as string[])[i] &&
+                row.transaction_type === (p[6] as string[])[i] &&
+                Number(row.net_units) === Number((p[7] as number[])[i]) &&
+                Number(row.royalty) === Number((p[8] as unknown[])[i]) &&
+                row.currency === (p[9] as string[])[i] &&
+                row.format === (p[10] as string[])[i]
+              ) {
+                return true;
+              }
+            }
+            return false;
+          };
           const kept = t.kdpSaleTransactions.filter(
-            (row) =>
-              !(
-                row.workspace_id === p[0] &&
-                months.includes(`${dateOnly(row.order_date).slice(0, 7)}-01`)
-              ),
+            (row) => !(row.workspace_id === p[0] && matches(row)),
           );
           const removed = t.kdpSaleTransactions.length - kept.length;
           t.kdpSaleTransactions.splice(
@@ -2115,7 +2129,7 @@ export class FakeDb {
                   (p[1] === null || row.book_id === p[1]) &&
                   (p[2] === null || row.profile_id === p[2]) &&
                   (p[3] === null ||
-                    `${dateOnly(row.order_date).slice(0, 7)}-01` === p[3]),
+                    `${dateOnly(row.royalty_date).slice(0, 7)}-01` === p[3]),
               ).length,
             },
           ]),
@@ -2132,7 +2146,7 @@ export class FakeDb {
                   (p[1] === null || row.book_id === p[1]) &&
                   (p[2] === null || row.profile_id === p[2]) &&
                   (p[3] === null ||
-                    `${dateOnly(row.order_date).slice(0, 7)}-01` === p[3]),
+                    `${dateOnly(row.royalty_date).slice(0, 7)}-01` === p[3]),
               )
               .sort(
                 (a, b) =>
@@ -2145,6 +2159,48 @@ export class FakeDb {
                 ((p[5] as number) ?? 0) + (p[4] as number),
               ),
           ),
+      },
+      {
+        // Daily KDP royalty by order date, converted per day (listKdpDailyRoyalty).
+        match: "select order_date as metric_date, royalty, currency",
+        handle: (p, db) => {
+          const start = String(p[1]);
+          const end = String(p[2]);
+          const display = String(p[4]);
+          const byDate = new Map<
+            string,
+            { royalty: number; missing: boolean }
+          >();
+          for (const row of t.kdpSaleTransactions) {
+            const date = dateOnly(row.order_date);
+            if (
+              row.workspace_id !== p[0] ||
+              date < start ||
+              date > end ||
+              (p[3] !== null && String(row.book_id) !== String(p[3]))
+            ) {
+              continue;
+            }
+            const entry = byDate.get(date) ?? { royalty: 0, missing: false };
+            const dr = db.fxRateFor(display, date);
+            const nr = db.fxRateFor(String(row.currency), date);
+            if (dr === null || nr === null) {
+              if (Number(row.royalty) !== 0) entry.missing = true;
+            } else {
+              entry.royalty += (Number(row.royalty) * dr) / nr;
+            }
+            byDate.set(date, entry);
+          }
+          return this.ok(
+            [...byDate.entries()]
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([date, entry]) => ({
+                metric_date: date,
+                royalty: entry.royalty.toFixed(4),
+                rates_missing: entry.missing,
+              })),
+          );
+        },
       },
       {
         // Ad-attributed copies per linked book × profile × month:

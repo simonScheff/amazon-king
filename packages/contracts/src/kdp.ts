@@ -149,16 +149,17 @@ export type KdpRoyaltyApplyResult = z.infer<typeof kdpRoyaltyApplyResultSchema>;
  * GET /api/kdp/history — phase-2 sales history for the /kdp-history page
  * (docs/kdp-royalty-import-plan.md §6): per book × marketplace monthly series
  * for the sales-mix and royalty-trend charts, plus fulfillment-time stats.
- * KDP units come from the stored monthly aggregates; ad units are computed
- * from the fact tables at query time (decision 11); royaltyPerSale is the
- * effective-dated book_economics value in effect for that month (decision 10
- * — read from history, never duplicated). Each series is single-currency by
- * construction.
+ * KDP units are derived at read time from the stored transactions, grouped
+ * by KDP report month (royalty_date, matching the KDP dashboard's own
+ * display); ad units are computed from the fact tables at query time
+ * (decision 11); royaltyPerSale is the effective-dated book_economics value
+ * in effect for that month (decision 10 — read from history, never
+ * duplicated). Each series is single-currency by construction.
  */
 
 /** One month of a book × marketplace history series. */
 export const kdpHistoryMonthSchema = z.object({
-  /** First of the month (ISO date). */
+  /** First of the KDP report month — the month of royalty_date (ISO date). */
   month: isoDateSchema,
   /** KDP standard-rate net units (can go negative on refund-heavy months). */
   kdpStandardUnits: z.number().int(),
@@ -216,7 +217,7 @@ export const kdpTransactionsQuerySchema = z.object({
   bookId: z.string().min(1).optional(),
   /** Amazon Ads profile id. */
   profileId: z.string().min(1).optional(),
-  /** First-of-month ISO date; matches on order_date's month. */
+  /** First-of-month ISO date; matches the KDP report month (royalty_date). */
   month: isoDateSchema.optional(),
   limit: z.coerce.number().int().min(1).max(1000).default(500),
   offset: z.coerce.number().int().min(0).default(0),
@@ -253,3 +254,66 @@ export const kdpTransactionsPageSchema = z.object({
   total: z.number().int().nonnegative(),
 });
 export type KdpTransactionsPage = z.infer<typeof kdpTransactionsPageSchema>;
+
+/**
+ * GET /api/kdp/daily-profit — daily profitability of one calendar month for
+ * the /kdp-history organic tab: real KDP royalty per order date (organic
+ * included) next to the estimated ad-attributed royalty and the ad spend, all
+ * markets converted per day into the workspace display currency through the
+ * USD-pivot fx_rates table (same convention as country=all on the dashboard
+ * summary). The ad/organic split avoids double counting by valuing
+ * organic = max(0, totalRoyalty − adRoyalty) — ad attribution and KDP order
+ * dates never align perfectly, the same clamp the sales-mix chart uses.
+ * `profit = totalRoyalty − adSpend` is real money and needs no book
+ * economics; only the ad/organic split does.
+ */
+
+/** GET /api/kdp/daily-profit query params. */
+export const kdpDailyProfitQuerySchema = z.object({
+  /** First-of-month ISO date; the month to observe. */
+  month: isoDateSchema,
+  /** Catalog book id; absent sums every book (and unlinked-ASIN sales). */
+  book: z.string().min(1).optional(),
+});
+export type KdpDailyProfitQuery = z.infer<typeof kdpDailyProfitQuerySchema>;
+
+/** One day of the monthly profitability series. */
+export const kdpDailyProfitDaySchema = z.object({
+  date: isoDateSchema,
+  /** Converted ad spend; "0" on ad-free days. */
+  adSpend: nonNegativeDecimalStringSchema,
+  /**
+   * Estimated ad-attributed royalty (facts × book economics); null when
+   * economics were missing for that day.
+   */
+  adRoyalty: nonNegativeDecimalStringSchema.nullable(),
+  /**
+   * max(0, totalRoyalty − adRoyalty); null when the split is unavailable
+   * (economics missing) or the month was never imported.
+   */
+  organicRoyalty: nonNegativeDecimalStringSchema.nullable(),
+  /**
+   * Real summed KDP royalty for the order date (signed — refunds go
+   * negative); null when the month was never imported.
+   */
+  totalRoyalty: decimalStringSchema.nullable(),
+  /** totalRoyalty − adSpend; null when the month was never imported. */
+  profit: decimalStringSchema.nullable(),
+});
+export type KdpDailyProfitDay = z.infer<typeof kdpDailyProfitDaySchema>;
+
+export const kdpDailyProfitSchema = z.object({
+  /** First of the observed month (echo of the query). */
+  month: isoDateSchema,
+  /** Display currency every figure is converted into. */
+  currency: currencyCodeSchema,
+  /** False when fx_rates is empty — daily is then empty, never unconverted. */
+  ratesAvailable: z.boolean(),
+  /** True when any day lacked the economics needed for the ad/organic split. */
+  economicsMissing: z.boolean(),
+  /** False when the month has no KDP transactions (never imported). */
+  kdpImported: z.boolean(),
+  /** Every day of the month, ascending (current month capped at today). */
+  daily: z.array(kdpDailyProfitDaySchema),
+});
+export type KdpDailyProfit = z.infer<typeof kdpDailyProfitSchema>;

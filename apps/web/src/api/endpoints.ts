@@ -26,6 +26,7 @@ import {
   dataFreshnessResponseSchema,
   fxSyncResultSchema,
   kdpHistorySchema,
+  kdpDailyProfitSchema,
   kdpRoyaltyApplyResultSchema,
   kdpRoyaltyImportSchema,
   kdpRoyaltyImportSummarySchema,
@@ -1065,6 +1066,22 @@ export function useKdpSaleTransactions(filters: {
   });
 }
 
+/**
+ * Daily profitability of one calendar month (ads + organic) for the
+ * /kdp-history organic tab. The query key carries both filter dimensions
+ * (month, book) or the cache would serve another view's numbers.
+ */
+export function useKdpDailyProfit(month: string, book?: string) {
+  return useQuery({
+    queryKey: ["kdp-daily-profit", month, book ?? null],
+    queryFn: () =>
+      apiFetch("/api/kdp/daily-profit", {
+        query: { month, book },
+        schema: kdpDailyProfitSchema,
+      }),
+  });
+}
+
 export function useCreateKdpRoyaltyImport() {
   const qc = useQueryClient();
   return useMutation({
@@ -1079,6 +1096,7 @@ export function useCreateKdpRoyaltyImport() {
         qc.invalidateQueries({ queryKey: ["kdp-royalty-imports"] }),
         qc.invalidateQueries({ queryKey: ["kdp-history"] }),
         qc.invalidateQueries({ queryKey: ["kdp-sale-transactions"] }),
+        qc.invalidateQueries({ queryKey: ["kdp-daily-profit"] }),
         qc.invalidateQueries({ queryKey: ["audit-events"] }),
       ]);
     },
@@ -1099,6 +1117,7 @@ export function useApplyKdpRoyaltyImport() {
         qc.invalidateQueries({ queryKey: ["books"] }),
         qc.invalidateQueries({ queryKey: ["kdp-royalty-imports"] }),
         qc.invalidateQueries({ queryKey: ["kdp-history"] }),
+        qc.invalidateQueries({ queryKey: ["kdp-daily-profit"] }),
         qc.invalidateQueries({ queryKey: ["audit-events"] }),
         qc.invalidateQueries({ queryKey: ["dashboard-summary"] }),
       ]);

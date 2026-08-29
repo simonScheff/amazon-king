@@ -18,6 +18,7 @@ import {
   dashboardSummaryQuerySchema,
   kdpRoyaltyApplyInputSchema,
   kdpRoyaltyImportInputSchema,
+  kdpDailyProfitQuerySchema,
   kdpTransactionsQuerySchema,
   loginRequestSchema,
   metricWindowSchema,
@@ -636,6 +637,12 @@ export async function buildServer(
     const auth = await authenticate(request);
     const query = parse(kdpTransactionsQuerySchema, request.query);
     return services.read.listKdpTransactions(auth.workspaceId, query);
+  });
+
+  app.get("/api/kdp/daily-profit", async (request) => {
+    const auth = await authenticate(request);
+    const query = parse(kdpDailyProfitQuerySchema, request.query);
+    return services.read.kdpDailyProfit(auth.workspaceId, query);
   });
 
   app.post(

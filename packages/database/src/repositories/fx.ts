@@ -62,6 +62,14 @@ export async function getLatestRateDate(db: Db): Promise<string | null> {
   return result.rows[0]?.latest ?? null;
 }
 
+/** Oldest stored rate_date; null when no rates have ever been synced. */
+export async function getEarliestRateDate(db: Db): Promise<string | null> {
+  const result = await db.query<{ earliest: string | null }>(
+    `select min(rate_date)::text as earliest from fx_rates`,
+  );
+  return result.rows[0]?.earliest ?? null;
+}
+
 /** Raw fx_sync health, straight from fx_rates and the job queue. */
 export interface FxSyncStatus {
   /** Newest stored rate_date; null when no rates have ever been synced. */
@@ -121,8 +129,9 @@ export async function getFxSyncStatus(db: Db): Promise<FxSyncStatus> {
 }
 
 /**
- * Oldest metric date across the workspace's daily fact tables, so the fx_sync
- * job knows how far back to backfill rates. Null when the workspace has no
+ * Oldest metric date across the workspace's daily fact tables plus the KDP
+ * sale transactions' order dates, so the fx_sync job knows how far back to
+ * backfill rates. Null when the workspace has no
  * facts yet.
  */
 export async function getEarliestFactDate(
@@ -161,6 +170,13 @@ export async function getEarliestFactDate(
        join amazon_profiles p on p.id = m.profile_id
        join amazon_connections c on c.id = p.connection_id
        where c.workspace_id = $1
+       union all
+       -- KDP sale rows are conversion-relevant facts too (the /kdp-history
+       -- daily profit chart converts royalty at each order date); they sit
+       -- outside the profile join chain, keyed by workspace directly.
+       select min(t.order_date)
+       from kdp_sale_transactions t
+       where t.workspace_id = $1
      ) facts`,
     [workspaceId],
   );

@@ -163,6 +163,44 @@ those hooks translate `country === "all"` into no country filter
 (unfiltered) rather than sending `all` downstream. There is no FX conversion
 on either screen.
 
+## Total sales card
+
+The **Organic data** tab of `/kdp-history` renders a single merged card
+("Total sales — ads + organic", inline in `src/routes/kdp-history.tsx`) fed
+entirely by `useKdpHistory` — there is no separate endpoint or request. It
+combines three stat tiles (total units, from ads, organic, the latter two with
+shares of the total, computed client-side by `buildSalesTotals`/`unitShare`
+over the visible months) with the full-imported-history stacked bar chart
+(`SalesMixChart` in `src/components/kdp-history-charts.tsx`: ad `#a078ff` vs.
+organic `#34d399`, organic clamped ≥ 0 per book × market × month before
+summing). The URL-backed `?book=` selector sits in the card header and drives
+tiles and chart together; the current month carries a "month to date" badge
+(`currentMonth()` helper) because its KDP side is incomplete. Units are
+counts, so summing across books and markets needs no FX conversion.
+
+## Daily profit card
+
+The **Organic data** tab leads with the "Daily profit — ads + organic" card
+(`DailyProfitCard` inline in `src/routes/kdp-history.tsx`, chart in
+`src/components/kdp-daily-profit-chart.tsx`): one calendar month of per-day
+profitability from `useKdpDailyProfit(month, book)` (key
+`["kdp-daily-profit", month, book ?? null]` → `GET /api/kdp/daily-profit`).
+Stacked bars show the royalty split — estimated ad-attributed (`#a078ff`)
+and real organic (`#34d399`, per day `max(0, total − ad)`, the same clamp as
+the sales mix) — against the day's ad spend (red line) and a cumulative
+profit line (`#d0bcff`, built client-side by `buildDailyProfitPoints`). All
+figures are all-markets money converted per day into the workspace display
+currency — the endpoint owns the FX conversion (same USD-pivot convention
+as `country=all` on the summary) and can answer `ratesAvailable: false`
+(empty state) or 409 `FX_RATES_INCOMPLETE`. profit = real KDP royalty −
+spend needs no book economics; only the ad/organic split does (missing
+economics drop the split with a footnote, profit stays). A month without a
+KDP import shows the estimated ad side only, footnoted. The URL-backed
+`?month=` selector (first-of-month ISO, validated in `src/router.tsx`) sits
+in the card header; options are the imported months plus the current one
+(default current, which shows the ad side only until its report lands), and
+the page's `?book=` selector filters the card too.
+
 ## Settings page
 
 `src/routes/settings.tsx` is split into five URL-backed tabs
@@ -172,7 +210,10 @@ and the audit log. The KDP imports tab is the operational surface for the
 KDP royalty import: the same **Import from KDP report** button as on Books &
 economics, plus the read-only import log (period, file, row and suggestion
 counts, Applied/Not applied status, imported date) — rows do not link to a
-batch review because `GET /api/kdp/imports` returns summaries only.
+batch review because `GET /api/kdp/imports` returns summaries only. The card
+is also a drop zone (`KdpDropZone` in
+`src/components/kdp-royalty-import.tsx`): dragging a Royalties Estimator
+.xlsx anywhere onto it imports the file, same as the button.
 Tab badges surface outstanding setup work (unconfigured economics, new
 ASINs). The profiles tab leads with the Workspace card (display currency plus
 the FX rates status row and its **Sync rates now** manual trigger — see the
@@ -199,28 +240,46 @@ The same button plus the import log also live on the KDP imports tab (above).
 
 `src/routes/kdp-history.tsx` (`/kdp-history`, sidebar "KDP history" between
 Negatives and Change center) is the analytics surface for KDP royalty
-imports (phase 2 of `docs/kdp-royalty-import-plan.md`, decision 10). It shows
-the royalty-per-sale trend (one line per book × market, each labeled with
-its own currency — lines are never converted or summed) rendered as gradient
-areas with the y-axis zoomed to the data range, compact legend chips, and a
-latest-value stat tile per series with the month-over-month delta; the monthly
-sales-mix stacked bars (ad `#a078ff` vs. organic `#71717a`, organic clamped
-≥ 0, URL-backed `?book=` selector), the fulfillment-time card (median and
-average order→ship days per marketplace, standard-rate sales only), and the
-individual-sales transaction browser (book/marketplace/month filters plus a
-computed ship-lag column). The empty state links to Settings.
+imports (phase 2 of `docs/kdp-royalty-import-plan.md`, decision 10). The page
+is split into four URL-backed tabs (`?tab=organic|royalty|fulfillment|transactions`,
+validated in `src/router.tsx`, same tab-bar idiom as Settings; bare
+`/kdp-history` lands on `organic`):
+
+- **Organic data** — the Daily profit card (see its section above) plus the
+  Total sales card: monthly ad-vs-organic unit sales as stat tiles plus a
+  full-history stacked bar chart. The URL-backed `?book=` selector drives
+  both cards; `?month=` picks the daily-profit month.
+- **Royalty trend** — the royalty-per-sale trend (one line per book × market,
+  each labeled with its own currency — lines are never converted or summed)
+  rendered as gradient areas with the y-axis zoomed to the data range,
+  compact legend chips, and a latest-value stat tile per series with the
+  month-over-month delta.
+- **Fulfillment** — median and average order→ship days per marketplace,
+  standard-rate sales only.
+- **Individual sales** — the transaction browser (book/marketplace/month
+  filters plus a computed ship-lag column).
+
+Months on this page are **KDP report months** — the month of `royalty_date`,
+matching the KDP dashboard's own display (an order placed July 31 whose
+royalty posted August 2 counts as August). The exceptions are the daily
+views: the Daily profit card sums royalty per order date, and the
+Fulfillment card groups the order→ship lag by order month.
+
+The empty state (no KDP imports at all) replaces the tabs and links to
+Settings.
 
 Data comes from `useKdpHistory` (key `["kdp-history"]` →
-`GET /api/kdp/history`) and `useKdpSaleTransactions` (key
+`GET /api/kdp/history`), `useKdpSaleTransactions` (key
 `["kdp-sale-transactions", bookId, profileId, month, page]` →
-`GET /api/kdp/transactions`). The transaction browser is server-side
+`GET /api/kdp/transactions`), and `useKdpDailyProfit` (key
+`["kdp-daily-profit", month, book ?? null]` → `GET /api/kdp/daily-profit`). The transaction browser is server-side
 paginated at `KDP_SALES_PAGE_SIZE` (50) rows: the hook sends
 `limit`/`offset`, the API answers `{ transactions, total }`, and the card
 renders Previous/Next controls once the filtered total exceeds one page —
 changing any filter resets to page 0. Ad units are computed at query time from
 advertised-product facts via the linked ASIN — never snapshotted — so a
 re-synced ad account rewrites the mix. The import create/apply mutations
-invalidate both keys.
+invalidate all three keys.
 
 ## New-campaign wizard
 

@@ -94,18 +94,32 @@ To add a migration, use the `add-migration` skill.
   `markKdpRoyaltyImportApplied`, which returns null on a second attempt so a
   batch can never be applied twice. Only the import flow reads this table;
   applying writes real `book_economics` rows through `upsertBookEconomics`.
-- `kdp_monthly_book_sales` and `kdp_sale_transactions` (migration 0020,
-  `repositories/kdp-sales.ts`) are the phase-2 KDP history tables feeding
-  `/kdp-history`: monthly per-book × per-marketplace aggregates plus verbatim
-  per-transaction rows (`royalty_date − order_date` is the fulfillment lag).
-  Re-importing a month replaces its data — monthly rows upsert on
-  `(book_id, profile_id, month)` with the newer import winning, and
-  `deleteKdpSaleTransactionsForMonths` clears the covered months' transactions
-  before the new file's rows are inserted, so overlapping files never
-  double-count. Unlinked-ASIN transactions keep null `book_id`/`profile_id`.
+  The normalized report rows are stored too (`rows` jsonb, migration 0022) so
+  the KDP history can be rebuilt from the database alone —
+  `scripts/rebuild-kdp-history.ts` wipes and replays them through
+  `listKdpRoyaltyImportPayloads`; batches predating the column carry `[]` and
+  become rebuildable only by re-uploading the file.
+- `kdp_sale_transactions` (migration 0020, `repositories/kdp-sales.ts`) is the
+  phase-2 KDP history feeding `/kdp-history`: verbatim per-transaction rows
+  (`royalty_date − order_date` is the fulfillment lag). Imports are
+  **additive** (migration 0022): a KDP report is royalty-month scoped and
+  every file carries a tail of previous-month orders, so
+  `mergeKdpSaleTransactions` deletes only rows identical to the incoming ones
+  (every report field — multiplicity survives, since real files contain true
+  duplicate one-copy sales) and inserts the incoming set. No import ever
+  deletes another file's data — the 2026-08-29 incident was the old
+  delete-covered-months model wiping a full month over a one-row tail. The
+  monthly aggregates are **derived at read time** by
+  `listKdpMonthlyBookSales` (the old `kdp_monthly_book_sales` table was
+  dropped), grouped by KDP report month — `date_trunc('month', royalty_date)`,
+  matching the KDP dashboard's own display; order-date months are never used
+  for display. Unlinked-ASIN transactions keep null `book_id`/`profile_id`
+  (shown in the transaction browser, excluded from the monthly derivation).
+  The transaction browser's `month` filter is the royalty_date month too.
   Transactions carry `transaction_type` (migration 0021) because the
-  fulfillment stats exclude Expanded Distribution rows on the same
-  royalty-type + transaction-type classification the import uses.
+  fulfillment stats and the monthly derivation exclude Expanded Distribution
+  rows on the same royalty-type + transaction-type classification the import
+  uses (`STANDARD_ROW_SQL`).
   `listKdpAdUnitsByBookMonth` computes the ad side of the sales mix at query
   time from `advertised_product_metrics_daily` (fact ad_id → `ads.asin` →
   `book_profile_links`, `greatest(units_sold_clicks14d, purchases14d)` copies)
@@ -113,7 +127,12 @@ To add a migration, use the `add-migration` skill.
   for the median lag per profile × month of order_date, standard-rate rows
   only. The royalty trend reads `books.listBookEconomicsHistoryByWorkspace`
   (every effective-dated row, `effective_from::text`) — never duplicated
-  storage.
+  storage. `listKdpDailyRoyalty` sums real royalty per order date (organic
+  included, unlinked-ASIN rows too unless a book filter is given) converted
+  per day into one display currency — the organic side of the
+  `/kdp-history` daily profit chart; it wraps the transactions in a
+  subselect aliasing `order_date as metric_date` so the shared
+  `fxRateJoins` applies verbatim.
 - The converting dashboard queries (`convertedDailyTotals`,
   `convertedDailySeries`, `convertedRoyaltySeries`, `convertedCountrySpend` in
   `repositories/dashboard.ts`) serve the `country=all` view: each fact is
@@ -121,6 +140,10 @@ To add a migration, use the `add-migration` skill.
   (`rate_date <= fact_date order by rate_date desc limit 1`, USD = 1), all on
   `numeric`, rounded to 4 decimals. A fact without a covering fixing
   contributes NULL and raises `rates_missing` — never a silent 1:1.
+  The joins come from the exported `fxRateJoins(displayParamIndex)` helper,
+  which expects the outer query's fact source aliased as `m` with
+  `metric_date` and `currency` columns — `kdp-sales.ts` reuses it for the
+  KDP daily-royalty conversion via a subselect.
   `fx.getFxSyncStatus` reads coverage plus the last `fx_sync` job state for
   the freshness endpoint; `job_queue.finished_at` (migration 0015) is stamped
   by `complete` and terminal `fail`.

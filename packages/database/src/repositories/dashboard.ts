@@ -2421,9 +2421,11 @@ export async function dailySeries(
  * display currency (parameter $N), `nr` for the row's native currency. USD's
  * pivot rate is 1 by definition; any other currency resolves the latest
  * fixing at or before the fact's metric date and stays NULL when fx_rates
- * does not cover that date.
+ * does not cover that date. The outer query must alias its fact source as
+ * `m` with `metric_date` and `currency` columns (a subselect works — the
+ * KDP daily-royalty query aliases order_date that way).
  */
-function fxRateJoins(displayParamIndex: number): string {
+export function fxRateJoins(displayParamIndex: number): string {
   return `cross join lateral (
        select case
                 when $${displayParamIndex} = 'USD' then 1::numeric
