@@ -134,6 +134,16 @@ function cannibalizationStore() {
         defaultBid: null,
       },
     ],
+    ads: [
+      ...STRUCTURE.ads,
+      {
+        id: "41",
+        adGroupId: "21",
+        amazonAdId: "ad2",
+        asin: "B001",
+        state: "enabled",
+      },
+    ],
     targets: [
       ...STRUCTURE.targets,
       {
@@ -402,6 +412,56 @@ describe("recommendation_run", () => {
         (rec) => rec.type === "cannibalization_conflict",
       ),
     ).toBe(false);
+  });
+
+  it("stops flagging cannibalization if a campaign's ads in the serving ad group are disabled", async () => {
+    const store = cannibalizationStore();
+    // Disable the only ad in campaign c2 (which is in adGroup ag2, id 21)
+    store.structure = {
+      ...store.structure,
+      ads: [
+        {
+          id: "40",
+          adGroupId: "20",
+          amazonAdId: "ad1",
+          asin: "B001",
+          state: "enabled",
+        },
+        {
+          id: "41",
+          adGroupId: "21",
+          amazonAdId: "ad2",
+          asin: "B001",
+          state: "paused", // disabled!
+        },
+      ],
+    };
+    await runHandler(
+      createRecommendationRunHandler(makeDeps({ store, now: () => NOW })),
+      PAYLOAD,
+    );
+    expect(
+      store.recommendations.filter(
+        (rec) => rec.type === "cannibalization_conflict",
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("stops flagging cannibalization if the campaign itself is paused", async () => {
+    const store = cannibalizationStore();
+    // Pause campaign c2 (id "11")
+    store.structure.campaigns = store.structure.campaigns.map((c) =>
+      c.id === "11" ? { ...c, state: "paused" } : c,
+    );
+    await runHandler(
+      createRecommendationRunHandler(makeDeps({ store, now: () => NOW })),
+      PAYLOAD,
+    );
+    expect(
+      store.recommendations.filter(
+        (rec) => rec.type === "cannibalization_conflict",
+      ),
+    ).toHaveLength(0);
   });
 
   it("does not flag a wasteful term a campaign negative already blocks", async () => {
