@@ -260,6 +260,13 @@ function inputDecimal(value: string | null | undefined): string {
 
 const ECONOMICS_COLUMN_COUNT = 6;
 
+enum UpdateStrategy {
+  Overwrite = "overwrite",
+  History = "history",
+}
+
+const DEFAULT_GOAL_MODE: GoalMode = "balanced";
+
 /**
  * One country's economics as a single editable table row. The rarely changed
  * fields (effective-from date, notes) live behind a per-row Details toggle so
@@ -282,8 +289,8 @@ function BookEconomicsRow({
   const [royalty, setRoyalty] = useState(() =>
     inputDecimal(economics?.estimatedRoyaltyPerSale),
   );
-  const [effectiveFrom, setEffectiveFrom] = useState(() =>
-    new Date().toISOString().slice(0, 10),
+  const [effectiveFrom, setEffectiveFrom] = useState(
+    () => economics?.effectiveFrom ?? new Date().toISOString().slice(0, 10),
   );
   const [targetAcosPct, setTargetAcosPct] = useState(() =>
     economics?.targetAcos == null
@@ -291,12 +298,52 @@ function BookEconomicsRow({
       : inputDecimal(String(economics.targetAcos * 100)),
   );
   const [goalMode, setGoalMode] = useState<GoalMode>(
-    economics?.goalMode ?? "balanced",
+    economics?.goalMode ?? DEFAULT_GOAL_MODE,
   );
   const [notes, setNotes] = useState(economics?.notes ?? "");
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [updateStrategy, setUpdateStrategy] = useState<UpdateStrategy>(
+    UpdateStrategy.Overwrite,
+  );
+
+  useEffect(() => {
+    setListPrice(inputDecimal(economics?.listPrice));
+    setRoyalty(inputDecimal(economics?.estimatedRoyaltyPerSale));
+    setEffectiveFrom(
+      economics?.effectiveFrom ?? new Date().toISOString().slice(0, 10),
+    );
+    setTargetAcosPct(
+      economics?.targetAcos == null
+        ? ""
+        : inputDecimal(String(economics.targetAcos * 100)),
+    );
+    setGoalMode(economics?.goalMode ?? DEFAULT_GOAL_MODE);
+    setNotes(economics?.notes ?? "");
+    setUpdateStrategy(UpdateStrategy.Overwrite);
+  }, [economics]);
+
   const countryName = countryNameForCode(profile.countryCode);
   const saved = economics !== undefined;
+
+  const priceChanged = listPrice.trim() !== inputDecimal(economics?.listPrice);
+  const royaltyChanged =
+    royalty.trim() !== inputDecimal(economics?.estimatedRoyaltyPerSale);
+  const acosChanged =
+    (targetAcosPct.trim() === ""
+      ? null
+      : Number(targetAcosPct.trim()) / 100) !==
+    (economics?.targetAcos == null ? null : Number(economics.targetAcos));
+  const goalChanged = goalMode !== (economics?.goalMode ?? "balanced");
+  const notesChanged = notes.trim() !== (economics?.notes ?? "").trim();
+  const valuesDiffer =
+    priceChanged ||
+    royaltyChanged ||
+    acosChanged ||
+    goalChanged ||
+    notesChanged;
+  const dateMatches = effectiveFrom === economics?.effectiveFrom;
+  const showStrategyChoice = saved && valuesDiffer && dateMatches;
+
   const canSave =
     listPrice.trim() !== "" && royalty.trim() !== "" && effectiveFrom !== "";
 
@@ -396,16 +443,28 @@ function BookEconomicsRow({
               >
                 Details
               </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="primary"
-                aria-label={`${saved ? "Update" : "Save"} ${countryName}`}
-                disabled={save.isPending || !canSave}
-                onClick={onSave}
-              >
-                {save.isPending ? "Saving…" : saved ? "Update" : "Save"}
-              </Button>
+              {showStrategyChoice && !detailsOpen ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  aria-label={`Review ${countryName} update options`}
+                  onClick={() => setDetailsOpen(true)}
+                >
+                  Review options
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="primary"
+                  aria-label={`${saved ? "Update" : "Save"} ${countryName}`}
+                  disabled={save.isPending || !canSave}
+                  onClick={onSave}
+                >
+                  {save.isPending ? "Saving…" : saved ? "Update" : "Save"}
+                </Button>
+              )}
             </span>
           </span>
         </Td>
@@ -433,6 +492,57 @@ function BookEconomicsRow({
                 />
               </label>
             </div>
+            {showStrategyChoice && economics && (
+              <div className="mt-3 rounded-lg border border-amber-900/50 bg-amber-950/20 p-3 text-xs text-amber-200">
+                <p className="font-semibold">
+                  You are updating the economics values, but the effective date
+                  remains{" "}
+                  <code className="bg-amber-950 px-1 py-0.5 rounded">
+                    {formatDate(economics.effectiveFrom)}
+                  </code>
+                  .
+                </p>
+                <div className="mt-2.5 flex flex-col gap-2">
+                  <label className="flex items-start gap-2 cursor-pointer select-none">
+                    <input
+                      type="radio"
+                      name={`update-strategy-${profile.profileId}`}
+                      checked={updateStrategy === UpdateStrategy.Overwrite}
+                      aria-label="Correct typo (overwrite in place)"
+                      onChange={() => {
+                        setUpdateStrategy(UpdateStrategy.Overwrite);
+                        setEffectiveFrom(economics.effectiveFrom);
+                      }}
+                      className="mt-0.5 text-sky-600 focus:ring-sky-500"
+                    />
+                    <span>
+                      <strong>Correct typo (overwrite in place)</strong>:
+                      Overwrites the record in effect since{" "}
+                      {formatDate(economics.effectiveFrom)}. All historical
+                      profit since this date will be updated.
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2 cursor-pointer select-none">
+                    <input
+                      type="radio"
+                      name={`update-strategy-${profile.profileId}`}
+                      checked={updateStrategy === UpdateStrategy.History}
+                      aria-label="Keep history (new version starting today)"
+                      onChange={() => {
+                        setUpdateStrategy(UpdateStrategy.History);
+                        setEffectiveFrom(new Date().toISOString().slice(0, 10));
+                      }}
+                      className="mt-0.5 text-sky-600 focus:ring-sky-500"
+                    />
+                    <span>
+                      <strong>Keep history (new version starting today)</strong>
+                      : Inserts a new economics version starting today. Past
+                      profit calculations remain unchanged.
+                    </span>
+                  </label>
+                </div>
+              </div>
+            )}
             <p className="mt-2 max-w-xl text-xs text-zinc-600">
               Use the first date these economics were valid. Historical profit
               is available only for data on or after that date.
