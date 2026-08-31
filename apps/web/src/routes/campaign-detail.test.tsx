@@ -13,13 +13,14 @@ import { CampaignDetailPage } from "./campaign-detail";
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   useCampaign: vi.fn(),
+  search: { days: 7 } as Record<string, unknown>,
 }));
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children: ReactNode }) => <a href="#">{children}</a>,
   useNavigate: () => mocks.navigate,
   useParams: () => ({ id: "campaign-1" }),
-  useSearch: () => ({ days: 7 }),
+  useSearch: () => mocks.search,
 }));
 
 vi.mock("../api/endpoints", () => ({
@@ -252,6 +253,7 @@ describe("CampaignDetailPage profitability", () => {
   beforeEach(() => {
     mocks.navigate.mockReset();
     mocks.useCampaign.mockReset();
+    mocks.search = { days: 7 };
     mocks.useCampaign.mockReturnValue({
       isPending: false,
       error: null,
@@ -286,10 +288,10 @@ describe("CampaignDetailPage profitability", () => {
         },
       },
     });
+    mocks.search = { days: 7, tab: "searchTerms" };
     render(<CampaignDetailPage />);
 
     expect(screen.getByText("4 units")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "Search terms" }));
     expect(
       screen.getByRole("columnheader", { name: "Units" }),
     ).toBeInTheDocument();
@@ -352,9 +354,8 @@ describe("CampaignDetailPage profitability", () => {
   });
 
   it("shows keyword text, book titles, ASINs, and bids on the Targets tab", () => {
+    mocks.search = { days: 7, tab: "targets" };
     render(<CampaignDetailPage />);
-
-    fireEvent.click(screen.getByRole("tab", { name: "Targets" }));
 
     expect(
       screen.getByRole("cell", { name: "tractor book" }),
@@ -380,17 +381,36 @@ describe("CampaignDetailPage profitability", () => {
   });
 
   it("opens campaign-wide Max CPC controls from the breakdown tabs", () => {
+    mocks.search = { days: 7, tab: "maxCpc" };
     render(<CampaignDetailPage />);
-
-    fireEvent.click(screen.getByRole("tab", { name: "Max CPC" }));
 
     expect(screen.getByText("Max CPC controls")).toBeInTheDocument();
   });
 
-  it("shows every synced campaign and ad-group negative keyword", () => {
+  it("switches breakdown tabs through the URL", () => {
     render(<CampaignDetailPage />);
 
-    fireEvent.click(screen.getByRole("tab", { name: "Negative keywords" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Max CPC" }));
+
+    const call = mocks.navigate.mock.calls.at(-1)?.[0] as {
+      to: string;
+      params: { id: string };
+      search: (prev: Record<string, unknown>) => Record<string, unknown>;
+      replace: boolean;
+    };
+    expect(call.to).toBe("/campaigns/$id");
+    expect(call.params).toEqual({ id: "campaign-1" });
+    expect(call.replace).toBe(true);
+    expect(call.search({ days: 7, books: ["3"] })).toEqual({
+      days: 7,
+      books: ["3"],
+      tab: "maxCpc",
+    });
+  });
+
+  it("shows every synced campaign and ad-group negative keyword", () => {
+    mocks.search = { days: 7, tab: "negativeKeywords" };
+    render(<CampaignDetailPage />);
 
     expect(
       screen.getByRole("cell", { name: "free books" }),
@@ -459,8 +479,8 @@ describe("CampaignDetailPage profitability", () => {
         .slice(1)
         .map((row) => row.querySelector("td")?.textContent ?? "");
 
+    mocks.search = { days: 7, tab: "negativeKeywords" };
     render(<CampaignDetailPage />);
-    fireEvent.click(screen.getByRole("tab", { name: "Negative keywords" }));
 
     // Default: keyword asc.
     expect(rowKeywords()).toEqual([
@@ -507,9 +527,8 @@ describe("CampaignDetailPage profitability", () => {
   });
 
   it("shows every synced negative product target", () => {
+    mocks.search = { days: 7, tab: "negativeTargets" };
     render(<CampaignDetailPage />);
-
-    fireEvent.click(screen.getByRole("tab", { name: "Negative products" }));
 
     expect(
       screen.getByRole("cell", { name: /B0CRHVCT1T/ }),
@@ -528,9 +547,8 @@ describe("CampaignDetailPage profitability", () => {
       error: null,
       data: { ...detail, negativeTargets: [] },
     });
+    mocks.search = { days: 7, tab: "negativeTargets" };
     render(<CampaignDetailPage />);
-
-    fireEvent.click(screen.getByRole("tab", { name: "Negative products" }));
 
     expect(
       screen.getByText(
@@ -540,9 +558,8 @@ describe("CampaignDetailPage profitability", () => {
   });
 
   it("shows per-term profitability in the search terms tab", () => {
+    mocks.search = { days: 7, tab: "searchTerms" };
     render(<CampaignDetailPage />);
-
-    fireEvent.click(screen.getByRole("tab", { name: "Search terms" }));
 
     expect(
       screen.getByRole("columnheader", { name: "Profit" }),
@@ -623,8 +640,8 @@ describe("CampaignDetailPage profitability", () => {
         .slice(1)
         .map((row) => row.querySelector("td a")?.textContent ?? "");
 
+    mocks.search = { days: 7, tab: "searchTerms" };
     render(<CampaignDetailPage />);
-    fireEvent.click(screen.getByRole("tab", { name: "Search terms" }));
 
     // Default: spend desc → gamma (8), beta (5), alpha (2).
     expect(rowNames()).toEqual(["gamma", "beta", "alpha"]);
@@ -649,9 +666,8 @@ describe("CampaignDetailPage profitability", () => {
   });
 
   it("offers excluding a search term straight from its row", () => {
+    mocks.search = { days: 7, tab: "searchTerms" };
     render(<CampaignDetailPage />);
-
-    fireEvent.click(screen.getByRole("tab", { name: "Search terms" }));
 
     for (const term of ["tractor gifts", "farm tractors"]) {
       const row = screen.getByRole("cell", { name: term }).closest("tr");
@@ -690,9 +706,8 @@ describe("CampaignDetailPage profitability", () => {
         ],
       },
     });
+    mocks.search = { days: 7, tab: "searchTerms" };
     render(<CampaignDetailPage />);
-
-    fireEvent.click(screen.getByRole("tab", { name: "Search terms" }));
 
     // "Free Books" matches the enabled negative keyword case-insensitively,
     // B0CRHVCT1T the enabled negative product target; "used books" is only a
@@ -721,9 +736,8 @@ describe("CampaignDetailPage profitability", () => {
         campaign: { ...detail.campaign, state: "archived" },
       },
     });
+    mocks.search = { days: 7, tab: "searchTerms" };
     render(<CampaignDetailPage />);
-
-    fireEvent.click(screen.getByRole("tab", { name: "Search terms" }));
 
     expect(
       screen.queryByRole("button", { name: "Exclude" }),

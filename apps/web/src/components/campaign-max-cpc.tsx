@@ -1,8 +1,10 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   useApplyChangeSet,
   useCampaignMaxCpc,
   useChangeSetPreview,
+  useSession,
   useSetCampaignMaxCpc,
 } from "../api/endpoints";
 import { isReauthError } from "../api/client";
@@ -42,11 +44,55 @@ export function CampaignMaxCpc({
 }) {
   const controls = useCampaignMaxCpc(campaignId);
   const setMaxCpc = useSetCampaignMaxCpc(campaignId);
-  const [value, setValue] = useState("");
-  const [draftId, setDraftId] = useState<string | null>(null);
-  const [reauthOpen, setReauthOpen] = useState(false);
+  const session = useSession();
+  const navigate = useNavigate();
+  const search = useSearch({ strict: false }) as {
+    maxCpc?: string | number;
+    draft?: string | number;
+  };
+  // Resume state the re-auth magic link carried back in the URL (the link
+  // reloads the page, so the typed ceiling and an open review ride as search
+  // params). Captured on mount so stripping them below cannot cancel the
+  // resume that is already under way.
+  const [resumeMaxCpc] = useState(() =>
+    search.maxCpc !== undefined ? String(search.maxCpc) : undefined,
+  );
+  const [resumeDraft] = useState(() =>
+    search.draft !== undefined ? String(search.draft) : undefined,
+  );
+  const [value, setValue] = useState(resumeMaxCpc ?? "");
+  const [draftId, setDraftId] = useState<string | null>(resumeDraft ?? null);
+  /** The guarded action a REAUTH_REQUIRED failure interrupted. */
+  const [blocked, setBlocked] = useState<"submit" | "apply" | null>(null);
   const preview = useChangeSetPreview(draftId);
   const apply = useApplyChangeSet(draftId ?? "");
+
+  useEffect(() => {
+    if (search.maxCpc === undefined && search.draft === undefined) return;
+    void navigate({
+      // Route-agnostic strip: this component is embedded on two routes, so
+      // the updater cannot be tied to one route's search type.
+      search: ((prev: Record<string, unknown>) => ({
+        ...prev,
+        maxCpc: undefined,
+        draft: undefined,
+      })) as never,
+      replace: true,
+    });
+  }, [search.maxCpc, search.draft, navigate]);
+
+  // The magic link interrupted a "Review ceiling" click; redo it once the
+  // fresh session (and its CSRF token) is in place. Drafting only re-reads
+  // Amazon state — the write still needs the explicit Apply click. A draft
+  // resume reopens the existing change set instead of drafting anew.
+  const resumed = useRef(false);
+  useEffect(() => {
+    if (!resumeMaxCpc || resumeDraft || resumed.current || !session.data) {
+      return;
+    }
+    resumed.current = true;
+    runSubmit(resumeMaxCpc);
+  }, [resumeMaxCpc, resumeDraft, session.data]);
 
   useEffect(() => {
     // Wait for the live controls: the configured ceiling wins, so a
@@ -79,10 +125,9 @@ export function CampaignMaxCpc({
     unsupported: "Not supported",
   }[data.status];
 
-  function submit(event: FormEvent) {
-    event.preventDefault();
+  function runSubmit(maxCpc: string) {
     setMaxCpc.mutate(
-      { maxCpc: value },
+      { maxCpc },
       {
         onSuccess: (result) => {
           // A fingerprint can return the same failed set. Do not present the
@@ -91,13 +136,18 @@ export function CampaignMaxCpc({
           setDraftId(result.changeSet.id);
         },
         onError: (err) => {
-          if (isReauthError(err)) setReauthOpen(true);
+          if (isReauthError(err)) setBlocked("submit");
         },
       },
     );
   }
 
-  function applyDraft() {
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    runSubmit(value);
+  }
+
+  function runApply() {
     apply.mutate(undefined, {
       onSuccess: () => {
         apply.reset();
@@ -105,9 +155,17 @@ export function CampaignMaxCpc({
         void controls.refetch();
       },
       onError: (err) => {
-        if (isReauthError(err)) setReauthOpen(true);
+        if (isReauthError(err)) setBlocked("apply");
       },
     });
+  }
+
+  /** Return path for the re-auth magic link: this page plus the resume state. */
+  function resumeNext(): string {
+    const params = new URLSearchParams(window.location.search);
+    params.set("maxCpc", value);
+    if (draftId) params.set("draft", draftId);
+    return `${window.location.pathname}?${params.toString()}`;
   }
 
   return (
@@ -286,7 +344,7 @@ export function CampaignMaxCpc({
         }}
         onConfirm={
           preview.data && preview.data.guardrails.length === 0
-            ? applyDraft
+            ? runApply
             : undefined
         }
       >
@@ -330,7 +388,22 @@ export function CampaignMaxCpc({
           </div>
         ) : null}
       </Dialog>
-      <ReauthDialog open={reauthOpen} onClose={() => setReauthOpen(false)} />
+      <ReauthDialog
+        open={blocked !== null}
+        // The magic link reloads the page, so the typed ceiling (and an open
+        // review) rides back in the URL; on arrival the value is prefilled
+        // and the review reopens for its deliberate Apply click.
+        next={resumeNext()}
+        onClose={() => setBlocked(null)}
+        // Signed in without navigating away (installed-app paste flow): the
+        // state is still live, so finish the interrupted action directly.
+        onReauthenticated={() => {
+          const pending = blocked;
+          setBlocked(null);
+          if (pending === "submit") runSubmit(value);
+          else if (pending === "apply") runApply();
+        }}
+      />
     </div>
   );
 }

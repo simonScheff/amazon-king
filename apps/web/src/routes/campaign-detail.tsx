@@ -43,15 +43,17 @@ import { compareNullable, nextSort, type Sort } from "../lib/sorting";
 import { resolveTimeframe } from "../lib/timeframe";
 import { isAsin } from "../lib/asin";
 
-type Tab =
-  | "adGroups"
-  | "targets"
-  | "searchTerms"
-  | "negativeKeywords"
-  | "negativeTargets"
-  | "maxCpc";
+export const CAMPAIGN_DETAIL_TABS = [
+  "adGroups",
+  "targets",
+  "searchTerms",
+  "negativeKeywords",
+  "negativeTargets",
+  "maxCpc",
+] as const;
+export type CampaignDetailTab = (typeof CAMPAIGN_DETAIL_TABS)[number];
 
-const tabs: Array<{ key: Tab; label: string }> = [
+const tabs: Array<{ key: CampaignDetailTab; label: string }> = [
   { key: "adGroups", label: "Ad groups" },
   { key: "targets", label: "Targets" },
   { key: "searchTerms", label: "Search terms" },
@@ -738,12 +740,23 @@ export function CampaignDetailPage() {
   const search = useSearch({ strict: false }) as {
     days?: number | "mtd";
     books?: string[];
+    tab?: CampaignDetailTab;
   };
   const days = resolveTimeframe(search.days);
   const navigate = useNavigate();
   const campaign = useCampaign(id, days, search.books);
   const profiles = useProfiles();
-  const [tab, setTab] = useState<Tab>("adGroups");
+  // URL-backed (?tab=) so a re-auth magic link returns to the same tab.
+  const tab = search.tab ?? "adGroups";
+
+  function selectTab(next: CampaignDetailTab) {
+    void navigate({
+      to: "/campaigns/$id",
+      params: { id },
+      search: (prev) => ({ ...prev, tab: next }),
+      replace: true,
+    });
+  }
 
   if (campaign.isPending) return <Loading />;
   if (campaign.error) return <ErrorState error={campaign.error} />;
@@ -806,7 +819,13 @@ export function CampaignDetailPage() {
           navigate({
             to: "/campaigns/$id",
             params: { id },
-            search: (prev) => ({ ...prev, days: window }),
+            search: (prev) => ({
+              ...prev,
+              days: window,
+              // prev.tab is typed as the all-routes union; on this route it
+              // is always a validated campaign tab.
+              tab: prev.tab as CampaignDetailTab | undefined,
+            }),
             replace: true,
           })
         }
@@ -870,7 +889,7 @@ export function CampaignDetailPage() {
               key={t.key}
               role="tab"
               aria-selected={tab === t.key}
-              onClick={() => setTab(t.key)}
+              onClick={() => selectTab(t.key)}
               className={`shrink-0 whitespace-nowrap px-4 py-2 text-sm ${
                 tab === t.key
                   ? "border-b-2 border-sky-500 text-zinc-100"

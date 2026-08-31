@@ -1,15 +1,32 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../api/client";
 import { CampaignMaxCpc } from "./campaign-max-cpc";
 
 const mocks = vi.hoisted(() => ({
   set: vi.fn(),
   refetch: vi.fn(),
   applyReset: vi.fn(),
+  navigate: vi.fn(),
+  search: {} as Record<string, unknown>,
+  reauthProps: null as Record<string, unknown> | null,
   status: "not_configured",
 }));
 
+vi.mock("@tanstack/react-router", () => ({
+  useSearch: () => mocks.search,
+  useNavigate: () => mocks.navigate,
+}));
+
 vi.mock("../api/endpoints", () => ({
+  useSession: () => ({ data: { email: "owner@example.com" } }),
   useCampaignMaxCpc: () => ({
     isPending: false,
     error: null,
@@ -57,7 +74,16 @@ vi.mock("../api/endpoints", () => ({
 }));
 
 vi.mock("./reauth-dialog", () => ({
-  ReauthDialog: () => null,
+  ReauthDialog: (props: Record<string, unknown>) => {
+    mocks.reauthProps = props;
+    return null;
+  },
+}));
+
+// jsdom lacks HTMLDialogElement.showModal/close; render a minimal stand-in.
+vi.mock("./ui/dialog", () => ({
+  Dialog: (props: { open: boolean; children?: ReactNode }) =>
+    props.open ? <div role="dialog">{props.children}</div> : null,
 }));
 
 describe("CampaignMaxCpc", () => {
@@ -65,6 +91,9 @@ describe("CampaignMaxCpc", () => {
     cleanup();
     mocks.set.mockReset();
     mocks.applyReset.mockReset();
+    mocks.navigate.mockReset();
+    mocks.search = {};
+    mocks.reauthProps = null;
     mocks.status = "not_configured";
   });
 
@@ -101,5 +130,70 @@ describe("CampaignMaxCpc", () => {
         name: "Review pending change in Change center →",
       }),
     ).toHaveAttribute("href", "/changes");
+  });
+
+  it("restores the typed ceiling from the re-auth return URL and resubmits it", () => {
+    mocks.search = { tab: "maxCpc", maxCpc: "2.00" };
+
+    render(<CampaignMaxCpc campaignId="campaign-1" />);
+
+    expect(screen.getByLabelText("Maximum price per click")).toHaveValue(
+      "2.00",
+    );
+    // The interrupted "Review ceiling" click is redone automatically.
+    expect(mocks.set).toHaveBeenCalledWith(
+      { maxCpc: "2.00" },
+      expect.objectContaining({ onError: expect.any(Function) }),
+    );
+    // The resume params are stripped so a later reload does not resubmit.
+    const strip = mocks.navigate.mock.calls.at(-1)?.[0] as {
+      search: (prev: Record<string, unknown>) => Record<string, unknown>;
+      replace: boolean;
+    };
+    expect(strip.replace).toBe(true);
+    expect(strip.search({ tab: "maxCpc", maxCpc: "2.00" })).toEqual({
+      tab: "maxCpc",
+      maxCpc: undefined,
+      draft: undefined,
+    });
+  });
+
+  it("reopens the pending review from the return URL without drafting again", () => {
+    mocks.search = { tab: "maxCpc", maxCpc: "2.00", draft: "42" };
+
+    render(<CampaignMaxCpc campaignId="campaign-1" />);
+
+    expect(mocks.set).not.toHaveBeenCalled();
+  });
+
+  it("carries the typed ceiling in the re-auth return path and resumes in place", () => {
+    render(<CampaignMaxCpc campaignId="campaign-1" />);
+
+    fireEvent.change(screen.getByLabelText("Maximum price per click"), {
+      target: { value: "0.75" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Review ceiling" }));
+
+    const onError = mocks.set.mock.calls[0]?.[1]?.onError as (
+      err: unknown,
+    ) => void;
+    act(() => onError(new ApiError(401, "reauth", "REAUTH_REQUIRED")));
+
+    const props = mocks.reauthProps as unknown as {
+      open: boolean;
+      next: string;
+      onReauthenticated: () => void;
+    };
+    expect(props.open).toBe(true);
+    expect(props.next).toContain("maxCpc=0.75");
+
+    // The installed-app paste flow never navigates: the blocked submit is
+    // re-run directly with the value still in state.
+    act(() => props.onReauthenticated());
+    expect(mocks.set).toHaveBeenCalledTimes(2);
+    expect(mocks.set).toHaveBeenLastCalledWith(
+      { maxCpc: "0.75" },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
   });
 });

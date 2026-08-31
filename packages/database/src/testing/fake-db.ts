@@ -596,6 +596,47 @@ export class FakeDb {
     return latest;
   }
 
+  /**
+   * Accumulate one fact into a spend-explorer group row (spend/sales14d/
+   * orders). With `converted`, the fact is cross-rated through the USD pivot
+   * into `display` at its own date; an uncovered non-zero fact raises
+   * rates_missing and contributes nothing, exactly like the SQL.
+   */
+  private accumulateSpendFact(
+    row: FakeRow,
+    fact: FakeRow,
+    converted: boolean,
+    display: string | null,
+  ): void {
+    const cost = Number(fact.cost);
+    const sales = Number(fact.sales14d ?? fact.sales);
+    row.orders = Number(row.orders) + Number(fact.purchases14d ?? fact.orders);
+    if (!converted) {
+      row.spend = Number(row.spend) + cost;
+      row.sales = Number(row.sales) + sales;
+      return;
+    }
+    const date = String(fact.metric_date);
+    const dr = this.fxRateFor(display!, date);
+    const nr = this.fxRateFor(String(fact.currency), date);
+    if (dr === null || nr === null) {
+      if (cost !== 0 || sales !== 0) row.rates_missing = true;
+      return;
+    }
+    row.spend = Number(row.spend) + (cost * dr) / nr;
+    row.sales = Number(row.sales) + (sales * dr) / nr;
+  }
+
+  /** Stringify the numeric group sums the way pg returns numeric sums. */
+  private finalizeSpendRows(groups: Map<string, FakeRow>): FakeRow[] {
+    return [...groups.values()].map((row) => ({
+      ...row,
+      spend: Number(row.spend).toFixed(4),
+      sales: Number(row.sales).toFixed(4),
+      orders: String(row.orders),
+    }));
+  }
+
   private handlers(): Handler[] {
     const t = this.tables;
     return [
@@ -2711,6 +2752,144 @@ export class FakeDb {
               rates_missing: entry.missing,
             })),
           );
+        },
+      },
+
+      // -- spend explorer series (breakdown + tree, native and converted) -------
+      {
+        // repositories/spend.ts, grain=market: groups campaign facts by the
+        // profile's country per day. Handles the native and converted (FX
+        // cross-rate through the USD pivot) variants — the converted SQL
+        // carries the dr/nr rate expression and a fourth display param.
+        match: "null::text as parent_id",
+        handle: (p, db, text) => {
+          const profileIds = (p[0] as string[]).map(String);
+          const start = String(p[1]);
+          const end = String(p[2]);
+          const converted = text.includes("dr.rate / nr.rate");
+          const display = converted ? String(p[3]) : null;
+          const groups = new Map<string, FakeRow>();
+          for (const fact of t.campaignMetricsDaily) {
+            const date = String(fact.metric_date);
+            if (
+              !profileIds.includes(String(fact.profile_id)) ||
+              date < start ||
+              date > end
+            ) {
+              continue;
+            }
+            const profile = t.amazonProfiles.find(
+              (ap) => ap.id === fact.profile_id,
+            );
+            if (!profile) continue;
+            const country = String(profile.country_code);
+            const currency = String(fact.currency);
+            const key = `${country}|${date}|${currency}`;
+            const row = groups.get(key) ?? {
+              entity_id: country,
+              entity_name: country,
+              parent_id: null,
+              metric_date: date,
+              spend: 0,
+              sales: 0,
+              orders: 0,
+              currency,
+              rates_missing: false,
+            };
+            db.accumulateSpendFact(row, fact, converted, display);
+            groups.set(key, row);
+          }
+          return this.ok(db.finalizeSpendRows(groups));
+        },
+      },
+      {
+        // repositories/spend.ts, grain=campaign: facts per campaign per day,
+        // name from the synced campaigns table, market as parent.
+        match: "coalesce(max(c.name), m.campaign_id)",
+        handle: (p, db, text) => {
+          const profileIds = (p[0] as string[]).map(String);
+          const start = String(p[1]);
+          const end = String(p[2]);
+          const converted = text.includes("dr.rate / nr.rate");
+          const display = converted ? String(p[3]) : null;
+          const groups = new Map<string, FakeRow>();
+          for (const fact of t.campaignMetricsDaily) {
+            const date = String(fact.metric_date);
+            if (
+              !profileIds.includes(String(fact.profile_id)) ||
+              date < start ||
+              date > end
+            ) {
+              continue;
+            }
+            const profile = t.amazonProfiles.find(
+              (ap) => ap.id === fact.profile_id,
+            );
+            if (!profile) continue;
+            const campaignId = String(fact.campaign_id);
+            const campaign = t.campaigns.find(
+              (c) =>
+                c.profile_id === fact.profile_id &&
+                c.amazon_campaign_id === campaignId,
+            );
+            const currency = String(fact.currency);
+            const key = `${campaignId}|${date}|${currency}`;
+            const row = groups.get(key) ?? {
+              entity_id: campaignId,
+              entity_name: campaign ? String(campaign.name) : campaignId,
+              parent_id: String(profile.country_code),
+              metric_date: date,
+              spend: 0,
+              sales: 0,
+              orders: 0,
+              currency,
+              rates_missing: false,
+            };
+            db.accumulateSpendFact(row, fact, converted, display);
+            groups.set(key, row);
+          }
+          return this.ok(db.finalizeSpendRows(groups));
+        },
+      },
+      {
+        // repositories/spend.ts, grain=searchTerm: facts per term per
+        // campaign per day (the campaign stays the parent for the treemap).
+        match: "m.search_term as entity_id",
+        handle: (p, db, text) => {
+          const profileIds = (p[0] as string[]).map(String);
+          const start = String(p[1]);
+          const end = String(p[2]);
+          const converted = text.includes("dr.rate / nr.rate");
+          const display = converted ? String(p[3]) : null;
+          const groups = new Map<string, FakeRow>();
+          for (const fact of t.searchTermMetricsDaily) {
+            const date = String(fact.metric_date);
+            if (
+              !profileIds.includes(String(fact.profile_id)) ||
+              date < start ||
+              date > end
+            ) {
+              continue;
+            }
+            const term = String(fact.search_term);
+            const campaignId = String(fact.campaign_id);
+            const currency = String(fact.currency);
+            const key = `${term}|${campaignId}|${date}|${currency}`;
+            const row = groups.get(key) ?? {
+              entity_id: term,
+              entity_name: term,
+              parent_id: campaignId,
+              metric_date: date,
+              spend: 0,
+              sales: 0,
+              orders: 0,
+              currency,
+              rates_missing: false,
+            };
+            db.accumulateSpendFact(row, fact, converted, display);
+            groups.set(key, row);
+          }
+          return this.ok(db.finalizeSpendRows(groups));
         },
       },
 

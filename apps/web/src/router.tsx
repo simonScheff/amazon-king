@@ -12,6 +12,7 @@ import {
   recommendationTypeSchema,
   type MetricWindow,
   type NegativeKind,
+  type SpendGrain,
 } from "@amazon-king/contracts";
 import { AppLayout } from "./components/layout";
 import { parseDaysSearch } from "./lib/timeframe";
@@ -22,7 +23,11 @@ import { RecommendationsPage } from "./routes/recommendations";
 import { RecommendationDetailPage } from "./routes/recommendation-detail";
 import { CampaignsPage } from "./routes/campaigns";
 import { CampaignNewPage } from "./routes/campaign-new";
-import { CampaignDetailPage } from "./routes/campaign-detail";
+import {
+  CAMPAIGN_DETAIL_TABS,
+  CampaignDetailPage,
+  type CampaignDetailTab,
+} from "./routes/campaign-detail";
 import { SearchTermsPage } from "./routes/search-terms";
 import { SearchTermDetailPage } from "./routes/search-term-detail";
 import { NegativesPage } from "./routes/negatives";
@@ -32,6 +37,12 @@ import {
   KdpHistoryPage,
   type KdpHistoryTab,
 } from "./routes/kdp-history";
+import {
+  SPEND_GRAINS,
+  SPEND_TABS,
+  SpendPage,
+  type SpendTab,
+} from "./routes/spend";
 import { ChangesPage } from "./routes/changes";
 import {
   SETTINGS_TABS,
@@ -44,6 +55,18 @@ const rootRoute = createRootRoute();
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
+  // `?next=` is where the session gate sends a signed-out user back to after
+  // the magic link; same acceptance as the API's post-verify redirect
+  // allowlist (same-origin relative paths only).
+  validateSearch: (search: Record<string, unknown>): { next?: string } => {
+    const next =
+      typeof search.next === "string" &&
+      /^\/[^/\\]/.test(search.next) &&
+      search.next.length <= 500
+        ? search.next
+        : undefined;
+    return next ? { next } : {};
+  },
   component: LoginPage,
 });
 
@@ -161,12 +184,39 @@ const campaignNewRoute = createRoute({
 const campaignDetailRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/campaigns/$id",
+  // `?tab=` keeps the active breakdown tab in the URL so a re-auth magic link
+  // returns to the same tab. `?maxCpc=` / `?draft=` are the Max CPC resume
+  // params that link carries back: the typed ceiling and the open review.
   validateSearch: (
     search: Record<string, unknown>,
-  ): { days?: MetricWindow } => {
+  ): {
+    days?: MetricWindow;
+    tab?: CampaignDetailTab;
+    maxCpc?: string;
+    draft?: string;
+  } => {
     const days = parseDaysSearch(search.days);
+    const tab =
+      typeof search.tab === "string" &&
+      (CAMPAIGN_DETAIL_TABS as readonly string[]).includes(search.tab)
+        ? (search.tab as CampaignDetailTab)
+        : undefined;
+    const maxCpc =
+      (typeof search.maxCpc === "string" ||
+        typeof search.maxCpc === "number") &&
+      /^\d+(\.\d{1,2})?$/.test(String(search.maxCpc))
+        ? String(search.maxCpc)
+        : undefined;
+    const draft =
+      (typeof search.draft === "string" || typeof search.draft === "number") &&
+      String(search.draft).trim() !== ""
+        ? String(search.draft).trim()
+        : undefined;
     return {
       ...(days !== undefined ? { days } : {}),
+      ...(tab ? { tab } : {}),
+      ...(maxCpc ? { maxCpc } : {}),
+      ...(draft ? { draft } : {}),
     };
   },
   component: CampaignDetailPage,
@@ -264,6 +314,41 @@ const kdpHistoryRoute = createRoute({
   component: KdpHistoryPage,
 });
 
+const spendRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/spend",
+  // `?tab=` keeps the active explorer section in the URL; `?grain=` the
+  // breakdown dimension (market/campaign/searchTerm, default campaign);
+  // `?days=` and `?country=` follow the overview conventions (`all` allowed).
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): {
+    tab?: SpendTab;
+    grain?: SpendGrain;
+    days?: MetricWindow;
+    country?: string;
+  } => {
+    const days = parseDaysSearch(search.days);
+    const tab =
+      typeof search.tab === "string" &&
+      (SPEND_TABS as readonly string[]).includes(search.tab)
+        ? (search.tab as SpendTab)
+        : undefined;
+    const grain =
+      typeof search.grain === "string" &&
+      (SPEND_GRAINS as readonly string[]).includes(search.grain)
+        ? (search.grain as SpendGrain)
+        : undefined;
+    return {
+      ...(tab ? { tab } : {}),
+      ...(grain ? { grain } : {}),
+      ...(days !== undefined ? { days } : {}),
+      ...validateCountrySearch(search),
+    };
+  },
+  component: SpendPage,
+});
+
 const changesRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/changes",
@@ -317,6 +402,7 @@ const routeTree = rootRoute.addChildren([
     negativesRoute,
     negativeDetailRoute,
     kdpHistoryRoute,
+    spendRoute,
     changesRoute,
     connectRoute,
     settingsRoute,

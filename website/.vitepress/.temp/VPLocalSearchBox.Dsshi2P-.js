@@ -6,7 +6,7 @@ import { ssrRenderTeleport, ssrRenderAttr, ssrRenderClass, ssrIncludeBooleanAttr
 import { t as toArray, u as unrefElement, n as notNullish, a as tryOnScopeDispose, b as useData, c as computedAsync, d as useSessionStorage, e as useLocalStorage, w as watchDebounced, o as onKeyStroke, f as useRouter, g as createSearchTranslate, h as useEventListener, i as useScrollLock, j as dataSymbol, p as pathToFile, k as inBrowser, l as escapeRegExp } from "./app.js";
 import { _ as _export_sfc } from "./plugin-vue_export-helper.1tPrXgE0.js";
 import "mermaid";
-const localSearchIndex = { "root": () => import("./@localSearchIndexroot.BrzIN-Cc.js") };
+const localSearchIndex = { "root": () => import("./@localSearchIndexroot.D14_HpZ9.js") };
 /*!
 * tabbable 6.5.0
 * @license MIT, https://github.com/focus-trap/tabbable/blob/master/LICENSE
@@ -5101,29 +5101,29 @@ const _sfc_main = /* @__PURE__ */ defineComponent({
     return (_ctx, _push, _parent, _attrs) => {
       ssrRenderTeleport(_push, (_push2) => {
         var _a2, _b2, _c, _d, _e;
-        _push2(`<div role="button"${ssrRenderAttr("aria-owns", ((_a2 = results.value) == null ? void 0 : _a2.length) ? "localsearch-list" : void 0)} aria-expanded="true" aria-haspopup="listbox" aria-labelledby="localsearch-label" class="VPLocalSearchBox" data-v-a761953b><div class="backdrop" data-v-a761953b></div><div class="shell" data-v-a761953b><form class="search-bar" data-v-a761953b><label${ssrRenderAttr("title", buttonText.value)} id="localsearch-label" for="localsearch-input" data-v-a761953b><span aria-hidden="true" class="vpi-search search-icon local-search-icon" data-v-a761953b></span></label><div class="search-actions before" data-v-a761953b><button class="back-button"${ssrRenderAttr("title", unref(translate)("modal.backButtonTitle"))} data-v-a761953b><span class="vpi-arrow-left local-search-icon" data-v-a761953b></span></button></div><input${ssrRenderAttr("value", unref(filterText))}${ssrRenderAttr("aria-activedescendant", selectedIndex.value > -1 ? "localsearch-item-" + selectedIndex.value : void 0)} aria-autocomplete="both"${ssrRenderAttr("aria-controls", ((_b2 = results.value) == null ? void 0 : _b2.length) ? "localsearch-list" : void 0)} aria-labelledby="localsearch-label" autocapitalize="off" autocomplete="off" autocorrect="off" class="search-input" id="localsearch-input" enterkeyhint="go" maxlength="64"${ssrRenderAttr("placeholder", buttonText.value)} spellcheck="false" type="search" data-v-a761953b><div class="search-actions" data-v-a761953b>`);
+        _push2(`<div role="button"${ssrRenderAttr("aria-owns", ((_a2 = results.value) == null ? void 0 : _a2.length) ? "localsearch-list" : void 0)} aria-expanded="true" aria-haspopup="listbox" aria-labelledby="localsearch-label" class="VPLocalSearchBox" data-v-d18c0cbd><div class="backdrop" data-v-d18c0cbd></div><div class="shell" data-v-d18c0cbd><form class="search-bar" data-v-d18c0cbd><label${ssrRenderAttr("title", buttonText.value)} id="localsearch-label" for="localsearch-input" data-v-d18c0cbd><span aria-hidden="true" class="vpi-search search-icon local-search-icon" data-v-d18c0cbd></span></label><div class="search-actions before" data-v-d18c0cbd><button class="back-button"${ssrRenderAttr("title", unref(translate)("modal.backButtonTitle"))} data-v-d18c0cbd><span class="vpi-arrow-left local-search-icon" data-v-d18c0cbd></span></button></div><input${ssrRenderAttr("value", unref(filterText))}${ssrRenderAttr("aria-activedescendant", selectedIndex.value > -1 ? "localsearch-item-" + selectedIndex.value : void 0)} aria-autocomplete="both"${ssrRenderAttr("aria-controls", ((_b2 = results.value) == null ? void 0 : _b2.length) ? "localsearch-list" : void 0)} aria-labelledby="localsearch-label" autocapitalize="off" autocomplete="off" autocorrect="off" class="search-input" id="localsearch-input" enterkeyhint="go" maxlength="64"${ssrRenderAttr("placeholder", buttonText.value)} spellcheck="false" type="search" data-v-d18c0cbd><div class="search-actions" data-v-d18c0cbd>`);
         if (!disableDetailedView.value) {
-          _push2(`<button type="button" class="${ssrRenderClass([{ "detailed-list": unref(showDetailedList) }, "toggle-layout-button"])}"${ssrRenderAttr("title", unref(translate)("modal.displayDetails"))} data-v-a761953b><span class="vpi-layout-list local-search-icon" data-v-a761953b></span></button>`);
+          _push2(`<button type="button" class="${ssrRenderClass([{ "detailed-list": unref(showDetailedList) }, "toggle-layout-button"])}"${ssrRenderAttr("title", unref(translate)("modal.displayDetails"))} data-v-d18c0cbd><span class="vpi-layout-list local-search-icon" data-v-d18c0cbd></span></button>`);
         } else {
           _push2(`<!---->`);
         }
-        _push2(`<button class="clear-button" type="reset"${ssrIncludeBooleanAttr(disableReset.value) ? " disabled" : ""}${ssrRenderAttr("title", unref(translate)("modal.resetButtonTitle"))} data-v-a761953b><span class="vpi-delete local-search-icon" data-v-a761953b></span></button></div></form><ul${ssrRenderAttr("id", ((_c = results.value) == null ? void 0 : _c.length) ? "localsearch-list" : void 0)}${ssrRenderAttr("role", ((_d = results.value) == null ? void 0 : _d.length) ? "listbox" : void 0)}${ssrRenderAttr("aria-labelledby", ((_e = results.value) == null ? void 0 : _e.length) ? "localsearch-label" : void 0)} class="results" data-v-a761953b><!--[-->`);
+        _push2(`<button class="clear-button" type="reset"${ssrIncludeBooleanAttr(disableReset.value) ? " disabled" : ""}${ssrRenderAttr("title", unref(translate)("modal.resetButtonTitle"))} data-v-d18c0cbd><span class="vpi-delete local-search-icon" data-v-d18c0cbd></span></button></div></form><ul${ssrRenderAttr("id", ((_c = results.value) == null ? void 0 : _c.length) ? "localsearch-list" : void 0)}${ssrRenderAttr("role", ((_d = results.value) == null ? void 0 : _d.length) ? "listbox" : void 0)}${ssrRenderAttr("aria-labelledby", ((_e = results.value) == null ? void 0 : _e.length) ? "localsearch-label" : void 0)} class="results" data-v-d18c0cbd><!--[-->`);
         ssrRenderList(results.value, (p, index) => {
-          _push2(`<li${ssrRenderAttr("id", "localsearch-item-" + index)}${ssrRenderAttr("aria-selected", selectedIndex.value === index ? "true" : "false")} role="option" data-v-a761953b><a${ssrRenderAttr("href", p.id)} class="${ssrRenderClass([{
+          _push2(`<li${ssrRenderAttr("id", "localsearch-item-" + index)}${ssrRenderAttr("aria-selected", selectedIndex.value === index ? "true" : "false")} role="option" data-v-d18c0cbd><a${ssrRenderAttr("href", p.id)} class="${ssrRenderClass([{
             selected: selectedIndex.value === index
-          }, "result"])}"${ssrRenderAttr("aria-label", [...p.titles, p.title].join(" > "))}${ssrRenderAttr("data-index", index)} data-v-a761953b><div data-v-a761953b><div class="titles" data-v-a761953b><span class="title-icon" data-v-a761953b>#</span><!--[-->`);
+          }, "result"])}"${ssrRenderAttr("aria-label", [...p.titles, p.title].join(" > "))}${ssrRenderAttr("data-index", index)} data-v-d18c0cbd><div data-v-d18c0cbd><div class="titles" data-v-d18c0cbd><span class="title-icon" data-v-d18c0cbd>#</span><!--[-->`);
           ssrRenderList(p.titles, (t, index2) => {
-            _push2(`<span class="title" data-v-a761953b><span class="text" data-v-a761953b>${t ?? ""}</span><span class="vpi-chevron-right local-search-icon" data-v-a761953b></span></span>`);
+            _push2(`<span class="title" data-v-d18c0cbd><span class="text" data-v-d18c0cbd>${t ?? ""}</span><span class="vpi-chevron-right local-search-icon" data-v-d18c0cbd></span></span>`);
           });
-          _push2(`<!--]--><span class="title main" data-v-a761953b><span class="text" data-v-a761953b>${p.title ?? ""}</span></span></div>`);
+          _push2(`<!--]--><span class="title main" data-v-d18c0cbd><span class="text" data-v-d18c0cbd>${p.title ?? ""}</span></span></div>`);
           if (unref(showDetailedList)) {
-            _push2(`<div class="excerpt-wrapper" data-v-a761953b>`);
+            _push2(`<div class="excerpt-wrapper" data-v-d18c0cbd>`);
             if (p.text) {
-              _push2(`<div class="excerpt" inert data-v-a761953b><div class="vp-doc" data-v-a761953b>${p.text ?? ""}</div></div>`);
+              _push2(`<div class="excerpt" inert data-v-d18c0cbd><div class="vp-doc" data-v-d18c0cbd>${p.text ?? ""}</div></div>`);
             } else {
               _push2(`<!---->`);
             }
-            _push2(`<div class="excerpt-gradient-bottom" data-v-a761953b></div><div class="excerpt-gradient-top" data-v-a761953b></div></div>`);
+            _push2(`<div class="excerpt-gradient-bottom" data-v-d18c0cbd></div><div class="excerpt-gradient-top" data-v-d18c0cbd></div></div>`);
           } else {
             _push2(`<!---->`);
           }
@@ -5131,11 +5131,11 @@ const _sfc_main = /* @__PURE__ */ defineComponent({
         });
         _push2(`<!--]-->`);
         if (unref(filterText) && !results.value.length && enableNoResults.value) {
-          _push2(`<li class="no-results" data-v-a761953b>${ssrInterpolate(unref(translate)("modal.noResultsText"))} &quot;<strong data-v-a761953b>${ssrInterpolate(unref(filterText))}</strong>&quot; </li>`);
+          _push2(`<li class="no-results" data-v-d18c0cbd>${ssrInterpolate(unref(translate)("modal.noResultsText"))} &quot;<strong data-v-d18c0cbd>${ssrInterpolate(unref(filterText))}</strong>&quot; </li>`);
         } else {
           _push2(`<!---->`);
         }
-        _push2(`</ul><div class="search-keyboard-shortcuts" data-v-a761953b><span data-v-a761953b><kbd${ssrRenderAttr("aria-label", unref(translate)("modal.footer.navigateUpKeyAriaLabel"))} data-v-a761953b><span class="vpi-arrow-up navigate-icon" data-v-a761953b></span></kbd><kbd${ssrRenderAttr("aria-label", unref(translate)("modal.footer.navigateDownKeyAriaLabel"))} data-v-a761953b><span class="vpi-arrow-down navigate-icon" data-v-a761953b></span></kbd> ${ssrInterpolate(unref(translate)("modal.footer.navigateText"))}</span><span data-v-a761953b><kbd${ssrRenderAttr("aria-label", unref(translate)("modal.footer.selectKeyAriaLabel"))} data-v-a761953b><span class="vpi-corner-down-left navigate-icon" data-v-a761953b></span></kbd> ${ssrInterpolate(unref(translate)("modal.footer.selectText"))}</span><span data-v-a761953b><kbd${ssrRenderAttr("aria-label", unref(translate)("modal.footer.closeKeyAriaLabel"))} data-v-a761953b>esc</kbd> ${ssrInterpolate(unref(translate)("modal.footer.closeText"))}</span></div></div></div>`);
+        _push2(`</ul><div class="search-keyboard-shortcuts" data-v-d18c0cbd><span data-v-d18c0cbd><kbd${ssrRenderAttr("aria-label", unref(translate)("modal.footer.navigateUpKeyAriaLabel"))} data-v-d18c0cbd><span class="vpi-arrow-up navigate-icon" data-v-d18c0cbd></span></kbd><kbd${ssrRenderAttr("aria-label", unref(translate)("modal.footer.navigateDownKeyAriaLabel"))} data-v-d18c0cbd><span class="vpi-arrow-down navigate-icon" data-v-d18c0cbd></span></kbd> ${ssrInterpolate(unref(translate)("modal.footer.navigateText"))}</span><span data-v-d18c0cbd><kbd${ssrRenderAttr("aria-label", unref(translate)("modal.footer.selectKeyAriaLabel"))} data-v-d18c0cbd><span class="vpi-corner-down-left navigate-icon" data-v-d18c0cbd></span></kbd> ${ssrInterpolate(unref(translate)("modal.footer.selectText"))}</span><span data-v-d18c0cbd><kbd${ssrRenderAttr("aria-label", unref(translate)("modal.footer.closeKeyAriaLabel"))} data-v-d18c0cbd>esc</kbd> ${ssrInterpolate(unref(translate)("modal.footer.closeText"))}</span></div></div></div>`);
       }, "body", false, _parent);
     };
   }
@@ -5143,10 +5143,10 @@ const _sfc_main = /* @__PURE__ */ defineComponent({
 const _sfc_setup = _sfc_main.setup;
 _sfc_main.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.1.2_lightningcss@1.33.0_po_5253c8ae0035f476a711aae74fc79706/node_modules/vitepress/dist/client/theme-default/components/VPLocalSearchBox.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPLocalSearchBox.vue");
   return _sfc_setup ? _sfc_setup(props, ctx) : void 0;
 };
-const VPLocalSearchBox = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-a761953b"]]);
+const VPLocalSearchBox = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-d18c0cbd"]]);
 export {
   VPLocalSearchBox as default
 };

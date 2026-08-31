@@ -70,6 +70,13 @@ const KdpHistoryIcon = makeIcon(
     <path d="M9 12.5h6" />
   </>,
 );
+const SpendIcon = makeIcon(
+  <>
+    <path d="M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+    <path d="M3 10.5h18" />
+    <path d="M7 15h4" />
+  </>,
+);
 const ChangesIcon = makeIcon(
   <>
     <path d="M17 3h4v4" />
@@ -122,6 +129,7 @@ const navItems = [
   { to: "/search-terms", label: "Search terms", Icon: SearchTermsIcon },
   { to: "/negatives", label: "Negatives", Icon: NegativesIcon },
   { to: "/kdp-history", label: "KDP history", Icon: KdpHistoryIcon },
+  { to: "/spend", label: "Spend", Icon: SpendIcon },
   { to: "/changes", label: "Change center", Icon: ChangesIcon },
   { to: "/connect", label: "Connection", Icon: ConnectIcon },
   { to: "/settings", label: "Settings", Icon: SettingsIcon },
@@ -304,7 +312,10 @@ function SessionGate({ children }: { children: React.ReactNode }) {
       session.error.status === 401 &&
       location.pathname !== "/login"
     ) {
-      void navigate({ to: "/login" });
+      // Carry the current location so the post-verify redirect lands back on
+      // the same page (window.location keeps the raw query string intact).
+      const next = window.location.pathname + window.location.search;
+      void navigate({ to: "/login", search: { next } });
     }
   }, [session.error, location.pathname, navigate]);
 

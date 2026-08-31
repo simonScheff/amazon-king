@@ -46,9 +46,17 @@ import {
   type Db,
 } from "@amazon-king/database";
 import { z } from "zod";
+import {
+  DAY_MS,
+  dateRange,
+  isoDay,
+  previousDateRange,
+  utcToday,
+} from "./date-ranges.js";
 import { ApiError, conflict, notFound } from "./errors.js";
 import { getKdpHistory, listKdpTransactions } from "./kdp-history.js";
 import { getKdpDailyProfit } from "./daily-profit.js";
+import { getSpendBreakdown, getSpendTree } from "./spend.js";
 import {
   applyKdpRoyaltyImport,
   createKdpRoyaltyImport,
@@ -83,9 +91,7 @@ export interface ReadServiceDeps {
   now?: () => Date;
 }
 
-const MAX_DAYS = 90;
 const MANUAL_SYNC_HISTORY_DAYS = 60;
-const DAY_MS = 86_400_000;
 /**
  * How long a rejected finding stays suppressed. Matches the longest optimizer
  * evidence window, so the metrics that produced it have fully rolled out of
@@ -161,16 +167,6 @@ const cannibalizationEvidenceSchema = z.object({
     )
     .min(2),
 });
-
-function utcToday(now: Date): Date {
-  return new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-  );
-}
-
-function isoDay(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
 
 const MATCHED_PHRASE_CAP = 20;
 
@@ -333,62 +329,6 @@ function sortMarketCodes(codes: readonly string[]): string[] {
     if (b === "US") return 1;
     return a.localeCompare(b);
   });
-}
-
-function dateRange(
-  now: Date,
-  window: MetricWindow,
-): { start: string; end: string } {
-  const end = utcToday(now);
-  if (window === "mtd") {
-    const start = new Date(
-      Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1),
-    );
-    return { start: isoDay(start), end: isoDay(end) };
-  }
-  const clamped = Math.min(Math.max(Math.trunc(window) || 30, 1), MAX_DAYS);
-  // Facts land a day late (metrics sync imports yesterday), so a 1-day window
-  // means the latest complete day, not the empty in-progress today.
-  const endDay = clamped === 1 ? new Date(end.getTime() - DAY_MS) : end;
-  const start = new Date(endDay.getTime() - (clamped - 1) * DAY_MS);
-  return { start: isoDay(start), end: isoDay(endDay) };
-}
-
-/** Comparison window for dashboard period-over-period totals. */
-function previousDateRange(
-  now: Date,
-  window: MetricWindow,
-): { start: string; end: string } {
-  if (window === "mtd") {
-    const end = utcToday(now);
-    const dayOfMonth = end.getUTCDate();
-    // Day 0 of this month is the last day of the previous month.
-    const prevMonthEnd = new Date(
-      Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 0),
-    );
-    const prevStart = new Date(
-      Date.UTC(prevMonthEnd.getUTCFullYear(), prevMonthEnd.getUTCMonth(), 1),
-    );
-    const prevEndDay = Math.min(dayOfMonth, prevMonthEnd.getUTCDate());
-    const prevEnd = new Date(
-      Date.UTC(
-        prevMonthEnd.getUTCFullYear(),
-        prevMonthEnd.getUTCMonth(),
-        prevEndDay,
-      ),
-    );
-    return { start: isoDay(prevStart), end: isoDay(prevEnd) };
-  }
-  const clamped = Math.min(Math.max(Math.trunc(window) || 30, 1), MAX_DAYS);
-  const { start } = dateRange(now, window);
-  // Compute directly instead of composing dateRange: dateRange's 1-day
-  // special case (end yesterday) would otherwise push the previous window a
-  // day too far back.
-  const prevEnd = new Date(
-    new Date(`${start}T00:00:00.000Z`).getTime() - DAY_MS,
-  );
-  const prevStart = new Date(prevEnd.getTime() - (clamped - 1) * DAY_MS);
-  return { start: isoDay(prevStart), end: isoDay(prevEnd) };
 }
 
 /** Map a raw job_queue status to the contract's fx_sync run state. */
@@ -2388,6 +2328,30 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
 
     async kdpDailyProfit(workspaceId, query) {
       return getKdpDailyProfit(db, workspaceId, query, now);
+    },
+
+    async spendBreakdown(
+      workspaceId,
+      grain,
+      days,
+      countryCode,
+      displayCurrency,
+    ) {
+      return getSpendBreakdown(
+        db,
+        workspaceId,
+        { grain, days, country: countryCode, currency: displayCurrency },
+        now,
+      );
+    },
+
+    async spendTree(workspaceId, days, countryCode, displayCurrency) {
+      return getSpendTree(
+        db,
+        workspaceId,
+        { days, country: countryCode, currency: displayCurrency },
+        now,
+      );
     },
 
     async listRecommendations(workspaceId, filter) {

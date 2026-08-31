@@ -12,6 +12,14 @@ import { LoginPage } from "./login";
 
 const fetchMock = vi.fn<typeof fetch>();
 
+const mocks = vi.hoisted(() => ({
+  search: {} as Record<string, unknown>,
+}));
+
+vi.mock("@tanstack/react-router", () => ({
+  useSearch: () => mocks.search,
+}));
+
 function renderLogin() {
   const queryClient = new QueryClient({
     defaultOptions: { mutations: { retry: false } },
@@ -26,6 +34,7 @@ describe("LoginPage", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", fetchMock);
     fetchMock.mockReset();
+    mocks.search = {};
     window.history.replaceState({}, "", "/login");
   });
 
@@ -119,5 +128,32 @@ describe("LoginPage", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Email delivery is not configured",
     );
+  });
+
+  it("sends the session gate's return path with the login request", async () => {
+    mocks.search = { next: "/campaigns/123?tab=maxCpc" };
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    renderLogin();
+
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: "owner@example.com" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Email me a sign-in link" }),
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    const body = JSON.parse(
+      String(fetchMock.mock.calls[0]?.[1]?.body),
+    ) as Record<string, unknown>;
+    expect(body).toEqual({
+      email: "owner@example.com",
+      next: "/campaigns/123?tab=maxCpc",
+    });
   });
 });

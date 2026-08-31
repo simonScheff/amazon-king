@@ -42,6 +42,8 @@ import {
   negativeDetailSchema,
   negativeListRowSchema,
   sessionInfoSchema,
+  spendBreakdownSchema,
+  spendTreeSchema,
   syncRunSchema,
   syncRunSummarySchema,
   workspaceSettingsSchema,
@@ -64,6 +66,7 @@ import {
   type RecommendationType,
   type RejectRecommendation,
   type SearchTermNegativesCreate,
+  type SpendGrain,
   type WorkspaceSettings,
   type WorkspaceSettingsUpdate,
 } from "@amazon-king/contracts";
@@ -352,6 +355,49 @@ export function useCountrySpend(
   });
 }
 
+/**
+ * Spend explorer breakdown (/spend composition + movers tabs). `country` is a
+ * two-letter code or `"all"` (converted into the workspace display currency
+ * when `currency` is omitted — the API applies the workspace setting). The
+ * query key carries every filter dimension or the cache would serve another
+ * view's numbers.
+ */
+export function useSpendBreakdown(
+  grain: SpendGrain,
+  days: MetricWindow,
+  country: string,
+  currency?: string,
+  options?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: ["spend-breakdown", grain, days, country, currency ?? null],
+    enabled: options?.enabled ?? true,
+    queryFn: () =>
+      apiFetch("/api/spend/breakdown", {
+        query: { grain, days, country, currency },
+        schema: spendBreakdownSchema,
+      }),
+  });
+}
+
+/** Spend explorer treemap (/spend map tab); same currency conventions. */
+export function useSpendTree(
+  days: MetricWindow,
+  country: string,
+  currency?: string,
+  options?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: ["spend-tree", days, country, currency ?? null],
+    enabled: options?.enabled ?? true,
+    queryFn: () =>
+      apiFetch("/api/spend/tree", {
+        query: { days, country, currency },
+        schema: spendTreeSchema,
+      }),
+  });
+}
+
 export function useDataFreshness(options?: { poll?: boolean }) {
   const forcePoll = options?.poll ?? false;
   return useQuery({
@@ -421,6 +467,8 @@ export function useUpdateWorkspaceSettings() {
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["dashboard-summary"] }),
         qc.invalidateQueries({ queryKey: ["dashboard-country-spend"] }),
+        qc.invalidateQueries({ queryKey: ["spend-breakdown"] }),
+        qc.invalidateQueries({ queryKey: ["spend-tree"] }),
       ]);
     },
   });

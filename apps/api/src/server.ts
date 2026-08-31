@@ -32,6 +32,8 @@ import {
   renameCampaignSchema,
   searchTermNegativesCreateSchema,
   setCampaignMaxCpcSchema,
+  spendBreakdownQuerySchema,
+  spendTreeQuerySchema,
   updateCampaignStateSchema,
   workspaceSettingsUpdateSchema,
 } from "@amazon-king/contracts";
@@ -441,6 +443,36 @@ export async function buildServer(
           books,
           currency,
         );
+  });
+
+  app.get("/api/spend/breakdown", async (request) => {
+    const auth = await authenticate(request);
+    const { grain, days, country, currency } = parse(
+      spendBreakdownQuerySchema,
+      request.query,
+    );
+    // Pass the display currency only when the caller sent one, so the
+    // service falls back to the workspace setting (summary convention).
+    return currency === undefined
+      ? services.read.spendBreakdown(auth.workspaceId, grain, days, country)
+      : services.read.spendBreakdown(
+          auth.workspaceId,
+          grain,
+          days,
+          country,
+          currency,
+        );
+  });
+
+  app.get("/api/spend/tree", async (request) => {
+    const auth = await authenticate(request);
+    const { days, country, currency } = parse(
+      spendTreeQuerySchema,
+      request.query,
+    );
+    return currency === undefined
+      ? services.read.spendTree(auth.workspaceId, days, country)
+      : services.read.spendTree(auth.workspaceId, days, country, currency);
   });
 
   app.get("/api/campaigns", async (request) => {

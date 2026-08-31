@@ -40,6 +40,17 @@ overview's Sync status card polls while a run is active.
 preceding same-length range for trailing 7/14/30/60d, or prior-month MTD when
 `days=mtd`. Those power the period-over-period deltas on the overview KPI cards.
 
+`GET /api/spend/breakdown` and `GET /api/spend/tree` feed the /spend explorer
+(read-only). The breakdown takes `grain=market|campaign|searchTerm` (default
+`campaign`) plus the summary's `days`/`country`/`currency` conventions and
+returns the top 12 entities by window spend with zero-filled per-day series,
+an `other` fold, and previous-window spend per entity and in totals; the tree
+returns a two-level hierarchy for the treemap (market → campaigns with
+`country=all`, campaign → search terms for a single country, children capped
+at 10 plus an "Other" fold). Both share the all-market posture: empty
+fx_rates → zeroed figures with `ratesAvailable: false`, partial coverage →
+409 `FX_RATES_INCOMPLETE`, and single-country views refuse mixed currencies.
+
 ## All-market view and display currency
 
 `GET /api/dashboard/summary` accepts `country=all` plus an optional `currency`

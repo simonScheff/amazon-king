@@ -23,7 +23,10 @@ weaken this check). Local backups: `make backup` (also runs automatically on
   `schema_migrations`. Migrations are append-only; never edit an applied file.
 - `src/pool.ts` — a thin `pg` pool wrapper.
 - `src/repositories/` — explicit modules with **parameterized SQL only**. No
-  query builder, no string interpolation of user input.
+  query builder, no string interpolation of user input. The spend explorer's
+  per-entity daily series live in `repositories/spend.ts` (grain-parameterized
+  over static fragments; native plus FX-converted variants reusing
+  `fxRateJoins` from `dashboard.ts`).
 - `src/change-drafts.ts` — change-set drafting shared by apps/api and
   apps/worker: `campaignNegativeSpec` (ASIN term → `add_negative_target`,
   else `add_negative_exact`) and `createSearchTermExclusionSet`

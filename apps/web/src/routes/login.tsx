@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { useSearch } from "@tanstack/react-router";
 import { useLogin } from "../api/endpoints";
 import { ApiError } from "../api/client";
 import { isStandalone } from "../lib/install";
@@ -18,12 +19,16 @@ export function LoginPage() {
       new URLSearchParams(window.location.search).get("error") ===
       "invalid_token",
   );
+  // Where the session gate sent the user from; the magic link lands them
+  // back there after verify. Validated on the route and again by the API.
+  const search = useSearch({ strict: false }) as { next?: string };
+  const next = search.next;
   const login = useLogin();
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     setInvalidToken(false);
-    login.mutate({ email }, { onSuccess: () => setSent(true) });
+    login.mutate({ email, next }, { onSuccess: () => setSent(true) });
   }
 
   return (
@@ -132,7 +137,9 @@ export function LoginPage() {
             <div className="mt-6 border-t border-zinc-800 pt-4">
               {/* Reload rather than route: the app boots fresh under the
                   session the pasted link just created. */}
-              <PasteLoginLink onSignedIn={() => window.location.assign("/")} />
+              <PasteLoginLink
+                onSignedIn={() => window.location.assign(next ?? "/")}
+              />
             </div>
           )}
         </CardBody>

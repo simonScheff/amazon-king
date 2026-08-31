@@ -34,6 +34,9 @@ import type {
   SearchTermDetail,
   SearchTermExclusionList,
   SearchTermListRow,
+  SpendBreakdown,
+  SpendGrain,
+  SpendTree,
   NegativeDetail,
   NegativeKind,
   NegativeListRow,
@@ -300,4 +303,29 @@ export interface ReadService {
     patch: WorkspaceSettingsUpdate,
     meta: RequestMeta,
   ): Promise<WorkspaceSettings>;
+  /**
+   * Spend explorer breakdown (/spend composition + movers tabs): the top
+   * entities by window spend at the given grain with per-day series, the
+   * remainder folded into `other`, and the preceding same-length window's
+   * spend per entity and in totals. `countryCode` follows the dashboard
+   * summary conventions (`all` converts per fact date into `currency`).
+   */
+  spendBreakdown(
+    workspaceId: string,
+    grain: SpendGrain,
+    days: MetricWindow,
+    countryCode: string,
+    currency?: string,
+  ): Promise<SpendBreakdown>;
+  /**
+   * Spend explorer treemap (/spend map tab): two-level spend hierarchy —
+   * market → campaigns with `country=all`, campaign → search terms for a
+   * single country — children capped per parent with an "Other" fold.
+   */
+  spendTree(
+    workspaceId: string,
+    days: MetricWindow,
+    countryCode: string,
+    currency?: string,
+  ): Promise<SpendTree>;
 }

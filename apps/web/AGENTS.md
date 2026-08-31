@@ -239,7 +239,7 @@ The same button plus the import log also live on the KDP imports tab (above).
 ## KDP history page
 
 `src/routes/kdp-history.tsx` (`/kdp-history`, sidebar "KDP history" between
-Negatives and Change center) is the analytics surface for KDP royalty
+Negatives and Spend) is the analytics surface for KDP royalty
 imports (phase 2 of `docs/kdp-royalty-import-plan.md`, decision 10). The page
 is split into four URL-backed tabs (`?tab=organic|royalty|fulfillment|transactions`,
 validated in `src/router.tsx`, same tab-bar idiom as Settings; bare
@@ -280,6 +280,42 @@ changing any filter resets to page 0. Ad units are computed at query time from
 advertised-product facts via the linked ASIN — never snapshotted — so a
 re-synced ad account rewrites the mix. The import create/apply mutations
 invalidate all three keys.
+
+## Spend explorer page
+
+`src/routes/spend.tsx` (`/spend`, sidebar "Spend" between KDP history and
+Change center) shows where the ad money goes, in three URL-backed tabs
+(`?tab=composition|movers|map`, validated in `src/router.tsx`, same tab-bar
+idiom as KDP history; bare `/spend` lands on `composition`). A shared toolbar
+carries the breakdown grain (`?grain=market|campaign|searchTerm`, default
+`campaign` — hidden on the map tab, which builds its own hierarchy), the
+`TimeframeSelect` (30-day default), and a `CountrySelect` with "All markets"
+gated on FX rates like the overview. The page does not use the `books`
+product filter.
+
+Data comes from `useSpendBreakdown` (key
+`["spend-breakdown", grain, days, country, currency]` →
+`GET /api/spend/breakdown`) and `useSpendTree` (key
+`["spend-tree", days, country, currency]` → `GET /api/spend/tree`); only the
+active tab's query is enabled. The breakdown response carries the top 12
+entities with zero-filled per-day series, an `other` fold, and
+previous-window spend per entity; the tree response is a two-level
+market → campaign (`country=all`) or campaign → search-term hierarchy with
+children capped at 10 plus an "Other" fold. Both honor the summary's
+country/currency conventions (`country=all` converts per fact date), so the
+workspace display-currency PATCH invalidates both keys.
+
+Tab views: Composition (`src/components/spend-composition.tsx`) is a
+100%-stacked Recharts AreaChart (`stackOffset="expand"`) of daily spend
+share, top 8 entities plus a gray "Everything else" band; Movers
+(`src/components/spend-movers.tsx`) buckets the daily series into ISO weeks
+client-side (`src/lib/spend.ts` — tested in `src/lib/spend.test.ts`) for a
+weekly rank bump chart and a this-vs-previous table with 14-day sparklines
+and New/Rising/Fading/Stable badges (±10% threshold), and replaces its
+content with a notice under 14 days; Spend map
+(`src/components/spend-treemap.tsx`) is a Recharts Treemap sized by spend
+and colored by ACoS bucket (<30% green, 30–60% amber, >60% or null red),
+and clicking a campaign node navigates to `/campaigns/$id`.
 
 ## New-campaign wizard
 
@@ -350,7 +386,9 @@ deliberately does not expose it.
 Breakdown tabs on `src/routes/campaign-detail.tsx` include **Negative
 products** (`negativeTargets`): campaign- and ad-group-level `ASIN_SAME_AS`
 exclusions from structure sync, with an Amazon retail link per ASIN. Do not
-route that tab through `MetricsTable`.
+route that tab through `MetricsTable`. The active tab is URL-backed
+(`?tab=`, validated in `src/router.tsx`) — see the Re-authentication section
+for why.
 
 The **Targets** tab uses its own `TargetsTable` (not `MetricsTable`): the
 read side derives each row's identity from the stored `targets.expression` —
@@ -415,3 +453,18 @@ the click — it is a URL param, not an instruction). `ChangesPage` strips the
 param after capturing it so a reload does not ask again. The installed-app paste
 flow never navigates, so `onReauthenticated` re-runs the blocked mutation
 directly instead.
+
+The campaign detail tabs are URL-backed (`?tab=maxCpc`, validated in
+`src/router.tsx` like the Settings and KDP-history tabs) so the magic-link
+return lands on the same tab. The embedded `CampaignMaxCpc` goes further: its
+`next` adds the typed ceiling (`?maxCpc=`) and an open review (`?draft=<change
+set id>`); on arrival it prefills the input, reopens the review, and re-runs an
+interrupted "Review ceiling" once the fresh session (and CSRF token) is in
+place — drafting only re-reads Amazon state, the write still needs the Apply
+click. Both params are captured on mount and stripped from the URL.
+
+A fully expired session takes a different path: `SessionGate` in
+`src/components/layout.tsx` redirects to `/login?next=<current path+search>`
+(validated on the login route, same same-origin allowlist the API enforces),
+`LoginPage` forwards `next` in the login request, and its paste flow reloads to
+`next` instead of `/`.

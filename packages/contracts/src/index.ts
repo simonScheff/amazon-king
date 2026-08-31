@@ -4,6 +4,7 @@ export * from "./amazon.js";
 export * from "./asin.js";
 export * from "./books.js";
 export * from "./metrics.js";
+export * from "./spend.js";
 export * from "./recommendations.js";
 export * from "./sync.js";
 export * from "./audit.js";
