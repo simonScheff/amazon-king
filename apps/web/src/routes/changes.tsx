@@ -5,9 +5,11 @@ import {
   useApplyChangeSet,
   useChangeSetPreview,
   useChangeSets,
+  useProfiles,
   useRollbackChangeAction,
 } from "../api/endpoints";
 import { isReauthError } from "../api/client";
+import { Flag } from "../components/flag";
 import { ReauthDialog } from "../components/reauth-dialog";
 import { useToast } from "../components/toast";
 import { Badge } from "../components/ui/badge";
@@ -17,6 +19,7 @@ import { Dialog } from "../components/ui/dialog";
 import { Table, Td, Th } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
 import { formatDateTime, labelize } from "../lib/format";
+import { countryNameForCode } from "../lib/marketplaces";
 
 const statusTone: Record<
   string,
@@ -90,6 +93,10 @@ function ChangeSetDetail({
   // click.
   const [confirmApply, setConfirmApply] = useState(resuming);
   const [blocked, setBlocked] = useState<BlockedAction | null>(null);
+  const profiles = useProfiles();
+  const profile = profiles.data?.find(
+    (p) => p.profileId === changeSet.profileId,
+  );
 
   function runApply() {
     apply.mutate(undefined, {
@@ -129,12 +136,26 @@ function ChangeSetDetail({
             type="button"
             aria-expanded={expanded}
             onClick={() => setExpanded((v) => !v)}
-            className="flex items-center gap-2 text-left"
+            className="flex items-center gap-2.5 text-left"
           >
             <span aria-hidden="true" className="w-3 text-zinc-500">
               {expanded ? "▾" : "▸"}
             </span>
-            Change set <span className="font-mono text-xs">{changeSet.id}</span>
+            <span className="font-semibold text-zinc-100">
+              Change set <span className="font-mono text-xs">{changeSet.id}</span>
+            </span>
+            {profile ? (
+              <span
+                className="inline-flex items-center gap-1.5 rounded border border-zinc-700/60 bg-zinc-800/80 px-2 py-0.5 text-xs font-medium text-zinc-200"
+                title={`${countryNameForCode(profile.countryCode)} (${profile.countryCode}) · ${profile.currencyCode}`}
+              >
+                <Flag countryCode={profile.countryCode} className="h-3 w-4" />
+                <span>{profile.countryCode}</span>
+                <span className="text-[11px] text-zinc-400">
+                  ({profile.currencyCode})
+                </span>
+              </span>
+            ) : null}
             <Badge tone={statusTone[changeSet.status] ?? "neutral"}>
               {labelize(changeSet.status)}
             </Badge>
@@ -301,10 +322,28 @@ function ChangeSetDetail({
         onClose={() => setConfirmApply(false)}
         onConfirm={runApply}
       >
-        This performs real write operations against your Amazon Ads account
-        (profile <span className="font-mono">{changeSet.profileId}</span>). Each
-        action is verified after applying, but spend-affecting changes take
-        effect immediately.
+        This performs real write operations against your Amazon Ads account{" "}
+        {profile ? (
+          <>
+            in{" "}
+            <span className="inline-flex items-center gap-1 font-semibold text-zinc-100">
+              <Flag countryCode={profile.countryCode} />
+              {countryNameForCode(profile.countryCode)} ({profile.countryCode} ·{" "}
+              {profile.currencyCode})
+            </span>{" "}
+            (profile{" "}
+            <span className="font-mono text-zinc-400">
+              {changeSet.profileId}
+            </span>
+            )
+          </>
+        ) : (
+          <>
+            (profile <span className="font-mono">{changeSet.profileId}</span>)
+          </>
+        )}
+        . Each action is verified after applying, but spend-affecting changes
+        take effect immediately.
       </Dialog>
       <ReauthDialog
         open={blocked !== null}

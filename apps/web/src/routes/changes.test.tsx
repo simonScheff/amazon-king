@@ -31,6 +31,7 @@ vi.mock("../api/endpoints", () => ({
   }),
   useApplyChangeSet: () => ({ isPending: false, mutate: mocks.applyMutate }),
   useRollbackChangeAction: () => ({ isPending: false, mutate: vi.fn() }),
+  useProfiles: () => ({ isPending: false, error: null, data: [] }),
 }));
 
 vi.mock("../components/toast", () => ({
