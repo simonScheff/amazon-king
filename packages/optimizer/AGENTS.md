@@ -39,5 +39,10 @@ The four profit rules — `expensive_target@2`, `profitable_target@2`,
 order therefore earns a royalty per copy, and windows whose units were never
 imported fall back to orders.
 
+**Relevant negatives only (no cross-category clutter).** Negatives are applied
+strictly for observed historical waste or direct single-book harvest isolation.
+Never propose or draft unrelated cross-category negatives (e.g. animal terms on
+vehicle campaigns or non-animal terms on animal campaigns).
+
 Coverage is expected at threshold boundaries and for launch-mode, protected, and
 cooldown suppression.

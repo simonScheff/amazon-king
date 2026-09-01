@@ -30,6 +30,10 @@ guardrail constraints.
 - **Value royalty on copies.** Profit rules pass
   `royaltyCopies(orders, units)` — `max(orders, units)` — to
   `estimatedAdProfit`, because KDP pays per copy sold.
+- **Relevant negatives only (no cross-category clutter).** Negatives must
+  strictly target direct historical waste or direct single-book harvest
+  isolation. Never generate speculative cross-category negatives across
+  unrelated book topics (e.g. animal negatives on vehicle campaigns).
 
 ## When to bump the version instead of editing in place
 
