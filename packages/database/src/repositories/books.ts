@@ -360,6 +360,30 @@ export async function mapAdvertisedProductToBook(
   return result.rows[0] ? toBook(result.rows[0]) : null;
 }
 
+/**
+ * Automatically link advertised ASINs in a profile to existing catalog books
+ * in the same workspace. Idempotent: enables the link if already present.
+ */
+export async function autoLinkMatchingBooks(
+  db: Db,
+  profileId: string,
+): Promise<void> {
+  await db.query(
+    `insert into book_profile_links (book_id, profile_id, marketplace_asin, enabled)
+     select distinct b.id, p.id, a.asin, true
+     from ads a
+     join amazon_profiles p on p.id = a.profile_id
+     join amazon_connections c on c.id = p.connection_id
+     join books b on b.workspace_id = c.workspace_id and b.asin = a.asin
+     where p.id = $1
+       and a.asin <> ''
+     on conflict (book_id, profile_id) do update set
+       marketplace_asin = excluded.marketplace_asin,
+       enabled = true`,
+    [profileId],
+  );
+}
+
 export type LinkBookToProfilesFailure =
   "not_found" | "asin_mismatch" | "asin_already_linked";
 
