@@ -2202,8 +2202,9 @@ export class FakeDb {
           ),
       },
       {
-        // Daily KDP royalty by order date, converted per day (listKdpDailyRoyalty).
-        match: "select order_date as metric_date, royalty, currency",
+        // Daily KDP royalty by royalty posting date, converted per day
+        // (listKdpDailyRoyalty).
+        match: "select royalty_date as metric_date, royalty, currency",
         handle: (p, db) => {
           const start = String(p[1]);
           const end = String(p[2]);
@@ -2213,7 +2214,7 @@ export class FakeDb {
             { royalty: number; missing: boolean }
           >();
           for (const row of t.kdpSaleTransactions) {
-            const date = dateOnly(row.order_date);
+            const date = dateOnly(row.royalty_date);
             if (
               row.workspace_id !== p[0] ||
               date < start ||

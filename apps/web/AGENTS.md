@@ -261,9 +261,10 @@ validated in `src/router.tsx`, same tab-bar idiom as Settings; bare
 
 Months on this page are **KDP report months** — the month of `royalty_date`,
 matching the KDP dashboard's own display (an order placed July 31 whose
-royalty posted August 2 counts as August). The exceptions are the daily
-views: the Daily profit card sums royalty per order date, and the
-Fulfillment card groups the order→ship lag by order month.
+royalty posted August 2 counts as August). The Daily profit card follows the
+same convention, summing royalty per royalty posting date; the only
+exception is the Fulfillment card, which groups the order→ship lag by order
+month.
 
 The empty state (no KDP imports at all) replaces the tabs and links to
 Settings.

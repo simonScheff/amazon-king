@@ -145,7 +145,8 @@ capped at 1000 with a 500 default, newest order date first, book title joined
 in when linked) returning `{ transactions, total }` — one page plus the
 filtered total across all pages, which drives the table's pagination.
 `GET /api/kdp/daily-profit` (`month` first-of-month ISO, optional `book`)
-serves the organic tab's daily profit chart: per order day of the month,
+serves the organic tab's daily profit chart: per royalty posting day of the
+month (how the KDP dashboard itself displays the data),
 the ad spend and estimated ad-attributed royalty (the converting dashboard
 queries) next to the real summed KDP royalty (`listKdpDailyRoyalty` over the
 verbatim transactions, unlinked-ASIN rows included unless a book filter is

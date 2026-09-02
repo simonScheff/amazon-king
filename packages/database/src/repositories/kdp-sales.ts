@@ -290,7 +290,7 @@ export async function listKdpSaleTransactions(
 }
 
 export interface KdpDailyRoyaltyPoint {
-  /** Order date (ISO day). */
+  /** Royalty posting date (ISO day). */
   date: string;
   /** Summed royalty converted into the display currency at each day's fixing. */
   royalty: string;
@@ -299,13 +299,16 @@ export interface KdpDailyRoyaltyPoint {
 }
 
 /**
- * Real KDP royalty summed per order date, converted into one display currency
- * at each date's own fixing — the organic side of the /kdp-history daily
- * profit chart. The subselect aliases order_date/currency to the shape the
- * shared fxRateJoins expects; the conversion convention (USD pivot, last
- * fixing at or before the date, never a silent 1:1) matches the converting
- * dashboard queries. Unlinked-ASIN rows (null book_id) are real money and
- * included unless a book filter is given.
+ * Real KDP royalty summed per royalty date, converted into one display
+ * currency at each date's own fixing — the organic side of the /kdp-history
+ * daily profit chart. Royalty date (the day KDP posted the royalty) matches
+ * how the KDP dashboard itself scopes and displays the data, the monthly
+ * aggregates above, and the royalty-date-based import periods. The subselect
+ * aliases royalty_date/currency to the shape the shared fxRateJoins expects;
+ * the conversion convention (USD pivot, last fixing at or before the date,
+ * never a silent 1:1) matches the converting dashboard queries.
+ * Unlinked-ASIN rows (null book_id) are real money and included unless a
+ * book filter is given.
  */
 export async function listKdpDailyRoyalty(
   db: Db,
@@ -329,10 +332,10 @@ export async function listKdpDailyRoyalty(
               (dr.rate is null or nr.rate is null) and m.royalty <> 0
             ), false) as rates_missing
      from (
-       select order_date as metric_date, royalty, currency
+       select royalty_date as metric_date, royalty, currency
        from kdp_sale_transactions
        where workspace_id = $1
-         and order_date between $2 and $3
+         and royalty_date between $2 and $3
          and ($4::bigint is null or book_id = $4)
      ) m
      ${fxRateJoins(5)}

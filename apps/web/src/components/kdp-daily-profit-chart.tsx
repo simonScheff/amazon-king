@@ -16,7 +16,9 @@ import { formatDate, formatMoney } from "../lib/format";
 
 /**
  * Daily profit chart for the /kdp-history organic tab: one calendar month of
- * per-day profitability. Stacked bars show the royalty split — estimated
+ * per-day profitability. Days are KDP royalty posting dates — how the KDP
+ * dashboard itself scopes and displays the data, and how the import periods
+ * are labeled. Stacked bars show the royalty split — estimated
  * ad-attributed (#a078ff) and real organic (#34d399), the same colors as the
  * sales-mix card — against the day's ad spend (red line); the purple line is
  * the running profit total, so its slope shows whether the month is

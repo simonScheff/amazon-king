@@ -5,7 +5,8 @@ import { FakeDb } from "@amazon-king/database/testing";
 
 /**
  * KDP daily profit (GET /api/kdp/daily-profit): one month of per-day
- * profitability — real KDP royalty per order date next to the estimated
+ * profitability — real KDP royalty per royalty posting date next to the
+ * estimated
  * ad-attributed royalty and the ad spend, all markets converted per day into
  * the display currency. Runs the real read service against the
  * SQL-matching FakeDb.
@@ -107,13 +108,15 @@ describe("kdp daily profit", () => {
     db.seedKdpSaleTransaction({
       book_id: "7",
       profile_id: "profile-us",
-      order_date: "2026-08-14",
+      order_date: "2026-08-13",
+      royalty_date: "2026-08-14",
       royalty: "5.00",
     });
     db.seedKdpSaleTransaction({
       book_id: "7",
       profile_id: "profile-us",
-      order_date: "2026-08-14",
+      order_date: "2026-08-13",
+      royalty_date: "2026-08-14",
       royalty: "3.00",
     });
     // 2026-08-15 (DE): 10 EUR spend → 12.50 USD at Friday's fixing; an
@@ -129,7 +132,8 @@ describe("kdp daily profit", () => {
       book_id: null,
       profile_id: null,
       marketplace: "Amazon.de",
-      order_date: "2026-08-15",
+      order_date: "2026-08-14",
+      royalty_date: "2026-08-15",
       royalty: "8.00",
       currency: "EUR",
     });
@@ -182,7 +186,8 @@ describe("kdp daily profit", () => {
     });
     db.seedKdpSaleTransaction({
       book_id: "7",
-      order_date: "2026-08-14",
+      order_date: "2026-08-13",
+      royalty_date: "2026-08-14",
       royalty: "8.00",
     });
 
@@ -196,6 +201,34 @@ describe("kdp daily profit", () => {
       totalRoyalty: "8.0000",
       profit: "8.0000",
     });
+  });
+
+  it("buckets royalty by posting date, not order date — like the KDP dashboard", async () => {
+    const { db, service } = setup();
+    seedUsBook(db);
+    seedEurRate(db);
+    // Ordered in July, royalty posted in August: KDP's own reports and the
+    // import period label this an August sale, so the chart must too.
+    db.seedKdpSaleTransaction({
+      book_id: "7",
+      profile_id: "profile-us",
+      order_date: "2026-07-31",
+      royalty_date: "2026-08-02",
+      royalty: "3.43",
+    });
+
+    const august = await service.kdpDailyProfit("1", { month: "2026-08-01" });
+    expect(august.kdpImported).toBe(true);
+    expect(dayOf(august, "2026-08-02")).toMatchObject({
+      totalRoyalty: "3.4300",
+      organicRoyalty: "3.4300",
+      profit: "3.4300",
+    });
+
+    // July has no posted royalties, so it reads as never imported.
+    const july = await service.kdpDailyProfit("1", { month: "2026-07-01" });
+    expect(july.kdpImported).toBe(false);
+    expect(dayOf(july, "2026-07-31").totalRoyalty).toBeNull();
   });
 
   it("reports an unimported month with null KDP figures", async () => {
@@ -255,7 +288,8 @@ describe("kdp daily profit", () => {
     });
     db.seedKdpSaleTransaction({
       book_id: "7",
-      order_date: "2026-08-14",
+      order_date: "2026-08-13",
+      royalty_date: "2026-08-14",
       royalty: "6.00",
     });
 
@@ -279,18 +313,21 @@ describe("kdp daily profit", () => {
     db.seedBook({ id: "8", workspace_id: "1", title: "Other" });
     db.seedKdpSaleTransaction({
       book_id: "7",
-      order_date: "2026-08-14",
+      order_date: "2026-08-13",
+      royalty_date: "2026-08-14",
       royalty: "5.00",
     });
     db.seedKdpSaleTransaction({
       book_id: "8",
-      order_date: "2026-08-14",
+      order_date: "2026-08-13",
+      royalty_date: "2026-08-14",
       royalty: "3.00",
     });
     db.seedKdpSaleTransaction({
       book_id: null,
       profile_id: null,
-      order_date: "2026-08-14",
+      order_date: "2026-08-13",
+      royalty_date: "2026-08-14",
       royalty: "2.00",
     });
 
@@ -313,7 +350,8 @@ describe("kdp daily profit", () => {
     seedUsBook(db);
     db.seedKdpSaleTransaction({
       book_id: "7",
-      order_date: "2026-08-14",
+      order_date: "2026-08-13",
+      royalty_date: "2026-08-14",
       royalty: "5.00",
     });
 

@@ -2423,7 +2423,7 @@ export async function dailySeries(
  * fixing at or before the fact's metric date and stays NULL when fx_rates
  * does not cover that date. The outer query must alias its fact source as
  * `m` with `metric_date` and `currency` columns (a subselect works — the
- * KDP daily-royalty query aliases order_date that way).
+ * KDP daily-royalty query aliases royalty_date that way).
  */
 export function fxRateJoins(displayParamIndex: number): string {
   return `cross join lateral (

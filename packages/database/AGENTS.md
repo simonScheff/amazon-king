@@ -130,11 +130,11 @@ To add a migration, use the `add-migration` skill.
   for the median lag per profile × month of order_date, standard-rate rows
   only. The royalty trend reads `books.listBookEconomicsHistoryByWorkspace`
   (every effective-dated row, `effective_from::text`) — never duplicated
-  storage. `listKdpDailyRoyalty` sums real royalty per order date (organic
-  included, unlinked-ASIN rows too unless a book filter is given) converted
-  per day into one display currency — the organic side of the
+  storage. `listKdpDailyRoyalty` sums real royalty per royalty posting date
+  (organic included, unlinked-ASIN rows too unless a book filter is given)
+  converted per day into one display currency — the organic side of the
   `/kdp-history` daily profit chart; it wraps the transactions in a
-  subselect aliasing `order_date as metric_date` so the shared
+  subselect aliasing `royalty_date as metric_date` so the shared
   `fxRateJoins` applies verbatim.
 - The converting dashboard queries (`convertedDailyTotals`,
   `convertedDailySeries`, `convertedRoyaltySeries`, `convertedCountrySpend` in

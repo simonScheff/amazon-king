@@ -25,9 +25,12 @@ import { conflict, notFound } from "./errors.js";
  * fixing (the country=all convention): the ad spend and estimated
  * ad-attributed royalty come from the same converting dashboard queries the
  * overview uses; the real KDP royalty (organic included) is summed from the
- * imported sale transactions by order date. The split avoids double counting
- * with organic = max(0, total − ad) — ad click-attribution dates and KDP
- * order dates never align perfectly, the same clamp the sales-mix chart uses.
+ * imported sale transactions by royalty date — the day KDP posted the
+ * royalty, matching the KDP dashboard's own display and the royalty-month
+ * import periods. The split avoids double counting with
+ * organic = max(0, total − ad) — ad click-attribution dates and KDP royalty
+ * posting dates never align perfectly, the same clamp the sales-mix chart
+ * uses.
  * profit = total − spend is real money and needs no book economics; only the
  * ad/organic split does.
  */

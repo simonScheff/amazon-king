@@ -450,7 +450,7 @@ function DailyProfitCard({
     <Card>
       <CardHeader
         title="Daily profit — ads + organic"
-        description="Real KDP royalty per order day against the day's ad spend, all markets converted into the workspace display currency. The ad/organic split is estimated; the profit is real money."
+        description="Real KDP royalty per royalty posting day (how the KDP dashboard shows it) against the day's ad spend, all markets converted into the workspace display currency. The ad/organic split is estimated; the profit is real money."
         action={
           <Select
             aria-label="Daily profit month"

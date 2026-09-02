@@ -251,8 +251,9 @@ export interface ReadService {
   ): Promise<KdpTransactionsPage>;
   /**
    * Daily profitability of one calendar month (ads + organic) for the
-   * /kdp-history organic tab: real KDP royalty per order date next to the
-   * estimated ad-attributed royalty and the ad spend, all markets converted
+   * /kdp-history organic tab: real KDP royalty per royalty posting date
+   * (matching the KDP dashboard's display) next to the estimated
+   * ad-attributed royalty and the ad spend, all markets converted
    * per day into the workspace display currency. organic = max(0, total −
    * ad); profit = total − spend needs no book economics — only the split
    * does.

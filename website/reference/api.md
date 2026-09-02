@@ -680,7 +680,8 @@ The individual stored sale rows, newest order date first.
 ### `GET /api/kdp/daily-profit?month&book`
 
 Daily profitability of one calendar month — the organic tab's "Daily profit"
-chart. Per order day: the ad spend and estimated ad-attributed royalty next
+chart. Per royalty posting day (how the KDP dashboard itself displays the
+data): the ad spend and estimated ad-attributed royalty next
 to the real summed KDP royalty (organic included), all markets converted per
 day into the workspace display currency (same USD-pivot convention as the
 all-market dashboard summary).

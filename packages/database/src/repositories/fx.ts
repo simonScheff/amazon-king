@@ -130,7 +130,7 @@ export async function getFxSyncStatus(db: Db): Promise<FxSyncStatus> {
 
 /**
  * Oldest metric date across the workspace's daily fact tables plus the KDP
- * sale transactions' order dates, so the fx_sync job knows how far back to
+ * sale transactions' royalty dates, so the fx_sync job knows how far back to
  * backfill rates. Null when the workspace has no
  * facts yet.
  */
@@ -172,9 +172,9 @@ export async function getEarliestFactDate(
        where c.workspace_id = $1
        union all
        -- KDP sale rows are conversion-relevant facts too (the /kdp-history
-       -- daily profit chart converts royalty at each order date); they sit
-       -- outside the profile join chain, keyed by workspace directly.
-       select min(t.order_date)
+       -- daily profit chart converts royalty at each royalty posting date);
+       -- they sit outside the profile join chain, keyed by workspace directly.
+       select min(t.royalty_date)
        from kdp_sale_transactions t
        where t.workspace_id = $1
      ) facts`,

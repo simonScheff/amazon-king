@@ -94,8 +94,8 @@ export interface SalesMixPoint {
 /**
  * Monthly ad vs. organic units summed over the given series. Organic is
  * clamped at zero per series-month before summing: ad-attributed units can
- * exceed what KDP recorded for a book in a month (attribution windows vs.
- * order dates), and a negative bar would be nonsense.
+ * exceed what KDP recorded for a book in a month (ad attribution windows
+ * vs. KDP royalty posting months), and a negative bar would be nonsense.
  */
 export function buildSalesMix(
   series: readonly KdpHistorySeries[],

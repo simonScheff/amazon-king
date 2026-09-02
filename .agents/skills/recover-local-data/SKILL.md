@@ -55,7 +55,7 @@ Rebuild from sources, in this order:
    ones (country match; note Amazon reports the UK as `UK`, KDP as `GB`).
 3. **Sync:** `POST /api/profiles/:profileId/syncs` per enabled profile, then
    wait for structure + metrics. FX coverage heals itself: `fx_sync`
-   backfills from just before the earliest fact (KDP order dates included)
+   backfills from just before the earliest fact (KDP royalty dates included)
    whenever facts predate the oldest stored rate — trigger it immediately
    from Settings → Workspace (**Sync rates now**) instead of waiting for the
    daily schedule.

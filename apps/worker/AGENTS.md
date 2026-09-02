@@ -50,7 +50,7 @@ before the loop starts, when nothing can legitimately be in flight.
 - `fx_sync` — workspace-global daily Frankfurter rate top-up into `fx_rates`;
   scheduled by `schedule_tick` after 17:00 UTC, base URL from
   `FX_RATES_BASE_URL`. Self-healing on historical gaps: when facts (including
-  `kdp_sale_transactions` order dates) predate the oldest stored fixing, the
+  `kdp_sale_transactions` royalty dates) predate the oldest stored fixing, the
   fetch restarts just before the earliest fact instead of only topping up
   forward — after an fx_rates wipe or an older data import, one run restores
   full coverage

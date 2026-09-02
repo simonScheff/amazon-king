@@ -38,6 +38,7 @@ import {
 } from "./repositories/kdp-royalty-imports.js";
 import {
   listKdpAdUnitsByBookMonth,
+  listKdpDailyRoyalty,
   listKdpFulfillmentStats,
   listKdpMonthlyBookSales,
   listKdpSaleTransactions,
@@ -410,7 +411,9 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     expect(await getEarliestFactDate(pool, workspaceId)).toBe("2026-03-02");
 
     // KDP sale transactions count as conversion-relevant facts too (the
-    // /kdp-history daily profit chart converts royalty per order date).
+    // /kdp-history daily profit chart converts royalty per royalty posting
+    // date, so the backfill reaches back to the oldest royalty_date — here
+    // 2026-02-24, not the earlier 2026-02-20 order date).
     const kdpBatch = await insertKdpRoyaltyImport(pool, {
       workspaceId,
       fileName: "kdp-fx.xlsx",
@@ -440,7 +443,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         currency: "USD",
       },
     ]);
-    expect(await getEarliestFactDate(pool, workspaceId)).toBe("2026-02-20");
+    expect(await getEarliestFactDate(pool, workspaceId)).toBe("2026-02-24");
   });
 
   /** Seed one workspace with a US (USD) and a DE (EUR) profile. */
@@ -3118,6 +3121,24 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         royalty: "7.0000",
         currency: "USD",
       },
+    ]);
+
+    // The daily royalty series buckets by royalty posting date too, matching
+    // the KDP dashboard: the July-31 order lands on 2026-08-02, the unlinked
+    // row counts (no book filter), and USD→USD needs no fx rows.
+    expect(
+      await listKdpDailyRoyalty(pool, workspaceId, {
+        start: "2026-07-01",
+        end: "2026-08-31",
+        bookPk: null,
+        displayCurrency: "USD",
+      }),
+    ).toEqual([
+      { date: "2026-07-22", royalty: "7.0000", ratesMissing: false },
+      { date: "2026-07-25", royalty: "2.2000", ratesMissing: false },
+      { date: "2026-07-26", royalty: "3.5000", ratesMissing: false },
+      { date: "2026-08-02", royalty: "3.5000", ratesMissing: false },
+      { date: "2026-08-13", royalty: "3.5000", ratesMissing: false },
     ]);
 
     // The transactions month filter is the KDP report month (royalty_date).
