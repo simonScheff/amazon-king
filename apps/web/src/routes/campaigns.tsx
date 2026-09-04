@@ -39,6 +39,7 @@ type SortKey =
   | "profile"
   | "state"
   | "profit"
+  | "maxCpc"
   | "impressions"
   | "clicks"
   | "cost"
@@ -60,6 +61,8 @@ function sortValue(row: CampaignListRow, key: SortKey): number | string | null {
       return row.profitability.estimatedAdProfit === null
         ? null
         : Number(row.profitability.estimatedAdProfit);
+    case "maxCpc":
+      return row.maxCpc === null ? null : Number(row.maxCpc);
     case "impressions":
       return row.totals.impressions;
     case "clicks":
@@ -221,6 +224,13 @@ export function CampaignsPage() {
                   className="hidden md:table-cell"
                 />
                 <SortableTh
+                  label="Max CPC"
+                  column="maxCpc"
+                  sort={sort}
+                  onSort={onSort}
+                  className="text-right"
+                />
+                <SortableTh
                   label="Impressions"
                   column="impressions"
                   sort={sort}
@@ -355,6 +365,9 @@ export function CampaignsPage() {
                         hasActivity={hasActivity}
                         maxCpc={c.maxCpc}
                       />
+                    </Td>
+                    <Td className="text-right whitespace-nowrap">
+                      {formatMoney(c.maxCpc, currency)}
                     </Td>
                     <Td className="text-right">
                       {formatCount(c.totals.impressions)}
