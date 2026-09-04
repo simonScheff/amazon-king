@@ -239,7 +239,10 @@ export async function listCampaignRows(
             cr.impressions, cr.clicks, cr.cost, cr.sales, cr.orders, cr.units,
             coalesce(cr.currency, p.currency_code)::text as currency,
             rr.estimated_royalty,
-            policy.max_cpc::text as max_cpc,
+            coalesce(
+              policy.max_cpc,
+              (select g.default_bid from ad_groups g where g.campaign_id = c.id and g.default_bid is not null order by g.id limit 1)
+            )::text as max_cpc,
             coalesce(rr.economics_missing, false) as economics_missing,
             cr.data_current_through,
             coalesce(cr.mixed_currency, false)

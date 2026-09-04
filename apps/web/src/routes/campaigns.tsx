@@ -21,6 +21,7 @@ import {
   hasCampaignActivity,
 } from "../lib/campaign-profit";
 import {
+  CAMPAIGN_BID_COLUMN_TITLE,
   formatAcos,
   formatCount,
   formatMoney,
@@ -224,11 +225,12 @@ export function CampaignsPage() {
                   className="hidden md:table-cell"
                 />
                 <SortableTh
-                  label="Max CPC"
+                  label="Bid"
                   column="maxCpc"
                   sort={sort}
                   onSort={onSort}
                   className="text-right"
+                  title={CAMPAIGN_BID_COLUMN_TITLE}
                 />
                 <SortableTh
                   label="Impressions"

@@ -138,9 +138,10 @@ describe("CampaignsPage thirty-day profitability", () => {
     expect(
       screen.getByRole("columnheader", { name: "30-day profit" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("columnheader", { name: "Max CPC" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Bid" })).toHaveAttribute(
+      "title",
+      "Campaign bid price (uses the configured Max CPC ceiling or ad group default bid).",
+    );
     expect(
       within(screen.getByRole("columnheader", { name: /Campaign/ })).getByRole(
         "button",
@@ -402,8 +403,8 @@ describe("CampaignsPage thirty-day profitability", () => {
       "New campaign",
     ]);
 
-    // Max CPC desc: General ($0.80), Research ($0.50), nulls last.
-    fireEvent.click(screen.getByRole("button", { name: /Max CPC/ }));
+    // Bid desc: General ($0.80), Research ($0.50), nulls last.
+    fireEvent.click(screen.getByRole("button", { name: /Bid/ }));
     expect(rowNames()).toEqual([
       "General",
       "Research",
@@ -411,8 +412,8 @@ describe("CampaignsPage thirty-day profitability", () => {
       "New campaign",
     ]);
 
-    // Max CPC asc: Research ($0.50), General ($0.80), nulls last.
-    fireEvent.click(screen.getByRole("button", { name: /Max CPC/ }));
+    // Bid asc: Research ($0.50), General ($0.80), nulls last.
+    fireEvent.click(screen.getByRole("button", { name: /Bid/ }));
     expect(rowNames()).toEqual([
       "Research",
       "General",
