@@ -5,6 +5,7 @@ import {
   useApplyChangeSet,
   useChangeSetPreview,
   useChangeSets,
+  useRejectChangeSet,
   useRollbackChangeAction,
 } from "../api/endpoints";
 import { isReauthError } from "../api/client";
@@ -33,6 +34,7 @@ const statusTone: Record<
   rolled_back: "neutral",
   pending: "neutral",
   not_applied: "danger",
+  rejected: "neutral",
 };
 
 /**
@@ -83,13 +85,28 @@ function ChangeSetDetail({
   const [expanded, setExpanded] = useState(resuming);
   const preview = useChangeSetPreview(expanded ? changeSet.id : null);
   const apply = useApplyChangeSet(changeSet.id);
+  const reject = useRejectChangeSet(changeSet.id);
   const rollback = useRollbackChangeAction();
   const toast = useToast();
   // Re-auth returns to a fresh page, so the confirmation reopens itself rather
   // than writing to Amazon unprompted — the write still needs a deliberate
   // click.
   const [confirmApply, setConfirmApply] = useState(resuming);
+  const [confirmReject, setConfirmReject] = useState(false);
   const [blocked, setBlocked] = useState<BlockedAction | null>(null);
+
+  function runReject() {
+    reject.mutate(undefined, {
+      onSuccess: () => {
+        setConfirmReject(false);
+        toast("Change set dismissed");
+      },
+      onError: (err) => {
+        setConfirmReject(false);
+        toast(`Dismiss failed: ${err.message}`, "error");
+      },
+    });
+  }
 
   function runApply() {
     apply.mutate(undefined, {
@@ -262,27 +279,52 @@ function ChangeSetDetail({
           )}
           {(changeSet.status === "draft" ||
             changeSet.status === "previewed" ||
-            changeSet.status === "failed") &&
-            (dependencyLocked ? (
-              <div className="mx-4 mb-3 rounded-md border border-sky-800 bg-sky-950/20 px-3 py-2 text-xs leading-5 text-sky-200">
-                Locked until change set{" "}
-                <span className="font-mono">
-                  {changeSet.dependsOnChangeSetId}
-                </span>{" "}
-                is applied — the new campaign must exist on Amazon before these
-                negatives go live.
-              </div>
-            ) : (
-              <div className="flex justify-end px-4 pb-3">
-                <Button variant="primary" onClick={() => setConfirmApply(true)}>
+            changeSet.status === "failed") && (
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 pb-3">
+              <Button
+                variant="ghost"
+                disabled={reject.isPending || apply.isPending}
+                onClick={() => setConfirmReject(true)}
+              >
+                Dismiss
+              </Button>
+              {dependencyLocked ? (
+                <div className="rounded-md border border-sky-800 bg-sky-950/20 px-3 py-2 text-xs leading-5 text-sky-200">
+                  Locked until change set{" "}
+                  <span className="font-mono">
+                    {changeSet.dependsOnChangeSetId}
+                  </span>{" "}
+                  is applied — the new campaign must exist on Amazon before
+                  these negatives go live.
+                </div>
+              ) : (
+                <Button
+                  variant="primary"
+                  disabled={reject.isPending || apply.isPending}
+                  onClick={() => setConfirmApply(true)}
+                >
                   {changeSet.status === "failed"
                     ? "Retry apply to Amazon…"
                     : "Apply to Amazon…"}
                 </Button>
-              </div>
-            ))}
+              )}
+            </div>
+          )}
         </CardBody>
       )}
+
+      <Dialog
+        open={confirmReject}
+        title="Dismiss this change set?"
+        confirmLabel="Dismiss change set"
+        busy={reject.isPending}
+        onClose={() => setConfirmReject(false)}
+        onConfirm={runReject}
+      >
+        This will close change set{" "}
+        <span className="font-mono">{changeSet.id}</span> without applying any
+        changes to Amazon. Any included recommendations will be dismissed.
+      </Dialog>
 
       <Dialog
         open={confirmApply}

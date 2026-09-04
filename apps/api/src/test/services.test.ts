@@ -945,6 +945,59 @@ describe("change service", () => {
     expect(result.actions[0]!.status).toBe("verification_failed");
     expect(result.changeSet.status).toBe("failed");
   });
+
+  it("rejects an unapplied change set, dismisses recommendations, and is idempotent", async () => {
+    const { db, service, changeSetId } = setup();
+    const profile = db.tables.amazonProfiles[0]!;
+    const seededRec = db.seedRecommendation({
+      profile_id: profile.id,
+      state: "approved",
+    });
+    db.tables.changeActions[0]!.recommendation_id = seededRec.id;
+
+    const rejected = await service.rejectChangeSet(
+      authFixture(),
+      changeSetId,
+      META,
+    );
+    expect(rejected.changeSet.status).toBe("rejected");
+
+    // Recommendations linked to the change set should be transitioned to 'rejected'
+    const rec = db.tables.recommendations.find((r) => r.id === seededRec.id);
+    expect(rec?.state).toBe("rejected");
+
+    // A recommendation dismissal should be recorded with a 60-day window
+    expect(db.tables.recommendationDismissals.length).toBe(1);
+    expect(db.tables.recommendationDismissals[0]!.recommendation_id).toBe(
+      seededRec.id,
+    );
+
+    // Audit events should be logged
+    expect(
+      db.tables.auditEvents.some((r) => r.event === "change_set.reject"),
+    ).toBe(true);
+    expect(
+      db.tables.auditEvents.some((r) => r.event === "recommendation.reject"),
+    ).toBe(true);
+
+    // Repeated reject is idempotent
+    const again = await service.rejectChangeSet(
+      authFixture(),
+      changeSetId,
+      META,
+    );
+    expect(again.changeSet.status).toBe("rejected");
+  });
+
+  it("refuses to reject an applied change set", async () => {
+    const { db, service, changeSetId } = setup();
+    const set = db.tables.changeSets.find((s) => s.id === changeSetId);
+    if (set) set.status = "applied";
+
+    await expect(
+      service.rejectChangeSet(authFixture(), changeSetId, META),
+    ).rejects.toThrow(/cannot be rejected/);
+  });
 });
 
 describe("cannibalization resolution", () => {

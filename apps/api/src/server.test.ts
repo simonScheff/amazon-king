@@ -76,6 +76,7 @@ function stubServices(
       async () => options.changeSetStatus ?? "previewed",
     ),
     applyChangeSet: vi.fn(async () => ({ id: "set-1", status: "applied" })),
+    rejectChangeSet: vi.fn(async () => ({ id: "set-1", status: "rejected" })),
   } as unknown as ChangeService;
   const services = {
     session,
@@ -252,6 +253,47 @@ describe("POST /api/change-sets/:id/apply", () => {
 
     expect(response.statusCode).toBe(200);
     expect(changes.applyChangeSet).toHaveBeenCalledWith(
+      AUTH,
+      "set-1",
+      expect.anything(),
+    );
+  });
+});
+
+describe("POST /api/change-sets/:id/reject", () => {
+  let app: FastifyInstance | null = null;
+  afterEach(async () => {
+    await app?.close();
+    app = null;
+  });
+
+  async function start(
+    options: { recentAuth?: boolean; changeSetStatus?: string } = {},
+  ) {
+    const stubs = stubServices(options);
+    app = await buildServer({
+      config: testConfig(),
+      logger: createLogger("test", { level: "silent" }),
+      services: stubs.services,
+    });
+    return stubs;
+  }
+
+  function reject() {
+    return app!.inject({
+      method: "POST",
+      url: "/api/change-sets/set-1/reject",
+      headers: { "x-csrf-token": "csrf" },
+    });
+  }
+
+  it("rejects a change set without requiring recent sign-in", async () => {
+    const { changes } = await start({ recentAuth: false });
+
+    const response = await reject();
+
+    expect(response.statusCode).toBe(200);
+    expect(changes.rejectChangeSet).toHaveBeenCalledWith(
       AUTH,
       "set-1",
       expect.anything(),

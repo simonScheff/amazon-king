@@ -27,6 +27,7 @@ draft → previewed → applying → applied
                          ↓     → partially_applied
                      failed ←──┘  (retryable)
                      blocked      (terminal: stale, guardrail, or Max CPC violation)
+draft / previewed / failed → rejected (dismissed by user without Amazon write)
 ```
 
 - `draft` / `previewed` — created, not yet applied. Previewing records the
@@ -40,6 +41,7 @@ draft → previewed → applying → applied
 - `blocked` — the pipeline refused the set: stale before-state, guardrail
   violation, or a Max CPC conflict. Terminal — create a fresh set from
   current data.
+- `rejected` — dismissed by the operator without writing to Amazon.
 
 ## The change center
 
@@ -49,6 +51,8 @@ page does not fan out one request per set. Inside an expanded set you get:
 
 - each action with its before → after values and per-action status,
 - guardrail violations when present,
+- a **Dismiss button** on unapplied sets (`draft`, `previewed`, `failed`) to
+  discard the change set and suppress linked recommendations for 60 days,
 - a **confirm dialog** before applying (danger-styled; the button reads
   *Retry apply* for failed sets),
 - per-action **rollback buttons** where the action supports it, and

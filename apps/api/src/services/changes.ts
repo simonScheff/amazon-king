@@ -88,6 +88,9 @@ export interface ChangeServiceDeps {
   now?: () => Date;
 }
 
+const REJECTION_SUPPRESSION_DAYS = 60;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 interface LoadedSet {
   set: changes.ChangeSetWithProfile;
   actions: changes.ChangeAction[];
@@ -3280,6 +3283,92 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
         });
       }
       return result;
+    },
+
+    async rejectChangeSet(auth, changeSetId, meta) {
+      const loaded = await loadSet(auth, changeSetId);
+      const { set, actions } = loaded;
+
+      if (["applied", "partially_applied"].includes(set.status)) {
+        throw conflict(
+          "INVALID_STATE",
+          `Change set ${changeSetId} is '${set.status}' and cannot be rejected`,
+        );
+      }
+      if (set.status === "applying") {
+        throw conflict(
+          "APPLY_IN_PROGRESS",
+          "Change set is currently being applied",
+        );
+      }
+      if (set.status === "rejected") {
+        return toResult(set, actions);
+      }
+
+      const locked = await changes.transitionChangeSetStatus(
+        db,
+        set.id,
+        ["draft", "previewed", "failed"],
+        "rejected",
+      );
+      if (!locked) {
+        const reloaded = await loadSet(auth, set.id);
+        if (reloaded.set.status === "rejected") {
+          return toResult(reloaded.set, reloaded.actions);
+        }
+        throw conflict(
+          "INVALID_STATE",
+          `Change set ${changeSetId} cannot be rejected in state '${reloaded.set.status}'`,
+        );
+      }
+
+      const recById = await loadRecommendations(auth, actions);
+      for (const rec of recById.values()) {
+        const rejected =
+          (await recommendations.transitionRecommendationState(
+            db,
+            rec.id,
+            "approved",
+            "rejected",
+          )) ??
+          (await recommendations.transitionRecommendationState(
+            db,
+            rec.id,
+            "pending",
+            "rejected",
+          ));
+        if (rejected) {
+          const suppressionDays = REJECTION_SUPPRESSION_DAYS;
+          await recommendations.upsertRecommendationDismissal(db, {
+            profileId: rejected.profileId,
+            type: rejected.type,
+            campaignId: rejected.campaignId,
+            adGroupId: rejected.adGroupId,
+            targetId: rejected.targetId,
+            searchTerm: rejected.searchTerm,
+            recommendationId: rejected.id,
+            dismissedUntil: new Date(
+              now().getTime() + suppressionDays * DAY_MS,
+            ).toISOString(),
+          });
+          await recordAudit(
+            auth,
+            meta,
+            "recommendation.reject",
+            rec.id,
+            { changeSetId: set.id },
+            "recommendation",
+          );
+        }
+      }
+
+      await recordAudit(auth, meta, "change_set.reject", set.id, {
+        actionCount: actions.length,
+        previousStatus: set.status,
+      });
+
+      const updated = await loadSet(auth, set.id);
+      return toResult(updated.set, updated.actions);
     },
   };
 

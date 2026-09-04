@@ -950,6 +950,23 @@ export function useApplyChangeSet(changeSetId: string) {
   });
 }
 
+export function useRejectChangeSet(changeSetId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => {
+      if (!changeSetId) throw new Error("No change set selected");
+      return apiFetch(`/api/change-sets/${changeSetId}/reject`, {
+        method: "POST",
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["change-sets"] });
+      qc.invalidateQueries({ queryKey: ["change-set-preview"] });
+      qc.invalidateQueries({ queryKey: ["recommendations"] });
+    },
+  });
+}
+
 export function useRollbackChangeAction() {
   const qc = useQueryClient();
   return useMutation({

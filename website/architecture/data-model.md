@@ -31,6 +31,7 @@ in `schema_migrations`. The shape follows `docs/plan.md` §7.
 | `0016_remove_negative_target_action.sql` | Action type `remove_negative_target` — the guarded re-include for a synced negative ASIN target, mirroring `remove_negative_exact`. |
 | `0017_api_tokens.sql`           | `api_tokens` — SHA-256-hashed machine tokens (scope `mcp:read`) for the MCP server's HTTP transport. |
 | `0018_search_term_exclusions.sql` | `search_term_exclusions` — the workspace's persistent excluded search terms (trimmed + lower-cased, unique per workspace). Read by the worker's exclusion-enforcement pass and fed to the optimizer as protected search terms. |
+| `0023_change_set_rejection.sql`   | Change set status `rejected` on `change_sets.status`. Allows discarding unapplied change sets without writing to Amazon. |
 
 ## Conventions
 
