@@ -32,6 +32,10 @@ export function formatCount(n: number | null | undefined): string {
 export const ORDERS_COLUMN_TITLE =
   "Checkouts. One order can include multiple copies.";
 
+/** Native tooltip on the Targets tab Bid column: target-level bid or inherited default. */
+export const TARGET_BID_COLUMN_TITLE =
+  "Target bid price (uses the ad group default bid when no target override is set).";
+
 /**
  * KPI suffix beside Orders when Amazon attributed more units than checkouts.
  * Hidden when counts match, or when units are still 0 (not yet imported).

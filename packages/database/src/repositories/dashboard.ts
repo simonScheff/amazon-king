@@ -500,7 +500,7 @@ export async function listTargetRows(
     `select t.amazon_target_id,
             t.target_kind,
             t.match_type,
-            t.bid::text as bid,
+            coalesce(t.bid, g.default_bid)::text as bid,
             t.expression,
             t.state,
             sum(m.impressions)::text as impressions,
@@ -510,6 +510,7 @@ export async function listTargetRows(
             sum(m.purchases14d)::text as orders,
             sum(m.units_sold_clicks14d)::text as units
      from targets t
+     join ad_groups g on g.id = t.ad_group_id
      left join target_metrics_daily m
        on m.profile_id = t.profile_id
       and m.target_id = t.amazon_target_id
@@ -525,7 +526,7 @@ export async function listTargetRows(
          where fa.ad_group_id = t.ad_group_id
            and fb.book_id = any($4)
        ))
-     group by t.id
+     group by t.id, g.default_bid
      order by coalesce(sum(m.cost), 0) desc, t.id`,
     [campaignPk, dateStart, dateEnd, bookIds],
   );

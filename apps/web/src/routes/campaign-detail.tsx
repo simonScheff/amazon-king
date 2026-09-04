@@ -34,6 +34,7 @@ import {
   formatMoney,
   ORDERS_COLUMN_TITLE,
   ordersUnitsHint,
+  TARGET_BID_COLUMN_TITLE,
 } from "../lib/format";
 import {
   getCampaignProfitStatus,
@@ -444,6 +445,7 @@ function TargetsTable({
             sort={sort}
             onSort={onSort}
             className="text-right"
+            title={TARGET_BID_COLUMN_TITLE}
           />
           <SortableTh
             label="State"
