@@ -412,6 +412,122 @@ describe("SettingsPage book mapping", () => {
     );
   });
 
+  it("initializes effectiveFrom date from saved economics and synchronizes on update", () => {
+    // 1. Initial render with economics
+    mocks.books = [
+      {
+        id: "book-1",
+        asin: "B012345678",
+        title: "My Coloring Book",
+        format: "paperback",
+        status: "active",
+        profileIds: ["profile-ca"],
+        economics: [
+          {
+            profileId: "profile-ca",
+            effectiveFrom: "2026-08-13",
+            currency: "CAD",
+            listPrice: "14.2100",
+            estimatedRoyaltyPerSale: "5.0000",
+            targetAcos: null,
+            goalMode: "balanced",
+            maxSpendWithoutSale: null,
+            maxBid: null,
+            maxDailyBudget: null,
+            notes: "",
+          },
+        ],
+      },
+    ];
+
+    const { rerender } = render(<SettingsPage />);
+
+    // Expand the book settings card (since it is complete and defaults to collapsed)
+    fireEvent.click(screen.getByRole("button", { name: /My Coloring Book/ }));
+
+    // Open details drawer
+    fireEvent.click(
+      screen.getByRole("button", { name: "Canada economics details" }),
+    );
+
+    // Assert the date picker is initialized to "2026-08-13" (from saved economics)
+    expect(
+      screen.getByLabelText("Canada economics effective from"),
+    ).toHaveValue("2026-08-13");
+
+    // Modify the price to trigger the strategy choice warning
+    fireEvent.change(screen.getByLabelText("Canada list price"), {
+      target: { value: "15.99" },
+    });
+
+    // Strategy options should now be visible since list price changed but date matches
+    expect(
+      screen.getByText(/You are updating the economics values/),
+    ).toBeInTheDocument();
+
+    // Verify option inputs
+    const typoOption = screen.getByLabelText(
+      "Correct typo (overwrite in place)",
+    );
+    const historyOption = screen.getByLabelText(
+      "Keep history (new version starting today)",
+    );
+    expect(typoOption).toBeChecked();
+    expect(historyOption).not.toBeChecked();
+
+    // Choose history option
+    fireEvent.click(historyOption);
+
+    // It should set datepicker to today's date
+    const today = new Date().toISOString().slice(0, 10);
+    expect(
+      screen.getByLabelText("Canada economics effective from"),
+    ).toHaveValue(today);
+    // Since date no longer matches, strategy options should hide
+    expect(
+      screen.queryByText(/You are updating the economics values/),
+    ).not.toBeInTheDocument();
+
+    // 2. Test prop synchronization (rerender with new economics)
+    mocks.books = [
+      {
+        id: "book-1",
+        asin: "B012345678",
+        title: "My Coloring Book",
+        format: "paperback",
+        status: "active",
+        profileIds: ["profile-ca"],
+        economics: [
+          {
+            profileId: "profile-ca",
+            effectiveFrom: "2026-08-20",
+            currency: "CAD",
+            listPrice: "16.5000",
+            estimatedRoyaltyPerSale: "6.0000",
+            targetAcos: null,
+            goalMode: "balanced",
+            maxSpendWithoutSale: null,
+            maxBid: null,
+            maxDailyBudget: null,
+            notes: "Updated from sync",
+          },
+        ],
+      },
+    ];
+
+    // Trigger page rerender
+    rerender(<SettingsPage />);
+
+    // Assert the fields have successfully synchronized with the new economics prop values
+    expect(screen.getByLabelText("Canada list price")).toHaveValue("16.5");
+    expect(screen.getByLabelText("Canada net royalty per sale")).toHaveValue(
+      "6",
+    );
+    expect(
+      screen.getByLabelText("Canada economics effective from"),
+    ).toHaveValue("2026-08-20");
+  });
+
   it("saves and clears a book cover image URL", () => {
     mocks.books = [
       {
