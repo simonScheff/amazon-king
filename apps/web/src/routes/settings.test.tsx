@@ -412,8 +412,7 @@ describe("SettingsPage book mapping", () => {
     );
   });
 
-  it("initializes effectiveFrom date from saved economics and synchronizes on update", () => {
-    // 1. Initial render with economics
+  it("initializes effectiveFrom date from saved economics and asks for an explicit update strategy", () => {
     mocks.books = [
       {
         id: "book-1",
@@ -440,7 +439,7 @@ describe("SettingsPage book mapping", () => {
       },
     ];
 
-    const { rerender } = render(<SettingsPage />);
+    render(<SettingsPage />);
 
     // Expand the book settings card (since it is complete and defaults to collapsed)
     fireEvent.click(screen.getByRole("button", { name: /My Coloring Book/ }));
@@ -454,6 +453,14 @@ describe("SettingsPage book mapping", () => {
     expect(
       screen.getByLabelText("Canada economics effective from"),
     ).toHaveValue("2026-08-13");
+
+    // A purely cosmetic retype of the same price is not a change
+    fireEvent.change(screen.getByLabelText("Canada list price"), {
+      target: { value: "14.210" },
+    });
+    expect(
+      screen.queryByText(/You are updating the economics values/),
+    ).not.toBeInTheDocument();
 
     // Modify the price to trigger the strategy choice warning
     fireEvent.change(screen.getByLabelText("Canada list price"), {
@@ -487,8 +494,42 @@ describe("SettingsPage book mapping", () => {
     expect(
       screen.queryByText(/You are updating the economics values/),
     ).not.toBeInTheDocument();
+  });
 
-    // 2. Test prop synchronization (rerender with new economics)
+  it("synchronizes fields when economics update and the form has no unsaved edits", () => {
+    mocks.books = [
+      {
+        id: "book-1",
+        asin: "B012345678",
+        title: "My Coloring Book",
+        format: "paperback",
+        status: "active",
+        profileIds: ["profile-ca"],
+        economics: [
+          {
+            profileId: "profile-ca",
+            effectiveFrom: "2026-08-13",
+            currency: "CAD",
+            listPrice: "14.2100",
+            estimatedRoyaltyPerSale: "5.0000",
+            targetAcos: null,
+            goalMode: "balanced",
+            maxSpendWithoutSale: null,
+            maxBid: null,
+            maxDailyBudget: null,
+            notes: "",
+          },
+        ],
+      },
+    ];
+
+    const { rerender } = render(<SettingsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /My Coloring Book/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Canada economics details" }),
+    );
+
     mocks.books = [
       {
         id: "book-1",
@@ -515,10 +556,8 @@ describe("SettingsPage book mapping", () => {
       },
     ];
 
-    // Trigger page rerender
     rerender(<SettingsPage />);
 
-    // Assert the fields have successfully synchronized with the new economics prop values
     expect(screen.getByLabelText("Canada list price")).toHaveValue("16.5");
     expect(screen.getByLabelText("Canada net royalty per sale")).toHaveValue(
       "6",
@@ -526,6 +565,81 @@ describe("SettingsPage book mapping", () => {
     expect(
       screen.getByLabelText("Canada economics effective from"),
     ).toHaveValue("2026-08-20");
+  });
+
+  it("keeps unsaved edits when economics update server-side", () => {
+    mocks.books = [
+      {
+        id: "book-1",
+        asin: "B012345678",
+        title: "My Coloring Book",
+        format: "paperback",
+        status: "active",
+        profileIds: ["profile-ca"],
+        economics: [
+          {
+            profileId: "profile-ca",
+            effectiveFrom: "2026-08-13",
+            currency: "CAD",
+            listPrice: "14.2100",
+            estimatedRoyaltyPerSale: "5.0000",
+            targetAcos: null,
+            goalMode: "balanced",
+            maxSpendWithoutSale: null,
+            maxBid: null,
+            maxDailyBudget: null,
+            notes: "",
+          },
+        ],
+      },
+    ];
+
+    const { rerender } = render(<SettingsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /My Coloring Book/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Canada economics details" }),
+    );
+
+    // The owner starts editing but has not saved yet
+    fireEvent.change(screen.getByLabelText("Canada list price"), {
+      target: { value: "15.99" },
+    });
+
+    // A server-side change (e.g. a KDP royalty import) updates the row
+    mocks.books = [
+      {
+        id: "book-1",
+        asin: "B012345678",
+        title: "My Coloring Book",
+        format: "paperback",
+        status: "active",
+        profileIds: ["profile-ca"],
+        economics: [
+          {
+            profileId: "profile-ca",
+            effectiveFrom: "2026-08-20",
+            currency: "CAD",
+            listPrice: "16.5000",
+            estimatedRoyaltyPerSale: "6.0000",
+            targetAcos: null,
+            goalMode: "balanced",
+            maxSpendWithoutSale: null,
+            maxBid: null,
+            maxDailyBudget: null,
+            notes: "Updated from sync",
+          },
+        ],
+      },
+    ];
+
+    rerender(<SettingsPage />);
+
+    // The unsaved edit must survive the prop update
+    expect(screen.getByLabelText("Canada list price")).toHaveValue("15.99");
+    expect(
+      screen.getByLabelText("Canada economics effective from"),
+    ).toHaveValue("2026-08-13");
   });
 
   it("saves and clears a book cover image URL", () => {

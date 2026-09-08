@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   bookFormatSchema,
@@ -267,6 +267,53 @@ enum UpdateStrategy {
 
 const DEFAULT_GOAL_MODE: GoalMode = "balanced";
 
+function decimalInputEquals(
+  input: string,
+  saved: string | null | undefined,
+): boolean {
+  const typed = input.trim();
+  const normalized = inputDecimal(saved);
+  if (typed === normalized) return true;
+  if (typed === "" || normalized === "") return false;
+  const typedNumber = Number(typed);
+  const savedNumber = Number(normalized);
+  return (
+    Number.isFinite(typedNumber) &&
+    Number.isFinite(savedNumber) &&
+    typedNumber === savedNumber
+  );
+}
+
+function acosInputEquals(
+  input: string,
+  saved: number | null | undefined,
+): boolean {
+  const typed = input.trim() === "" ? null : Number(input.trim()) / 100;
+  const target = saved == null ? null : Number(saved);
+  return typed === target;
+}
+
+interface EconomicsFormValues {
+  listPrice: string;
+  royalty: string;
+  targetAcosPct: string;
+  goalMode: GoalMode;
+  notes: string;
+}
+
+function economicsFormValuesMatch(
+  form: EconomicsFormValues,
+  economics: BookEconomics | undefined,
+): boolean {
+  return (
+    decimalInputEquals(form.listPrice, economics?.listPrice) &&
+    decimalInputEquals(form.royalty, economics?.estimatedRoyaltyPerSale) &&
+    acosInputEquals(form.targetAcosPct, economics?.targetAcos) &&
+    form.goalMode === (economics?.goalMode ?? DEFAULT_GOAL_MODE) &&
+    form.notes.trim() === (economics?.notes ?? "").trim()
+  );
+}
+
 /**
  * One country's economics as a single editable table row. The rarely changed
  * fields (effective-from date, notes) live behind a per-row Details toggle so
@@ -306,7 +353,20 @@ function BookEconomicsRow({
     UpdateStrategy.Overwrite,
   );
 
+  const prevEconomicsRef = useRef(economics);
   useEffect(() => {
+    const prev = prevEconomicsRef.current;
+    prevEconomicsRef.current = economics;
+    // A prop change while the row has unsaved edits (e.g. a KDP royalty
+    // import landing mid-edit) must not discard the typed values.
+    const formDirty =
+      !economicsFormValuesMatch(
+        { listPrice, royalty, targetAcosPct, goalMode, notes },
+        prev,
+      ) ||
+      effectiveFrom !==
+        (prev?.effectiveFrom ?? new Date().toISOString().slice(0, 10));
+    if (formDirty) return;
     setListPrice(inputDecimal(economics?.listPrice));
     setRoyalty(inputDecimal(economics?.estimatedRoyaltyPerSale));
     setEffectiveFrom(
@@ -325,22 +385,10 @@ function BookEconomicsRow({
   const countryName = countryNameForCode(profile.countryCode);
   const saved = economics !== undefined;
 
-  const priceChanged = listPrice.trim() !== inputDecimal(economics?.listPrice);
-  const royaltyChanged =
-    royalty.trim() !== inputDecimal(economics?.estimatedRoyaltyPerSale);
-  const acosChanged =
-    (targetAcosPct.trim() === ""
-      ? null
-      : Number(targetAcosPct.trim()) / 100) !==
-    (economics?.targetAcos == null ? null : Number(economics.targetAcos));
-  const goalChanged = goalMode !== (economics?.goalMode ?? "balanced");
-  const notesChanged = notes.trim() !== (economics?.notes ?? "").trim();
-  const valuesDiffer =
-    priceChanged ||
-    royaltyChanged ||
-    acosChanged ||
-    goalChanged ||
-    notesChanged;
+  const valuesDiffer = !economicsFormValuesMatch(
+    { listPrice, royalty, targetAcosPct, goalMode, notes },
+    economics,
+  );
   const dateMatches = effectiveFrom === economics?.effectiveFrom;
   const showStrategyChoice = saved && valuesDiffer && dateMatches;
 
