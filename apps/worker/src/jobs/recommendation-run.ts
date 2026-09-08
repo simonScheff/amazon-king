@@ -54,6 +54,11 @@ import type {
  * profit rules stay disabled for entities without KDP economics.
  */
 
+enum CampaignState {
+  Enabled = "enabled",
+  Active = "active",
+}
+
 const EVIDENCE_WINDOWS_DAYS = [7, 14, 30, 60] as const;
 
 const payloadSchema = z.looseObject({
@@ -371,6 +376,9 @@ export function evaluateAllRules(inputs: EvaluationInputs): EvaluationResult {
       campaign,
     ]),
   );
+  const campaignById = new Map(
+    structure.campaigns.map((campaign) => [campaign.id, campaign]),
+  );
   const targetByAmazonId = new Map(
     structure.targets.map((target) => [target.amazonTargetId, target]),
   );
@@ -447,7 +455,8 @@ export function evaluateAllRules(inputs: EvaluationInputs): EvaluationResult {
         (target) =>
           target.targetKind === "keyword" &&
           target.matchType === "exact" &&
-          (target.state === "enabled" || target.state === "active"),
+          (target.state === CampaignState.Enabled ||
+            target.state === CampaignState.Active),
       )
       .map((target) =>
         normalizeTerm(
@@ -481,7 +490,7 @@ export function evaluateAllRules(inputs: EvaluationInputs): EvaluationResult {
         ? microsFromDecimalString(bidString)
         : null;
       if (
-        target.state === "enabled" &&
+        target.state === CampaignState.Enabled &&
         currentBidMicros !== null &&
         currentBidMicros > 0
       ) {
@@ -627,10 +636,46 @@ export function evaluateAllRules(inputs: EvaluationInputs): EvaluationResult {
         allNegatives,
         servingAdGroups,
       );
-      const withBlocked = campaigns.map((entry) => ({
-        ...entry,
-        blockedByNegative: blocked.has(entry.campaignId),
-      }));
+      const withBlocked = campaigns.map((entry) => {
+        const campaign = campaignById.get(entry.campaignId);
+        const isActiveCampaign =
+          campaign?.state === CampaignState.Enabled ||
+          campaign?.state === CampaignState.Active;
+
+        const adGroupIds =
+          servingAdGroups.get(entry.campaignId) || new Set<string>();
+        let hasActiveAd = false;
+        for (const adGroupId of adGroupIds) {
+          const adGroup = adGroupById.get(adGroupId);
+          if (
+            !adGroup ||
+            (adGroup.state !== CampaignState.Enabled &&
+              adGroup.state !== CampaignState.Active)
+          ) {
+            continue;
+          }
+          const adsInGroup = structure.ads.filter(
+            (ad) => ad.adGroupId === adGroupId,
+          );
+          if (
+            adsInGroup.some(
+              (ad) =>
+                ad.state === CampaignState.Enabled ||
+                ad.state === CampaignState.Active,
+            )
+          ) {
+            hasActiveAd = true;
+            break;
+          }
+        }
+
+        const isBlocked =
+          blocked.has(entry.campaignId) || !isActiveCampaign || !hasActiveAd;
+        return {
+          ...entry,
+          blockedByNegative: isBlocked,
+        };
+      });
       if (
         blocked.size > 0 &&
         withBlocked.filter((entry) => !entry.blockedByNegative).length <
