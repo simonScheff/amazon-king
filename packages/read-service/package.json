@@ -17,7 +17,7 @@
     "@amazon-king/contracts": "workspace:*",
     "@amazon-king/database": "workspace:*",
     "@amazon-king/optimizer": "workspace:*",
-    "zod": "^4.4.3"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@types/node": "^26.3.0",

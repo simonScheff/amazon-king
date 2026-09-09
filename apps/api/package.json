@@ -22,9 +22,9 @@
     "@fastify/cors": "^11.3.0",
     "@fastify/helmet": "^13.1.1",
     "@fastify/rate-limit": "^11.2.0",
-    "fastify": "^5.12.1",
-    "nodemailer": "^9.0.5",
-    "zod": "^4.4.3"
+    "fastify": "^5.12.3",
+    "nodemailer": "^10.0.0",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@types/nodemailer": "^8.0.1",
