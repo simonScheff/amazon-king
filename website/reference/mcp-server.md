@@ -6,11 +6,14 @@ own scripts — can query your advertising data and the optimizer's research
 directly: campaign performance, search-term analysis, the negatives inventory,
 recommendations with their evidence, and sync freshness.
 
-The server is **read-only by design**. It has no apply, rollback, or sync
-tools; applying a change always requires you in the
-[dashboard](../guide/applying-changes) with a recent sign-in. Agents get the
-same numbers the dashboard shows because both are served by the same read
-layer.
+The server **never applies to Amazon**. It can draft change sets and perform
+a small set of local mutations (dismissing recommendations, search-term
+exclusions, bid ceilings, campaign-state drafts), but applying a change set
+always requires you in the [dashboard](../guide/applying-changes) with a
+recent sign-in, and there are no apply, rollback, or sync tools. Agents get
+the same numbers the dashboard shows because both are served by the same
+read layer, and every write tool enforces the same validations as the
+equivalent dashboard action.
 
 ## Running it
 
@@ -50,7 +53,9 @@ only requirement.
 Manage tokens with `scripts/mcp-token.ts list` and
 `scripts/mcp-token.ts revoke <id>`. Only SHA-256 hashes are stored
 (`api_tokens` table), every token is limited to 120 requests per minute, and
-every tool call is written to the [audit log](../guide/operations). To expose
+every tool call is written to the [audit log](../guide/operations). Tokens
+are issued with the `mcp:read` scope by default; the write tools additionally
+require a token issued with the `mcp:draft` scope. To expose
 the endpoint beyond localhost, put it behind your own HTTPS-terminating
 reverse proxy.
 

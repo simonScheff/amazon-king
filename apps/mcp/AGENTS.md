@@ -1,8 +1,10 @@
 # apps/mcp — `@amazon-king/mcp`
 
 MCP (Model Context Protocol) server exposing the workspace's advertising data
-and optimizer research to external AI agents. Read-only by design — applying
-changes stays in the dashboard. See `docs/mcp-server-plan.md` for the design.
+and optimizer research to external AI agents. Draft-capable but never
+applying — agents may read everything, draft change sets, and perform the
+enumerated local mutations, but applying to Amazon stays in the dashboard.
+See `docs/mcp-server-plan.md` for the design.
 
 ## Commands
 
@@ -27,9 +29,15 @@ network, no real database; the pool is stubbed).
 
 ## Rules
 
-- **Never add a write tool here.** No apply, rollback, sync trigger, or
-  disconnect — the guarded-write path requires the owner's session in the
-  dashboard (root `AGENTS.md`, guarded writes).
+- **Write tools are drafting-only, enumerated, and validated.** Change-set
+  drafting and the listed local mutations (recommendation dismissals,
+  search-term exclusions, bid policies, campaign-state drafts) are allowed;
+  apply, rollback, sync trigger, and disconnect are not — the apply path
+  requires the owner's session in the dashboard (root `AGENTS.md`, guarded
+  writes). Every write tool must mirror the equivalent API service's
+  validations and record a domain audit event.
+- Over HTTP, write tools require a machine token with scope `mcp:draft`
+  (read tools keep `mcp:read`). Stdio is local and trusted.
 - Every tool takes the workspace id resolved at startup; there is no
   per-request tenant selection.
 - Tool descriptions carry the repo's metric semantics (ACoS ≠ profit, money

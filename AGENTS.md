@@ -91,7 +91,7 @@ apps/
   web/                 dashboard
   api/                 browser-facing backend and OAuth callback
   worker/              imports, reports, analysis, and scheduled jobs
-  mcp/                 read-only MCP server for external AI agents
+  mcp/                 MCP server for external AI agents (reads + drafting, never applies)
 packages/
   amazon-ads/          OAuth client, regional routing, API adapters (gateway)
   optimizer/           calculations and deterministic rules
@@ -178,12 +178,20 @@ These are binding design constraints; code must follow them.
   result handling, post-write re-read verification, and audit logging. Rollback
   is a compensating API action, not a DB undo. A global kill switch disables all
   writes immediately.
-- **MCP server is read-only.** `apps/mcp` exposes workspace data to external AI
-  agents over stdio (local) or Streamable HTTP (remote). It never touches the
-  guarded-write path — applying a change always requires the owner's dashboard
-  session. HTTP access uses owner-issued machine tokens (`api_tokens` table,
-  SHA-256 hashes only, scope `mcp:read`, 120 req/min per token, localhost bind
-  by default) and every tool call is audit-logged. Never add a write tool.
+- **MCP server never applies to Amazon.** `apps/mcp` exposes workspace data
+  to external AI agents over stdio (local) or Streamable HTTP (remote). It
+  may also draft change sets and perform enumerated local mutations
+  (dismissing recommendations, search-term exclusions, bid policies,
+  campaign-state drafts), but it never touches the apply path — applying a
+  change set to Amazon always requires the owner's dashboard session, and no
+  apply, rollback, sync-trigger, or disconnect tool may ever be added. Write
+  tools must route through the same validated services the API uses
+  (dismissal rows, state/expiry checks, serving windows, real change-set
+  rows) and record a domain audit event per mutation. HTTP access uses
+  owner-issued machine tokens (`api_tokens` table, SHA-256 hashes only, 120
+  req/min per token, localhost bind by default): read tools take scope
+  `mcp:read`, write tools additionally require scope `mcp:draft`, and every
+  tool call is audit-logged. Stdio is local and trusted.
 
 ## Data model conventions
 
