@@ -94,11 +94,18 @@ describe("CampaignsPage thirty-day profitability", () => {
       isPending: false,
       error: null,
       data: [
-        campaign("campaign-profit", "General", {}),
-        campaign("campaign-loss", "Research", {
-          estimatedRoyalty: "5.0000",
-          estimatedAdProfit: "-3.0000",
-        }),
+        campaign("campaign-profit", "General", {}, undefined, [], "0.8000"),
+        campaign(
+          "campaign-loss",
+          "Research",
+          {
+            estimatedRoyalty: "5.0000",
+            estimatedAdProfit: "-3.0000",
+          },
+          undefined,
+          [],
+          "0.5000",
+        ),
         campaign("campaign-missing", "Discovery", {
           estimatedRoyalty: null,
           estimatedAdProfit: null,
@@ -131,6 +138,10 @@ describe("CampaignsPage thirty-day profitability", () => {
     expect(
       screen.getByRole("columnheader", { name: "30-day profit" }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Bid" })).toHaveAttribute(
+      "title",
+      "Campaign bid price (uses the configured Max CPC ceiling or ad group default bid).",
+    );
     expect(
       within(screen.getByRole("columnheader", { name: /Campaign/ })).getByRole(
         "button",
@@ -140,6 +151,9 @@ describe("CampaignsPage thirty-day profitability", () => {
     expect(
       screen.getByRole("columnheader", { name: "Units" }),
     ).toBeInTheDocument();
+
+    expect(screen.getByText("$0.80")).toBeInTheDocument();
+    expect(screen.getByText("$0.50")).toBeInTheDocument();
 
     const profitable = screen.getByLabelText(
       "General 30-day profit: Profitable",
@@ -385,6 +399,24 @@ describe("CampaignsPage thirty-day profitability", () => {
     expect(rowNames()).toEqual([
       "General",
       "Research",
+      "Discovery",
+      "New campaign",
+    ]);
+
+    // Bid desc: General ($0.80), Research ($0.50), nulls last.
+    fireEvent.click(screen.getByRole("button", { name: /Bid/ }));
+    expect(rowNames()).toEqual([
+      "General",
+      "Research",
+      "Discovery",
+      "New campaign",
+    ]);
+
+    // Bid asc: Research ($0.50), General ($0.80), nulls last.
+    fireEvent.click(screen.getByRole("button", { name: /Bid/ }));
+    expect(rowNames()).toEqual([
+      "Research",
+      "General",
       "Discovery",
       "New campaign",
     ]);

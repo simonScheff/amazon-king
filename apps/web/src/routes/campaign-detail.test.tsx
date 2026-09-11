@@ -357,6 +357,10 @@ describe("CampaignDetailPage profitability", () => {
     mocks.search = { days: 7, tab: "targets" };
     render(<CampaignDetailPage />);
 
+    expect(screen.getByRole("columnheader", { name: "Bid" })).toHaveAttribute(
+      "title",
+      "Target bid price (uses the ad group default bid when no target override is set).",
+    );
     expect(
       screen.getByRole("cell", { name: "tractor book" }),
     ).toBeInTheDocument();

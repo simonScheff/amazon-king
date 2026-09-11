@@ -9,25 +9,27 @@ export function columnAriaSort<K extends string>(
   return sort.direction === "asc" ? "ascending" : "descending";
 }
 
-/** Inner control for a sortable column; compose inside a `Th` for stacked headers. */
 export function SortButton<K extends string>({
   label,
   column,
   sort,
   onSort,
   className = "",
+  title,
 }: {
   label: string;
   column: K;
   sort: Sort<K>;
   onSort: (column: K) => void;
   className?: string;
+  title?: string;
 }) {
   const active = sort.key === column;
   return (
     <button
       type="button"
       onClick={() => onSort(column)}
+      title={title}
       className={`inline-flex items-center gap-1 uppercase tracking-wider hover:text-zinc-300 ${className}`}
     >
       {label}
@@ -60,7 +62,13 @@ export function SortableTh<K extends string>({
       title={title}
       aria-sort={columnAriaSort(sort, [column])}
     >
-      <SortButton label={label} column={column} sort={sort} onSort={onSort} />
+      <SortButton
+        label={label}
+        column={column}
+        sort={sort}
+        onSort={onSort}
+        title={title}
+      />
     </Th>
   );
 }
