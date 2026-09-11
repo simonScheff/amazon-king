@@ -49,6 +49,11 @@ vi.mock("../api/endpoints", () => ({
     isPending: false,
     mutate: vi.fn(),
   }),
+  useProfiles: () => ({
+    isPending: false,
+    error: null,
+    data: [],
+  }),
 }));
 
 vi.mock("../components/toast", () => ({

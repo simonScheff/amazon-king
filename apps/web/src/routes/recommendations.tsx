@@ -2,12 +2,18 @@ import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import {
   recommendationStateSchema,
   recommendationTypeSchema,
+  type AmazonProfile,
   type Recommendation,
   type RecommendationState,
   type RecommendationType,
 } from "@amazon-king/contracts";
-import { useRecommendations, useRejectRecommendation } from "../api/endpoints";
+import {
+  useProfiles,
+  useRecommendations,
+  useRejectRecommendation,
+} from "../api/endpoints";
 import { CampaignLink } from "../components/campaign-link";
+import { Flag } from "../components/flag";
 import { useToast } from "../components/toast";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -16,6 +22,7 @@ import { Select } from "../components/ui/input";
 import { Table, Td, Th } from "../components/ui/table";
 import { EmptyState, ErrorState, Loading } from "../components/states";
 import { formatDate, formatDateTime, labelize } from "../lib/format";
+import { countryNameForCode } from "../lib/marketplaces";
 
 const stateTone: Record<
   string,
@@ -29,9 +36,17 @@ const stateTone: Record<
   protected: "info",
 };
 
-function Row({ rec }: { rec: Recommendation }) {
+function Row({
+  rec,
+  profiles,
+}: {
+  rec: Recommendation;
+  profiles?: readonly AmazonProfile[];
+}) {
   const reject = useRejectRecommendation(rec.id);
   const toast = useToast();
+  const profile = profiles?.find((p) => p.profileId === rec.profileId);
+
   return (
     <tr>
       <Td>
@@ -47,11 +62,23 @@ function Row({ rec }: { rec: Recommendation }) {
         >
           {labelize(rec.type)}
         </Link>
-        {rec.campaign ? (
-          <p className="mt-0.5 text-xs">
-            <CampaignLink campaign={rec.campaign} />
-          </p>
-        ) : null}
+        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs">
+          {profile ? (
+            <span
+              className="inline-flex items-center gap-1 font-medium text-zinc-300"
+              title={`${countryNameForCode(profile.countryCode)} (${profile.countryCode}) · ${profile.currencyCode}`}
+            >
+              <Flag countryCode={profile.countryCode} className="h-3 w-3.5" />
+              <span>{profile.countryCode}</span>
+            </span>
+          ) : null}
+          {rec.campaign ? (
+            <>
+              {profile ? <span className="text-zinc-600">·</span> : null}
+              <CampaignLink campaign={rec.campaign} />
+            </>
+          ) : null}
+        </div>
         <p className="mt-0.5 line-clamp-2 max-w-md text-xs text-zinc-500">
           {rec.rationale}
         </p>
@@ -104,6 +131,8 @@ export function RecommendationsPage() {
     { type: search.type, state: search.state },
     search.books,
   );
+
+  const profiles = useProfiles();
 
   function setFilter(patch: Partial<typeof search>) {
     void navigate({
@@ -186,7 +215,7 @@ export function RecommendationsPage() {
               {[...recs.data]
                 .sort((a, b) => a.priority - b.priority)
                 .map((r) => (
-                  <Row key={r.id} rec={r} />
+                  <Row key={r.id} rec={r} profiles={profiles.data} />
                 ))}
             </tbody>
           </Table>
