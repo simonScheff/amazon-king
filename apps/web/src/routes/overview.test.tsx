@@ -228,7 +228,7 @@ describe("OverviewPage default view", () => {
     render(<OverviewPage />);
 
     // No own selector: the card follows the page window (the summary's
-    // resolved dateRange) and always shows all markets.
+    // resolved dateRange), the market selector, and the product filter.
     expect(
       screen.getByText("Daily profit — ads + organic"),
     ).toBeInTheDocument();
@@ -237,6 +237,19 @@ describe("OverviewPage default view", () => {
       end: "2026-08-20",
     });
     expect(screen.getByText("All markets · in USD")).toBeInTheDocument();
+  });
+
+  it("scopes the KDP daily-profit card to the selected market and books", () => {
+    mocks.search = { country: "US", books: ["7"] };
+    render(<OverviewPage />);
+
+    expect(mocks.dailyProfitParams).toEqual({
+      start: "2026-07-22",
+      end: "2026-08-20",
+      books: ["7"],
+      country: "US",
+    });
+    expect(screen.getByText("United States · in USD")).toBeInTheDocument();
   });
 });
 

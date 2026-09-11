@@ -138,7 +138,10 @@ describe("kdp daily profit", () => {
       currency: "EUR",
     });
 
-    const result = await service.kdpDailyProfit("1", { month: "2026-08-01" });
+    const result = await service.kdpDailyProfit("1", {
+      books: undefined,
+      month: "2026-08-01",
+    });
 
     expect(result.start).toBe("2026-08-01");
     expect(result.end).toBe("2026-08-15");
@@ -192,7 +195,10 @@ describe("kdp daily profit", () => {
       royalty: "8.00",
     });
 
-    const result = await service.kdpDailyProfit("1", { month: "2026-08-01" });
+    const result = await service.kdpDailyProfit("1", {
+      books: undefined,
+      month: "2026-08-01",
+    });
 
     // Ad estimate 3 × 3.40 = 10.20 > 8.00 real — attribution windows never
     // align perfectly, so organic clamps to zero like the sales-mix chart.
@@ -218,7 +224,10 @@ describe("kdp daily profit", () => {
       royalty: "3.43",
     });
 
-    const august = await service.kdpDailyProfit("1", { month: "2026-08-01" });
+    const august = await service.kdpDailyProfit("1", {
+      books: undefined,
+      month: "2026-08-01",
+    });
     expect(august.kdpImported).toBe(true);
     expect(dayOf(august, "2026-08-02")).toMatchObject({
       totalRoyalty: "3.4300",
@@ -227,7 +236,10 @@ describe("kdp daily profit", () => {
     });
 
     // July has no posted royalties, so it reads as never imported.
-    const july = await service.kdpDailyProfit("1", { month: "2026-07-01" });
+    const july = await service.kdpDailyProfit("1", {
+      books: undefined,
+      month: "2026-07-01",
+    });
     expect(july.kdpImported).toBe(false);
     expect(dayOf(july, "2026-07-31").totalRoyalty).toBeNull();
   });
@@ -242,7 +254,10 @@ describe("kdp daily profit", () => {
       cost: "4.0000",
     });
 
-    const result = await service.kdpDailyProfit("1", { month: "2026-07-01" });
+    const result = await service.kdpDailyProfit("1", {
+      books: undefined,
+      month: "2026-07-01",
+    });
 
     expect(result.kdpImported).toBe(false);
     // A past month is returned in full.
@@ -294,7 +309,10 @@ describe("kdp daily profit", () => {
       royalty: "6.00",
     });
 
-    const result = await service.kdpDailyProfit("1", { month: "2026-08-01" });
+    const result = await service.kdpDailyProfit("1", {
+      books: undefined,
+      month: "2026-08-01",
+    });
 
     expect(result.economicsMissing).toBe(true);
     expect(dayOf(result, "2026-08-14")).toEqual({
@@ -332,18 +350,93 @@ describe("kdp daily profit", () => {
       royalty: "2.00",
     });
 
-    const all = await service.kdpDailyProfit("1", { month: "2026-08-01" });
+    const all = await service.kdpDailyProfit("1", {
+      books: undefined,
+      month: "2026-08-01",
+    });
     expect(dayOf(all, "2026-08-14").totalRoyalty).toBe("10.0000");
 
     const filtered = await service.kdpDailyProfit("1", {
       month: "2026-08-01",
-      book: "7",
+      books: ["7"],
     });
     expect(dayOf(filtered, "2026-08-14").totalRoyalty).toBe("5.0000");
 
+    const union = await service.kdpDailyProfit("1", {
+      month: "2026-08-01",
+      books: ["7", "8"],
+    });
+    expect(dayOf(union, "2026-08-14").totalRoyalty).toBe("8.0000");
+
     await expect(
-      service.kdpDailyProfit("1", { month: "2026-08-01", book: "999" }),
+      service.kdpDailyProfit("1", { month: "2026-08-01", books: ["999"] }),
     ).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  it("scopes both sides to one market in its native currency, no conversion", async () => {
+    const { db, service } = setup();
+    seedUsBook(db);
+    // No fx rates at all: a single-market view must not need them.
+    db.seedCampaignMetric({
+      profile_id: "profile-us",
+      metric_date: "2026-08-14",
+      cost: "10.0000",
+    });
+    db.seedCampaignMetric({
+      profile_id: "profile-de",
+      metric_date: "2026-08-14",
+      cost: "10.0000",
+      currency: "EUR",
+    });
+    db.seedAdvertisedProductMetric({
+      profile_id: "profile-us",
+      ad_id: "ad-1",
+      metric_date: "2026-08-14",
+      units_sold_clicks14d: 2,
+      purchases14d: 1,
+    });
+    db.seedKdpSaleTransaction({
+      book_id: "7",
+      profile_id: "profile-us",
+      order_date: "2026-08-13",
+      royalty_date: "2026-08-14",
+      royalty: "8.00",
+    });
+    // Unlinked-ASIN sale in the same market still counts (no book filter).
+    db.seedKdpSaleTransaction({
+      book_id: null,
+      profile_id: null,
+      order_date: "2026-08-13",
+      royalty_date: "2026-08-14",
+      royalty: "2.00",
+    });
+    // Another market's royalty and spend stay out.
+    db.seedKdpSaleTransaction({
+      book_id: null,
+      profile_id: null,
+      marketplace: "Amazon.de",
+      order_date: "2026-08-13",
+      royalty_date: "2026-08-14",
+      royalty: "8.00",
+      currency: "EUR",
+    });
+
+    const result = await service.kdpDailyProfit("1", {
+      books: undefined,
+      month: "2026-08-01",
+      country: "US",
+    });
+
+    expect(result.currency).toBe("USD");
+    expect(result.ratesAvailable).toBe(true);
+    expect(dayOf(result, "2026-08-14")).toEqual({
+      date: "2026-08-14",
+      adSpend: "10.0000",
+      adRoyalty: "6.8000",
+      organicRoyalty: "3.2000",
+      totalRoyalty: "10.0000",
+      profit: "0.0000",
+    });
   });
 
   it("answers an explicit start/end range, including across a month boundary", async () => {
@@ -364,6 +457,7 @@ describe("kdp daily profit", () => {
     });
 
     const result = await service.kdpDailyProfit("1", {
+      books: undefined,
       start: "2026-07-28",
       end: "2026-08-10",
     });
@@ -386,6 +480,7 @@ describe("kdp daily profit", () => {
     seedEurRate(db);
 
     const result = await service.kdpDailyProfit("1", {
+      books: undefined,
       start: "2026-08-14",
       end: "2026-08-31",
     });
@@ -405,7 +500,10 @@ describe("kdp daily profit", () => {
       royalty: "5.00",
     });
 
-    const result = await service.kdpDailyProfit("1", { month: "2026-08-01" });
+    const result = await service.kdpDailyProfit("1", {
+      books: undefined,
+      month: "2026-08-01",
+    });
 
     expect(result.ratesAvailable).toBe(false);
     expect(result.daily).toEqual([]);
@@ -424,7 +522,7 @@ describe("kdp daily profit", () => {
     });
 
     await expect(
-      service.kdpDailyProfit("1", { month: "2026-08-01" }),
+      service.kdpDailyProfit("1", { books: undefined, month: "2026-08-01" }),
     ).rejects.toMatchObject({ statusCode: 409, code: "FX_RATES_INCOMPLETE" });
   });
 });

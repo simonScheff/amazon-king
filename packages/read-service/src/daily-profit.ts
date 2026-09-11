@@ -17,13 +17,17 @@ import {
   type Db,
 } from "@amazon-king/database";
 import { conflict, notFound } from "./errors.js";
+import { kdpMarketplacesForCountry } from "./kdp-royalty.js";
 
 /**
  * KDP daily-profit read (GET /api/kdp/daily-profit): per-day profitability
  * over a calendar month (the /kdp-history organic tab) or an explicit day
- * range (the overview card, fed by the page's shared timeframe window). Per
- * day, all
- * markets converted into the workspace display currency at each date's own
+ * range (the overview card, fed by the page's shared timeframe window). The
+ * `books` product filter scopes both the ad side and the KDP side; an
+ * optional `country` scopes both to one market, answered in that market's
+ * native currency with no conversion (the single-country summary's
+ * posture). The all-market view converts every market
+ * into the workspace display currency at each date's own
  * fixing (the country=all convention): the ad spend and estimated
  * ad-attributed royalty come from the same converting dashboard queries the
  * overview uses; the real KDP royalty (organic included) is summed from the
@@ -68,21 +72,25 @@ function dayList(start: string, end: string): string[] {
 }
 
 /**
- * Resolve the optional book filter to a workspace-owned internal PK, like the
- * read service's requireBookPks: undefined = no filter, an unknown or foreign
- * book id is a 404.
+ * Resolve the optional product filter to workspace-owned internal PKs, like
+ * the read service's requireBookPks: undefined/empty = no filter, an unknown
+ * or foreign book id is a 404.
  */
-async function requireBookPk(
+async function requireBookPks(
   db: Db,
   workspaceId: string,
-  bookId: string | undefined,
-): Promise<bigint | null> {
-  if (bookId === undefined) return null;
-  const book = await books.getBook(db, bookId);
-  if (!book || book.workspaceId !== workspaceId) {
-    throw notFound("Unknown book");
+  bookIds: string[] | undefined,
+): Promise<bigint[] | null> {
+  if (!bookIds || bookIds.length === 0) return null;
+  const pks: bigint[] = [];
+  for (const bookId of bookIds) {
+    const book = await books.getBook(db, bookId);
+    if (!book || book.workspaceId !== workspaceId) {
+      throw notFound("Unknown book");
+    }
+    pks.push(BigInt(book.id));
   }
-  return BigInt(book.id);
+  return pks;
 }
 
 export async function getKdpDailyProfit(
@@ -97,17 +105,21 @@ export async function getKdpDailyProfit(
   const start = query.month ?? query.start!;
   const rangeEnd = query.month ? monthEnd(query.month) : query.end!;
   const end = rangeEnd < today ? rangeEnd : today;
-  const bookPk = await requireBookPk(db, workspaceId, query.book);
-  const bookPks = bookPk === null ? null : [bookPk];
+  const bookPks = await requireBookPks(db, workspaceId, query.books);
+  // Absent (or "all") is the all-market converted view; a two-letter market
+  // answers in that market's native currency.
+  const country = query.country ?? "all";
   const all = await profiles.listProfilesByWorkspace(db, workspaceId);
-  const enabled = all.filter((p) => p.enabled);
+  const enabled = all.filter(
+    (p) => p.enabled && (country === "all" || p.countryCode === country),
+  );
   const [storedDisplay, latestRateDate] = await Promise.all([
     identity.getWorkspaceDisplayCurrency(db, workspaceId),
     fx.getLatestRateDate(db),
   ]);
   const displayCurrency = storedDisplay ?? "USD";
 
-  if (latestRateDate === null) {
+  if (country === "all" && latestRateDate === null) {
     // Same posture as the all-market summary: never unconverted numbers.
     return {
       start,
@@ -121,60 +133,122 @@ export async function getKdpDailyProfit(
   }
 
   const profilePks = enabled.map((p) => p.id);
-  const [dailyRows, royaltyRows, kdpRows] = await Promise.all([
-    dashboard.convertedDailySeries(
-      db,
-      profilePks,
-      start,
-      end,
-      displayCurrency,
-      bookPks,
-    ),
-    dashboard.convertedRoyaltySeries(
-      db,
-      profilePks,
-      start,
-      end,
-      displayCurrency,
-      bookPks,
-    ),
-    kdpSales.listKdpDailyRoyalty(db, workspaceId, {
-      start,
-      end,
-      bookPk,
-      displayCurrency,
-    }),
-  ]);
-  if (
-    dailyRows.some((row) => row.ratesMissing) ||
-    royaltyRows.some((row) => row.ratesMissing) ||
-    kdpRows.some((row) => row.ratesMissing)
-  ) {
-    throw conflict(
-      "FX_RATES_INCOMPLETE",
-      "Stored exchange rates do not cover every fact in this range yet; the next fx_sync run closes the gap",
+
+  let currency = displayCurrency;
+  let spendByDate: Map<string, number>;
+  let adRoyaltyByDate: Map<string, number | null>;
+  let kdpByDate: Map<string, number>;
+  let kdpImported: boolean;
+  let economicsMissing: boolean;
+
+  if (country === "all") {
+    const [dailyRows, royaltyRows, kdpRows] = await Promise.all([
+      dashboard.convertedDailySeries(
+        db,
+        profilePks,
+        start,
+        end,
+        displayCurrency,
+        bookPks,
+      ),
+      dashboard.convertedRoyaltySeries(
+        db,
+        profilePks,
+        start,
+        end,
+        displayCurrency,
+        bookPks,
+      ),
+      kdpSales.listKdpDailyRoyalty(db, workspaceId, {
+        start,
+        end,
+        bookPks,
+        marketplaces: null,
+        displayCurrency,
+      }),
+    ]);
+    if (
+      dailyRows.some((row) => row.ratesMissing) ||
+      royaltyRows.some((row) => row.ratesMissing) ||
+      kdpRows.some((row) => row.ratesMissing)
+    ) {
+      throw conflict(
+        "FX_RATES_INCOMPLETE",
+        "Stored exchange rates do not cover every fact in this range yet; the next fx_sync run closes the gap",
+      );
+    }
+    spendByDate = new Map(
+      dailyRows.map((row) => [row.date, microsFromDecimalString(row.cost)]),
     );
+    adRoyaltyByDate = new Map(
+      royaltyRows.map((row) => [
+        row.date,
+        row.economicsMissing || row.estimatedRoyalty === null
+          ? null
+          : microsFromDecimalString(row.estimatedRoyalty),
+      ]),
+    );
+    kdpByDate = new Map(
+      kdpRows.map((row) => [row.date, microsFromDecimalString(row.royalty)]),
+    );
+    kdpImported = kdpRows.length > 0;
+    economicsMissing = royaltyRows.some((row) => row.economicsMissing);
+  } else {
+    // Single market: native currency, no conversion — the same posture as
+    // the single-country dashboard summary. Rows stay per profile × date,
+    // merged here after the currency check.
+    const [dailyRows, royaltyRows, kdpRows] = await Promise.all([
+      dashboard.dailySeries(db, profilePks, start, end, bookPks),
+      dashboard.overviewRoyaltySeries(db, profilePks, start, end, bookPks),
+      kdpSales.listKdpDailyRoyaltyNative(db, workspaceId, {
+        start,
+        end,
+        bookPks,
+        marketplaces: kdpMarketplacesForCountry(country),
+      }),
+    ]);
+    const currencies = new Set(
+      [...dailyRows, ...royaltyRows, ...kdpRows].map((row) => row.currency),
+    );
+    if (currencies.size > 1) {
+      throw conflict(
+        "MIXED_CURRENCY",
+        "Profiles use different currencies; refusing to aggregate (plan §9)",
+      );
+    }
+    currency = currencies.values().next().value ?? displayCurrency;
+    spendByDate = new Map();
+    for (const row of dailyRows) {
+      spendByDate.set(
+        row.date,
+        (spendByDate.get(row.date) ?? 0) + microsFromDecimalString(row.cost),
+      );
+    }
+    adRoyaltyByDate = new Map();
+    for (const row of royaltyRows) {
+      const existing = adRoyaltyByDate.get(row.date);
+      if (row.economicsMissing || row.estimatedRoyalty === null) {
+        adRoyaltyByDate.set(row.date, null);
+      } else if (existing !== null) {
+        adRoyaltyByDate.set(
+          row.date,
+          (existing ?? 0) + microsFromDecimalString(row.estimatedRoyalty),
+        );
+      }
+    }
+    kdpByDate = new Map();
+    for (const row of kdpRows) {
+      kdpByDate.set(
+        row.date,
+        (kdpByDate.get(row.date) ?? 0) + microsFromDecimalString(row.royalty),
+      );
+    }
+    kdpImported = kdpRows.length > 0;
+    economicsMissing = royaltyRows.some((row) => row.economicsMissing);
   }
 
-  const spendByDate = new Map(
-    dailyRows.map((row) => [row.date, microsFromDecimalString(row.cost)]),
-  );
-  const adRoyaltyByDate = new Map(
-    royaltyRows.map((row) => [
-      row.date,
-      row.economicsMissing || row.estimatedRoyalty === null
-        ? null
-        : microsFromDecimalString(row.estimatedRoyalty),
-    ]),
-  );
-  // Imports replace whole months, so the presence of any transaction dates
-  // the range as imported; days without sales are real zeros, not gaps.
-  const kdpByDate = new Map(
-    kdpRows.map((row) => [row.date, microsFromDecimalString(row.royalty)]),
-  );
-  const kdpImported = kdpRows.length > 0;
-  const economicsMissing = royaltyRows.some((row) => row.economicsMissing);
-
+  // The presence of any transaction dates the range as imported; days
+  // without sales are real zeros, not gaps.
   const daily: KdpDailyProfitDay[] = dayList(start, end).map((date) => {
     const adSpend = spendByDate.get(date) ?? 0;
     // A day without advertised-product facts had no ad sales — a real zero,
@@ -202,7 +276,7 @@ export async function getKdpDailyProfit(
   return {
     start,
     end,
-    currency: displayCurrency,
+    currency,
     ratesAvailable: true,
     economicsMissing,
     kdpImported,

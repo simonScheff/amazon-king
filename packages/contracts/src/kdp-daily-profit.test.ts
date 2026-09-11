@@ -12,14 +12,17 @@ import {
  */
 
 describe("kdp daily profit query schema", () => {
-  it("accepts a first-of-month date with an optional book", () => {
+  it("accepts a first-of-month date with optional books and country filters", () => {
     const parsed = kdpDailyProfitQuerySchema.parse({ month: "2026-08-01" });
-    expect(parsed.book).toBeUndefined();
+    expect(parsed.books).toBeUndefined();
+    expect(parsed.country).toBeUndefined();
     const filtered = kdpDailyProfitQuerySchema.parse({
       month: "2026-08-01",
-      book: "7",
+      books: "7,3",
+      country: "de",
     });
-    expect(filtered.book).toBe("7");
+    expect(filtered.books).toEqual(["7", "3"]);
+    expect(filtered.country).toBe("DE");
   });
 
   it("accepts a start/end day range", () => {

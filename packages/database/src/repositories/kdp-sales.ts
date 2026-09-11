@@ -308,7 +308,9 @@ export interface KdpDailyRoyaltyPoint {
  * the conversion convention (USD pivot, last fixing at or before the date,
  * never a silent 1:1) matches the converting dashboard queries.
  * Unlinked-ASIN rows (null book_id) are real money and included unless a
- * book filter is given.
+ * book filter is given. `marketplaces` (null = every market) restricts the
+ * series to one market's KDP report marketplace strings, covering linked
+ * and unlinked rows alike.
  */
 export async function listKdpDailyRoyalty(
   db: Db,
@@ -316,8 +318,10 @@ export async function listKdpDailyRoyalty(
   filter: {
     start: string;
     end: string;
-    /** Internal book PK; null sums every book including unlinked sales. */
-    bookPk: bigint | null;
+    /** Internal book PKs; null sums every book including unlinked sales. */
+    bookPks: readonly bigint[] | null;
+    /** KDP report marketplace strings; null sums every market. */
+    marketplaces: readonly string[] | null;
     displayCurrency: string;
   },
 ): Promise<KdpDailyRoyaltyPoint[]> {
@@ -336,16 +340,18 @@ export async function listKdpDailyRoyalty(
        from kdp_sale_transactions
        where workspace_id = $1
          and royalty_date between $2 and $3
-         and ($4::bigint is null or book_id = $4)
+         and ($4::bigint[] is null or book_id = any($4))
+         and ($5::text[] is null or marketplace = any($5))
      ) m
-     ${fxRateJoins(5)}
+     ${fxRateJoins(6)}
      group by m.metric_date
      order by m.metric_date`,
     [
       workspaceId,
       filter.start,
       filter.end,
-      filter.bookPk === null ? null : String(filter.bookPk),
+      filter.bookPks === null ? null : filter.bookPks.map(String),
+      filter.marketplaces === null ? null : [...filter.marketplaces],
       filter.displayCurrency,
     ],
   );
@@ -353,6 +359,63 @@ export async function listKdpDailyRoyalty(
     date: row.metric_date,
     royalty: row.royalty,
     ratesMissing: row.rates_missing,
+  }));
+}
+
+export interface KdpDailyRoyaltyNativePoint {
+  /** Royalty posting date (ISO day). */
+  date: string;
+  /** Summed royalty in the row's own currency — no conversion. */
+  royalty: string;
+  currency: string;
+}
+
+/**
+ * Single-market variant of `listKdpDailyRoyalty`: the same royalty-date
+ * bucketing and the same book/marketplace filters, but grouped by currency
+ * with no FX conversion — a specific market's figures stay native, like the
+ * single-country dashboard summary. The caller refuses to merge differing
+ * currencies.
+ */
+export async function listKdpDailyRoyaltyNative(
+  db: Db,
+  workspaceId: string,
+  filter: {
+    start: string;
+    end: string;
+    /** Internal book PKs; null sums every book including unlinked sales. */
+    bookPks: readonly bigint[] | null;
+    /** KDP report marketplace strings; null sums every market. */
+    marketplaces: readonly string[] | null;
+  },
+): Promise<KdpDailyRoyaltyNativePoint[]> {
+  const result = await db.query<{
+    metric_date: string;
+    royalty: string;
+    currency: string;
+  }>(
+    `select royalty_date::text as metric_date,
+            round(sum(royalty), 4)::text as royalty,
+            currency
+     from kdp_sale_transactions
+     where workspace_id = $1
+       and royalty_date between $2 and $3
+       and ($4::bigint[] is null or book_id = any($4))
+       and ($5::text[] is null or marketplace = any($5))
+     group by royalty_date, currency
+     order by royalty_date`,
+    [
+      workspaceId,
+      filter.start,
+      filter.end,
+      filter.bookPks === null ? null : filter.bookPks.map(String),
+      filter.marketplaces === null ? null : [...filter.marketplaces],
+    ],
+  );
+  return result.rows.map((row) => ({
+    date: row.metric_date,
+    royalty: row.royalty,
+    currency: row.currency,
   }));
 }
 

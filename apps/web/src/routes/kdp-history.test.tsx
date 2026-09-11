@@ -393,7 +393,7 @@ describe("KdpHistoryPage", () => {
     // All books selected: no book filter on the query.
     expect(mocks.dailyProfitParams.at(-1)).toEqual({
       month: expect.any(String),
-      book: undefined,
+      books: undefined,
     });
   });
 
@@ -423,7 +423,7 @@ describe("KdpHistoryPage", () => {
 
     expect(mocks.dailyProfitParams.at(-1)).toEqual({
       month: "2026-07-01",
-      book: "book-2",
+      books: ["book-2"],
     });
     expect(
       (screen.getByLabelText("Daily profit month") as HTMLSelectElement).value,

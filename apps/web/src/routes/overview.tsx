@@ -333,6 +333,9 @@ export function OverviewPage() {
               <OverviewKdpDailyProfitCard
                 start={summary.data.dateRange.start}
                 end={summary.data.dateRange.end}
+                books={bookIds}
+                country={country}
+                countryLabel={countryLabel}
               />
 
               <TopPerformers
@@ -595,20 +598,31 @@ function runProgressText(run: SyncRunSummary): string {
  * summary's date range, so the card follows the page's shared timeframe with
  * no selector of its own. Unlike the estimated Daily profitability card it
  * renders even when book economics are missing — profit is real KDP money;
- * only the ad/organic split footnotes. The endpoint is all-markets by
- * construction (KDP royalty has no per-market ad view here) and converts into
- * the workspace display currency, which can differ from the summary's
- * single-market currency, so the header takes the response's currency. The
- * sidebar product filter does not apply (the endpoint takes a single book).
+ * only the ad/organic split footnotes. The card follows the page's market
+ * and the sidebar product filter: a specific market is answered in its
+ * native currency, the all-market view converts into the workspace display
+ * currency — so the header takes the response's currency, which can differ
+ * from the summary's.
  */
 function OverviewKdpDailyProfitCard({
   start,
   end,
+  books,
+  country,
+  countryLabel,
 }: {
   start: string;
   end: string;
+  books?: string[];
+  country: string;
+  countryLabel: string;
 }) {
-  const dailyProfit = useKdpDailyProfit({ start, end });
+  const dailyProfit = useKdpDailyProfit({
+    start,
+    end,
+    books,
+    country: country === "all" ? undefined : country,
+  });
   return (
     <Card>
       <CardHeader
@@ -616,7 +630,7 @@ function OverviewKdpDailyProfitCard({
         action={
           dailyProfit.data ? (
             <span className="text-xs text-zinc-500">
-              All markets · in {dailyProfit.data.currency}
+              {countryLabel} · in {dailyProfit.data.currency}
             </span>
           ) : undefined
         }

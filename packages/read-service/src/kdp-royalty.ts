@@ -67,6 +67,22 @@ const NON_STANDARD_ROYALTY_TYPES = new Set(["40%", "50%"]);
  */
 const PROFILE_COUNTRY_ALIASES: Record<string, string> = { GB: "UK" };
 
+/**
+ * KDP report marketplace strings belonging to one market (ISO country or an
+ * aliased profile country code — "UK" and "GB" both match Amazon.co.uk).
+ * The daily-profit market filter scopes the KDP side by these strings, which
+ * covers unlinked-ASIN rows (null profile_id) too.
+ */
+export function kdpMarketplacesForCountry(countryCode: string): string[] {
+  return Object.entries(KDP_MARKETPLACE_COUNTRIES)
+    .filter(
+      ([, country]) =>
+        country === countryCode ||
+        PROFILE_COUNTRY_ALIASES[country] === countryCode,
+    )
+    .map(([marketplace]) => marketplace);
+}
+
 /** Below this many standard units a suggestion is advisory-only by default. */
 const LOW_EVIDENCE_UNITS = 5;
 /** Deviation from the current value that flags a suggestion for review. */

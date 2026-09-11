@@ -445,7 +445,10 @@ function DailyProfitCard({
   tab: KdpHistoryTab;
 }) {
   const navigate = useNavigate();
-  const dailyProfit = useKdpDailyProfit({ month, book });
+  const dailyProfit = useKdpDailyProfit({
+    month,
+    books: book ? [book] : undefined,
+  });
   return (
     <Card>
       <CardHeader

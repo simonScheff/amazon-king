@@ -140,7 +140,13 @@ To add a migration, use the `add-migration` skill.
   converted per day into one display currency — the organic side of the
   `/kdp-history` daily profit chart; it wraps the transactions in a
   subselect aliasing `royalty_date as metric_date` so the shared
-  `fxRateJoins` applies verbatim.
+  `fxRateJoins` applies verbatim. Both filters are lists: `bookPks`
+  (`book_id = any`) and `marketplaces` (KDP report marketplace strings,
+  which scopes unlinked rows to a market too). `listKdpDailyRoyaltyNative`
+  is the single-market variant: same filters and bucketing, grouped by
+  currency with no conversion — the daily-profit endpoint uses it (with
+  `dailySeries`/`overviewRoyaltySeries`) when a `country` is given, refusing
+  to merge differing currencies.
 - The converting dashboard queries (`convertedDailyTotals`,
   `convertedDailySeries`, `convertedRoyaltySeries`, `convertedCountrySpend` in
   `repositories/dashboard.ts`) serve the `country=all` view: each fact is

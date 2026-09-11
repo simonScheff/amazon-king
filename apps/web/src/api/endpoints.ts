@@ -1135,27 +1135,32 @@ export function useKdpSaleTransactions(filters: {
 /**
  * Daily profitability (ads + organic) over a calendar month (the /kdp-history
  * organic tab) or an explicit day range (the overview card, fed by the
- * page's shared timeframe window). The query key carries every filter
- * dimension or the cache would serve another view's numbers.
+ * page's shared timeframe window). `books` is the global product filter;
+ * `country` scopes the card to one market in its native currency (absent =
+ * all markets converted into the display currency). The query key carries
+ * every filter dimension or the cache would serve another view's numbers.
  */
 export function useKdpDailyProfit(params: {
   month?: string;
   start?: string;
   end?: string;
-  book?: string;
+  books?: string[];
+  country?: string;
 }) {
-  const { month, start, end, book } = params;
+  const { month, start, end, country } = params;
+  const books = booksParam(params.books);
   return useQuery({
     queryKey: [
       "kdp-daily-profit",
       month ?? null,
       start ?? null,
       end ?? null,
-      book ?? null,
+      books ?? null,
+      country ?? null,
     ],
     queryFn: () =>
       apiFetch("/api/kdp/daily-profit", {
-        query: { month, start, end, book },
+        query: { month, start, end, books, country },
         schema: kdpDailyProfitSchema,
       }),
   });

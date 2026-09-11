@@ -677,21 +677,28 @@ The individual stored sale rows, newest order date first.
   carry null book/profile ids) plus the total row count matching the filters
   across all pages.
 
-### `GET /api/kdp/daily-profit?month&start&end&book`
+### `GET /api/kdp/daily-profit?month&start&end&books&country`
 
 Daily profitability over a calendar month or an explicit day range — the
 organic tab's "Daily profit" chart and the overview card (which passes the
-page's shared timeframe window). Per royalty posting day (how the KDP
+page's shared timeframe window, market, and product filter). Per royalty
+posting day (how the KDP
 dashboard itself displays the
 data): the ad spend and estimated ad-attributed royalty next
-to the real summed KDP royalty (organic included), all markets converted per
+to the real summed KDP royalty (organic included). The all-market view
+(absent `country`) converts every market per
 day into the workspace display currency (same USD-pivot convention as the
-all-market dashboard summary).
+all-market dashboard summary); a specific `country` scopes both sides to
+that market in its native currency, with no conversion.
 
 - **Auth:** session.
 - `month` (a first-of-month ISO date) XOR `start`+`end` (an inclusive ISO
-  day range, ≤ 93 days) is required; `book` is an optional
-  catalog book id (absent sums every book, including unlinked-ASIN sales).
+  day range, ≤ 93 days) is required. `books` is an optional comma-separated
+  list of catalog book ids (absent sums every book, including unlinked-ASIN
+  sales). `country` is an optional two-letter market (or `all`, the
+  default): a specific market answers in that market's native currency and
+  never needs FX rates; mixing currencies within it is a `409
+  MIXED_CURRENCY`.
 - Response `200`: `{ start, end, currency, ratesAvailable, economicsMissing,
   kdpImported, daily }` with days of `{ date, adSpend, adRoyalty,
   organicRoyalty, totalRoyalty, profit }`, zero-filled over the observed
@@ -702,8 +709,9 @@ all-market dashboard summary).
   `adRoyalty`/`organicRoyalty` and sets `economicsMissing`). A range with no
   KDP import returns null `totalRoyalty`/`organicRoyalty`/`profit` with
   `kdpImported: false`; an empty `fx_rates` table returns
-  `ratesAvailable: false` with an empty series. Errors: `409
-  FX_RATES_INCOMPLETE` when stored rates don't cover a day.
+  `ratesAvailable: false` with an empty series on the all-market view.
+  Errors: `409 FX_RATES_INCOMPLETE` when stored rates don't cover a day
+  (all-market view only).
 
 ---
 

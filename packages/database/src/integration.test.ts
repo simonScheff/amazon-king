@@ -40,6 +40,7 @@ import {
 import {
   listKdpAdUnitsByBookMonth,
   listKdpDailyRoyalty,
+  listKdpDailyRoyaltyNative,
   listKdpFulfillmentStats,
   listKdpMonthlyBookSales,
   listKdpSaleTransactions,
@@ -3344,7 +3345,8 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       await listKdpDailyRoyalty(pool, workspaceId, {
         start: "2026-07-01",
         end: "2026-08-31",
-        bookPk: null,
+        bookPks: null,
+        marketplaces: null,
         displayCurrency: "USD",
       }),
     ).toEqual([
@@ -3353,6 +3355,49 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       { date: "2026-07-26", royalty: "3.5000", ratesMissing: false },
       { date: "2026-08-02", royalty: "3.5000", ratesMissing: false },
       { date: "2026-08-13", royalty: "3.5000", ratesMissing: false },
+    ]);
+
+    // The book and marketplace filters are lists: a book filter drops the
+    // unlinked row, a marketplace the workspace never sold in matches
+    // nothing.
+    expect(
+      await listKdpDailyRoyalty(pool, workspaceId, {
+        start: "2026-07-01",
+        end: "2026-08-31",
+        bookPks: [BigInt(bookId)],
+        marketplaces: null,
+        displayCurrency: "USD",
+      }),
+    ).toEqual([
+      { date: "2026-07-22", royalty: "7.0000", ratesMissing: false },
+      { date: "2026-07-25", royalty: "2.2000", ratesMissing: false },
+      { date: "2026-08-02", royalty: "3.5000", ratesMissing: false },
+      { date: "2026-08-13", royalty: "3.5000", ratesMissing: false },
+    ]);
+    expect(
+      await listKdpDailyRoyalty(pool, workspaceId, {
+        start: "2026-07-01",
+        end: "2026-08-31",
+        bookPks: null,
+        marketplaces: ["Amazon.de"],
+        displayCurrency: "USD",
+      }),
+    ).toEqual([]);
+
+    // The native single-market variant groups by currency, no conversion.
+    expect(
+      await listKdpDailyRoyaltyNative(pool, workspaceId, {
+        start: "2026-07-01",
+        end: "2026-08-31",
+        bookPks: null,
+        marketplaces: ["Amazon.com"],
+      }),
+    ).toEqual([
+      { date: "2026-07-22", royalty: "7.0000", currency: "USD" },
+      { date: "2026-07-25", royalty: "2.2000", currency: "USD" },
+      { date: "2026-07-26", royalty: "3.5000", currency: "USD" },
+      { date: "2026-08-02", royalty: "3.5000", currency: "USD" },
+      { date: "2026-08-13", royalty: "3.5000", currency: "USD" },
     ]);
 
     // The transactions month filter is the KDP report month (royalty_date).

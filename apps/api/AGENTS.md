@@ -90,8 +90,8 @@ date. Never apply one royalty rate per country.
 ## The `books` product filter
 
 `dashboard/summary`, `dashboard/country-spend`, `campaigns` list and detail,
-`recommendations`, `search-terms` list and detail, and `negatives` list and
-detail accept a `books`
+`recommendations`, `search-terms` list and detail, `negatives` list and
+detail, and `kdp/daily-profit` accept a `books`
 comma-separated book-id query param.
 
 Ids are resolved to internal PKs per request via `requireBookPks`, which 404s on
@@ -144,15 +144,24 @@ browser (`bookId`/`profileId`/`month`/`limit`/`offset` query params, limit
 capped at 1000 with a 500 default, newest order date first, book title joined
 in when linked) returning `{ transactions, total }` — one page plus the
 filtered total across all pages, which drives the table's pagination.
-`GET /api/kdp/daily-profit` (`month` first-of-month ISO, optional `book`)
-serves the organic tab's daily profit chart: per royalty posting day of the
+`GET /api/kdp/daily-profit` (`month` first-of-month ISO XOR a ≤ 93-day
+`start`/`end` range, optional `books` list and `country`)
+serves the organic tab's daily profit chart and the overview card: per
+royalty posting day of the
 month (how the KDP dashboard itself displays the data),
 the ad spend and estimated ad-attributed royalty (the converting dashboard
 queries) next to the real summed KDP royalty (`listKdpDailyRoyalty` over the
 verbatim transactions, unlinked-ASIN rows included unless a book filter is
-given), all markets converted per day into the workspace display currency —
+given). The all-market view (absent `country`) converts per day into the
+workspace display currency —
 empty `fx_rates` returns `ratesAvailable: false`, partial coverage a 409
-`FX_RATES_INCOMPLETE`. organic = max(0, total − ad) avoids double counting
+`FX_RATES_INCOMPLETE`; a specific `country` scopes both sides to that market
+(KDP side by KDP report marketplace strings, so unlinked rows match too) and
+answers in its native currency via the non-converting series
+(`dailySeries`/`overviewRoyaltySeries`/`listKdpDailyRoyaltyNative`), with a
+409 `MIXED_CURRENCY` if currencies disagree — the single-country summary's
+posture.
+organic = max(0, total − ad) avoids double counting
 ad-driven sales; profit = total − spend needs no book economics — only the
 split does (`economicsMissing` flags days without it). Days are zero-filled
 over the month, the current month capped at today; an unimported month

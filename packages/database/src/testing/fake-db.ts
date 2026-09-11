@@ -2208,7 +2208,9 @@ export class FakeDb {
         handle: (p, db) => {
           const start = String(p[1]);
           const end = String(p[2]);
-          const display = String(p[4]);
+          const bookPks = p[3] as string[] | null;
+          const marketplaces = p[4] as string[] | null;
+          const display = String(p[5]);
           const byDate = new Map<
             string,
             { royalty: number; missing: boolean }
@@ -2219,7 +2221,11 @@ export class FakeDb {
               row.workspace_id !== p[0] ||
               date < start ||
               date > end ||
-              (p[3] !== null && String(row.book_id) !== String(p[3]))
+              (bookPks !== null &&
+                (row.book_id === null ||
+                  !bookPks.includes(String(row.book_id)))) ||
+              (marketplaces !== null &&
+                !marketplaces.includes(String(row.marketplace)))
             ) {
               continue;
             }
@@ -2241,6 +2247,50 @@ export class FakeDb {
                 royalty: entry.royalty.toFixed(4),
                 rates_missing: entry.missing,
               })),
+          );
+        },
+      },
+      {
+        // Single-market variant: daily KDP royalty grouped by currency with
+        // no conversion (listKdpDailyRoyaltyNative).
+        match: "select royalty_date::text as metric_date,",
+        handle: (p) => {
+          const start = String(p[1]);
+          const end = String(p[2]);
+          const bookPks = p[3] as string[] | null;
+          const marketplaces = p[4] as string[] | null;
+          const byDateCurrency = new Map<string, number>();
+          for (const row of t.kdpSaleTransactions) {
+            const date = dateOnly(row.royalty_date);
+            if (
+              row.workspace_id !== p[0] ||
+              date < start ||
+              date > end ||
+              (bookPks !== null &&
+                (row.book_id === null ||
+                  !bookPks.includes(String(row.book_id)))) ||
+              (marketplaces !== null &&
+                !marketplaces.includes(String(row.marketplace)))
+            ) {
+              continue;
+            }
+            const key = `${date} ${row.currency}`;
+            byDateCurrency.set(
+              key,
+              (byDateCurrency.get(key) ?? 0) + Number(row.royalty),
+            );
+          }
+          return this.ok(
+            [...byDateCurrency.entries()]
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([key, royalty]) => {
+                const [date, currency] = key.split(" ");
+                return {
+                  metric_date: date,
+                  royalty: royalty.toFixed(4),
+                  currency,
+                };
+              }),
           );
         },
       },
@@ -2705,6 +2755,144 @@ export class FakeDb {
                   : entry.royalty.toFixed(4),
                 rates_missing: entry.ratesMissing,
               })),
+          );
+        },
+      },
+      {
+        // Per-day cost/sales/orders per profile, native currency
+        // (dailySeries) — the single-market counterpart of the converting
+        // handler above; the book filter is a FakeDb no-op like there.
+        match: "profile_id::text as profile_id, sum(cost)::text as cost",
+        handle: (p) => {
+          const profileIds = (p[0] as string[]).map(String);
+          const start = String(p[1]);
+          const end = String(p[2]);
+          const byKey = new Map<
+            string,
+            { cost: number; sales: number; orders: number; currency: string }
+          >();
+          for (const fact of t.campaignMetricsDaily) {
+            const date = String(fact.metric_date);
+            if (
+              !profileIds.includes(String(fact.profile_id)) ||
+              date < start ||
+              date > end
+            ) {
+              continue;
+            }
+            const key = `${date} ${fact.profile_id}`;
+            const entry = byKey.get(key) ?? {
+              cost: 0,
+              sales: 0,
+              orders: 0,
+              currency: String(fact.currency),
+            };
+            entry.cost += Number(fact.cost);
+            entry.sales += Number(fact.sales14d ?? fact.sales);
+            entry.orders += Number(fact.purchases14d ?? fact.orders);
+            byKey.set(key, entry);
+          }
+          return this.ok(
+            [...byKey.entries()]
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([key, entry]) => {
+                const [date, profileId] = key.split(" ");
+                return {
+                  metric_date: date,
+                  profile_id: profileId,
+                  cost: entry.cost.toFixed(4),
+                  sales: entry.sales.toFixed(4),
+                  orders: String(entry.orders),
+                  currency: entry.currency,
+                };
+              }),
+          );
+        },
+      },
+      {
+        // Per-day estimated royalty per profile, native currency
+        // (overviewRoyaltySeries) — same economics resolution as the
+        // converting handler, without the FX joins.
+        match: "m.profile_id::text as profile_id, m.currency",
+        handle: (p) => {
+          const profileIds = (p[0] as string[]).map(String);
+          const start = String(p[1]);
+          const end = String(p[2]);
+          const byKey = new Map<
+            string,
+            { missing: boolean; royalty: number; currency: string }
+          >();
+          for (const fact of t.advertisedProductMetricsDaily) {
+            const date = String(fact.metric_date);
+            if (
+              !profileIds.includes(String(fact.profile_id)) ||
+              date < start ||
+              date > end
+            ) {
+              continue;
+            }
+            const ad = t.ads.find(
+              (a) =>
+                a.profile_id === fact.profile_id &&
+                a.amazon_ad_id === fact.ad_id,
+            );
+            const link = ad
+              ? t.bookProfileLinks.find(
+                  (l) =>
+                    l.profile_id === fact.profile_id &&
+                    l.marketplace_asin === ad.asin &&
+                    l.enabled === true,
+                )
+              : undefined;
+            const economics = link
+              ? t.bookEconomics
+                  .filter(
+                    (be) =>
+                      be.book_id === link.book_id &&
+                      be.profile_id === link.profile_id &&
+                      be.currency === fact.currency &&
+                      String(be.effective_from) <= date,
+                  )
+                  .sort(
+                    (a, b) =>
+                      String(b.effective_from).localeCompare(
+                        String(a.effective_from),
+                      ) || Number(b.id) - Number(a.id),
+                  )[0]
+              : undefined;
+            const copies = Math.max(
+              Number(fact.units_sold_clicks14d ?? fact.units),
+              Number(fact.purchases14d ?? fact.orders),
+            );
+            const key = `${date} ${fact.profile_id}`;
+            const entry = byKey.get(key) ?? {
+              missing: false,
+              royalty: 0,
+              currency: String(fact.currency),
+            };
+            if (Number(fact.purchases14d ?? fact.orders) > 0 && !economics) {
+              entry.missing = true;
+            } else if (economics) {
+              entry.royalty +=
+                copies * Number(economics.estimated_royalty_per_sale);
+            }
+            byKey.set(key, entry);
+          }
+          return this.ok(
+            [...byKey.entries()]
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([key, entry]) => {
+                const [date, profileId] = key.split(" ");
+                return {
+                  metric_date: date,
+                  profile_id: profileId,
+                  currency: entry.currency,
+                  economics_missing: entry.missing,
+                  estimated_royalty: entry.missing
+                    ? null
+                    : entry.royalty.toFixed(4),
+                };
+              }),
           );
         },
       },

@@ -1,12 +1,14 @@
 import { z } from "zod";
 import { coverImageUrlSchema } from "./books.js";
 import {
+  bookIdListParamSchema,
   currencyCodeSchema,
   decimalStringSchema,
   isoDateSchema,
   isoDateTimeSchema,
   nonNegativeDecimalStringSchema,
 } from "./common.js";
+import { dashboardCountrySchema } from "./metrics.js";
 
 /**
  * KDP "Royalties Estimator" workbook import. The browser parses the xlsx into
@@ -269,7 +271,10 @@ export type KdpTransactionsPage = z.infer<typeof kdpTransactionsPageSchema>;
  * posting dates never align perfectly, the same clamp the sales-mix chart
  * uses.
  * `profit = totalRoyalty − adSpend` is real money and needs no book
- * economics; only the ad/organic split does.
+ * economics; only the ad/organic split does. The `books` product filter
+ * limits both the ad side and the KDP side; `country` limits both to one
+ * market, answered in that market's native currency with no FX conversion
+ * ("all", the default, is the converted view above).
  */
 
 /** Longest range the endpoint answers; bounds the per-day series. */
@@ -285,8 +290,18 @@ export const kdpDailyProfitQuerySchema = z
     /** Explicit day range (alternative to `month`), both ends inclusive. */
     start: isoDateSchema.optional(),
     end: isoDateSchema.optional(),
-    /** Catalog book id; absent sums every book (and unlinked-ASIN sales). */
-    book: z.string().min(1).optional(),
+    /**
+     * Global product filter: comma-separated catalog book ids; absent sums
+     * every book (and unlinked-ASIN sales).
+     */
+    books: bookIdListParamSchema,
+    /**
+     * Two-letter market; absent (or "all") converts every market into the
+     * workspace display currency, while a specific market keeps the day's
+     * figures in that market's native currency — like the dashboard
+     * summary — with no FX conversion.
+     */
+    country: dashboardCountrySchema.optional(),
   })
   .superRefine((query, ctx) => {
     const hasMonth = query.month !== undefined;

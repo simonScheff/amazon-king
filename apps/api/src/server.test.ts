@@ -879,14 +879,15 @@ describe("GET /api/kdp history and transactions", () => {
 
     const response = await app!.inject({
       method: "GET",
-      url: "/api/kdp/daily-profit?month=2026-08-01&book=7",
+      url: "/api/kdp/daily-profit?month=2026-08-01&books=7,3&country=de",
     });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual(DAILY_PROFIT);
     expect(read.kdpDailyProfit).toHaveBeenCalledWith("1", {
       month: "2026-08-01",
-      book: "7",
+      books: ["7", "3"],
+      country: "DE",
     });
 
     const badMonth = await app!.inject({
