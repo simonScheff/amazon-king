@@ -164,6 +164,14 @@ These are binding design constraints; code must follow them.
   console); the optimizer keeps `royaltyCopies(orders, units)` on the 7-day
   mirror columns. Facts imported before units were captured degrade to orders,
   which is safe because Amazon never reports fewer units than orders.
+- **Relevant negatives only (no cross-category clutter).** Negative keywords
+  must strictly target terms with direct relevance: (1) historical wasteful
+  queries that actually received clicks on that specific campaign, or (2) direct
+  harvest isolation where an exact term is graduated from auto to manual for
+  that specific book. Never add speculative cross-topic or cross-category
+  negatives (e.g. adding pet terms to vehicle campaigns). Amazon's matching
+  already separates distinct categories, and artificial cross-category negatives
+  create clutter and risk unintended match suppression.
 - **Guarded writes.** Read-only is the default per profile. Applying a change
   requires an immutable change set, a fresh re-read of Amazon state matching the
   `before` snapshot, guardrail re-checks, an idempotency fingerprint, per-item
