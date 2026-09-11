@@ -7,6 +7,14 @@ import { RecommendationsPage } from "./recommendations";
 
 const createdAt = "2026-08-13T02:01:00.000Z";
 
+const profileMocks = vi.hoisted(() => ({
+  profiles: [] as {
+    profileId: string;
+    countryCode: string;
+    currencyCode: string;
+  }[],
+}));
+
 const recommendation: Recommendation = {
   id: "rec-1",
   type: "wasteful_search_term",
@@ -52,7 +60,7 @@ vi.mock("../api/endpoints", () => ({
   useProfiles: () => ({
     isPending: false,
     error: null,
-    data: [],
+    data: profileMocks.profiles,
   }),
 }));
 
@@ -61,7 +69,20 @@ vi.mock("../components/toast", () => ({
 }));
 
 describe("RecommendationsPage", () => {
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    profileMocks.profiles = [];
+  });
+
+  it("shows the market badge next to the campaign link", () => {
+    profileMocks.profiles = [
+      { profileId: "profile-us", countryCode: "US", currencyCode: "USD" },
+    ];
+
+    render(<RecommendationsPage />);
+
+    expect(screen.getByTitle("United States (US) · USD")).toBeInTheDocument();
+  });
 
   it("shows when each finding was created", () => {
     render(<RecommendationsPage />);

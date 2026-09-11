@@ -8,6 +8,11 @@ import { ChangesPage } from "./changes";
 const mocks = vi.hoisted(() => ({
   changeSets: [] as ChangeSet[],
   actions: [] as Record<string, unknown>[],
+  profiles: [] as {
+    profileId: string;
+    countryCode: string;
+    currencyCode: string;
+  }[],
   toast: vi.fn(),
   applyMutate: vi.fn(),
   search: {} as { apply?: string },
@@ -31,7 +36,7 @@ vi.mock("../api/endpoints", () => ({
   }),
   useApplyChangeSet: () => ({ isPending: false, mutate: mocks.applyMutate }),
   useRollbackChangeAction: () => ({ isPending: false, mutate: vi.fn() }),
-  useProfiles: () => ({ isPending: false, error: null, data: [] }),
+  useProfiles: () => ({ isPending: false, error: null, data: mocks.profiles }),
 }));
 
 vi.mock("../components/toast", () => ({
@@ -112,6 +117,7 @@ describe("ChangesPage dependency gate", () => {
   beforeEach(() => {
     mocks.changeSets = [];
     mocks.actions = [];
+    mocks.profiles = [];
     mocks.search = {};
     mocks.toast.mockReset();
     mocks.applyMutate.mockReset();
@@ -125,6 +131,18 @@ describe("ChangesPage dependency gate", () => {
       }),
     );
   }
+
+  it("shows the market badge on the change set header", () => {
+    mocks.profiles = [
+      { profileId: "amz-profile-1", countryCode: "US", currencyCode: "USD" },
+    ];
+    mocks.changeSets = [changeSet({})];
+
+    render(<ChangesPage />);
+
+    expect(screen.getByTitle("United States (US) · USD")).toBeInTheDocument();
+    expect(screen.getByText("(USD)")).toBeInTheDocument();
+  });
 
   it("locks the negatives apply until the creation set is applied", () => {
     mocks.changeSets = [

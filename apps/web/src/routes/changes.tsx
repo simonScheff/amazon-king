@@ -142,7 +142,8 @@ function ChangeSetDetail({
               {expanded ? "▾" : "▸"}
             </span>
             <span className="font-semibold text-zinc-100">
-              Change set <span className="font-mono text-xs">{changeSet.id}</span>
+              Change set{" "}
+              <span className="font-mono text-xs">{changeSet.id}</span>
             </span>
             {profile ? (
               <span
