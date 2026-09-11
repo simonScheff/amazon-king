@@ -210,6 +210,7 @@ export const changeSetStatusSchema = z.enum([
   "partially_applied",
   "failed",
   "blocked",
+  "rejected",
 ]);
 export type ChangeSetStatus = z.infer<typeof changeSetStatusSchema>;
 

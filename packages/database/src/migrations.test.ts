@@ -123,6 +123,15 @@ describe("migration files", () => {
     }
   });
 
+  it("allows rejected status on change_sets", async () => {
+    const migrations = await loadMigrations();
+    const migration = migrations.find(
+      (file) => file.filename === "0023_change_set_rejection.sql",
+    );
+    expect(migration?.sql).toContain("change_sets_status_check");
+    expect(migration?.sql).toContain("'rejected'");
+  });
+
   const tempDirs: string[] = [];
   afterAll(async () => {
     await Promise.all(

@@ -990,6 +990,20 @@ with a post-write read.
   `AMAZON_NETWORK_ERROR`, `PARENT_FAILED`, or `MISSING_RESULT` in their
   result payload (see [Errors](/reference/errors#per-action-failure-codes)).
 
+### `POST /api/change-sets/:id/reject`
+
+Rejects and dismisses an unapplied change set (`draft`, `previewed`, or `failed`)
+without writing anything to Amazon. If actions in the change set originated from
+recommendations, those recommendations are transitioned to `rejected` and a
+60-day suppression is recorded in `recommendation_dismissals`.
+
+- **Auth:** session + CSRF (recent-auth is not required since no Amazon write is
+  performed). **Rate:** WRITE.
+- Response `200`: `{changeSet, actions}` with status `rejected`.
+- Errors: `404 NOT_FOUND`, `409 APPLY_IN_PROGRESS`, `409 INVALID_STATE` (if the
+  change set is already `applied`, `partially_applied`, or `blocked`). Idempotent
+  if already `rejected`.
+
 ### `POST /api/change-actions/:actionId/rollback`
 
 Creates and applies a compensating change set (`update_bid` restores the

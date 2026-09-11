@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   }[],
   toast: vi.fn(),
   applyMutate: vi.fn(),
+  rejectMutate: vi.fn(),
   search: {} as { apply?: string },
   navigate: vi.fn(),
 }));
@@ -35,6 +36,7 @@ vi.mock("../api/endpoints", () => ({
     },
   }),
   useApplyChangeSet: () => ({ isPending: false, mutate: mocks.applyMutate }),
+  useRejectChangeSet: () => ({ isPending: false, mutate: mocks.rejectMutate }),
   useRollbackChangeAction: () => ({ isPending: false, mutate: vi.fn() }),
   useProfiles: () => ({ isPending: false, error: null, data: mocks.profiles }),
 }));
@@ -332,5 +334,62 @@ describe("ChangesPage dependency gate", () => {
     ).toHaveAttribute("href", "/campaigns/amz-camp-1");
     expect(screen.getByText("free tractor books")).toBeInTheDocument();
     expect(screen.getByText("Add Negative Exact")).toBeInTheDocument();
+  });
+
+  it("offers Dismiss on unapplied change sets and calls reject mutation", () => {
+    mocks.changeSets = [changeSet({ id: "set-1", status: "draft" })];
+    mocks.rejectMutate.mockImplementation(
+      (_: unknown, options?: { onSuccess?: () => void }) => {
+        options?.onSuccess?.();
+      },
+    );
+    render(<ChangesPage />);
+    expand("set-1");
+
+    const dismissButton = screen.getByRole("button", { name: "Dismiss" });
+    expect(dismissButton).toBeInTheDocument();
+
+    fireEvent.click(dismissButton);
+
+    // Confirmation dialog opens
+    expect(
+      screen.getByRole("dialog", { name: "Dismiss this change set?" }),
+    ).toBeInTheDocument();
+
+    // Confirm dismissal
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss change set" }));
+
+    expect(mocks.rejectMutate).toHaveBeenCalledTimes(1);
+    expect(mocks.toast).toHaveBeenCalledWith("Change set dismissed");
+  });
+
+  it.each(["applied", "partially_applied", "rejected", "blocked"] as const)(
+    "does not show Dismiss on %s change sets",
+    (status) => {
+      mocks.changeSets = [changeSet({ id: "set-1", status })];
+      render(<ChangesPage />);
+      expand("set-1");
+
+      expect(screen.queryByRole("button", { name: "Dismiss" })).toBeNull();
+    },
+  );
+
+  it("shows an error toast when dismiss fails (e.g. race with apply)", () => {
+    mocks.changeSets = [changeSet({ id: "set-1", status: "draft" })];
+    mocks.rejectMutate.mockImplementation(
+      (_: unknown, options?: { onError?: (err: Error) => void }) => {
+        options?.onError?.(new Error("Change set is currently being applied"));
+      },
+    );
+    render(<ChangesPage />);
+    expand("set-1");
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss change set" }));
+
+    expect(mocks.toast).toHaveBeenCalledWith(
+      "Dismiss failed: Change set is currently being applied",
+      "error",
+    );
   });
 });

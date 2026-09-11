@@ -1012,6 +1012,16 @@ export async function buildServer(
   );
 
   app.post(
+    "/api/change-sets/:id/reject",
+    { config: { rateLimit: WRITE_RATE } },
+    async (request) => {
+      const auth = await authenticate(request);
+      const { id } = request.params as { id: string };
+      return services.changes.rejectChangeSet(auth, id, meta(request));
+    },
+  );
+
+  app.post(
     "/api/change-actions/:actionId/rollback",
     { config: { rateLimit: WRITE_RATE } },
     async (request) => {

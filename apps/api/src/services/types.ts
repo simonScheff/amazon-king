@@ -255,6 +255,17 @@ export interface ChangeService {
     changeSetId: string,
     meta: RequestMeta,
   ): Promise<ChangeSetWithActions>;
+  /**
+   * Reject / dismiss an unapplied change set without writing to Amazon.
+   * Allowed for draft, previewed, or failed change sets. If actions reference
+   * recommendations, those recommendations transition to 'rejected' and
+   * 60-day dismissals are recorded.
+   */
+  rejectChangeSet(
+    auth: AuthContext,
+    changeSetId: string,
+    meta: RequestMeta,
+  ): Promise<ChangeSetWithActions>;
   /** Compensating action using the saved before value (§10 rollback). */
   rollbackAction(
     auth: AuthContext,
