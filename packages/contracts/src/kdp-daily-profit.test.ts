@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  KDP_DAILY_PROFIT_MAX_RANGE_DAYS,
   kdpDailyProfitDaySchema,
   kdpDailyProfitQuerySchema,
   kdpDailyProfitSchema,
@@ -7,7 +8,7 @@ import {
 
 /**
  * Schemas for the KDP daily-profit response (GET /api/kdp/daily-profit) — the
- * per-day ads + organic profitability series of one calendar month.
+ * per-day ads + organic profitability series over a month or a day range.
  */
 
 describe("kdp daily profit query schema", () => {
@@ -21,11 +22,62 @@ describe("kdp daily profit query schema", () => {
     expect(filtered.book).toBe("7");
   });
 
+  it("accepts a start/end day range", () => {
+    const parsed = kdpDailyProfitQuerySchema.parse({
+      start: "2026-08-10",
+      end: "2026-09-08",
+    });
+    expect(parsed.start).toBe("2026-08-10");
+    expect(parsed.end).toBe("2026-09-08");
+  });
+
   it("rejects a missing or malformed month", () => {
     expect(() => kdpDailyProfitQuerySchema.parse({})).toThrow();
     expect(() =>
       kdpDailyProfitQuerySchema.parse({ month: "2026-08" }),
     ).toThrow();
+  });
+
+  it("rejects mixing month with a range, or a partial range", () => {
+    expect(() =>
+      kdpDailyProfitQuerySchema.parse({
+        month: "2026-08-01",
+        start: "2026-08-01",
+        end: "2026-08-31",
+      }),
+    ).toThrow();
+    expect(() =>
+      kdpDailyProfitQuerySchema.parse({ start: "2026-08-01" }),
+    ).toThrow();
+    expect(() =>
+      kdpDailyProfitQuerySchema.parse({ end: "2026-08-31" }),
+    ).toThrow();
+  });
+
+  it("rejects an inverted or over-long range", () => {
+    expect(() =>
+      kdpDailyProfitQuerySchema.parse({
+        start: "2026-09-08",
+        end: "2026-08-10",
+      }),
+    ).toThrow();
+    expect(() =>
+      kdpDailyProfitQuerySchema.parse({
+        start: "2026-01-01",
+        end: "2026-12-31",
+      }),
+    ).toThrow();
+    // Exactly at the cap still passes.
+    const start = new Date(Date.UTC(2026, 0, 1));
+    const end = new Date(
+      start.getTime() + (KDP_DAILY_PROFIT_MAX_RANGE_DAYS - 1) * 86_400_000,
+    );
+    expect(() =>
+      kdpDailyProfitQuerySchema.parse({
+        start: start.toISOString().slice(0, 10),
+        end: end.toISOString().slice(0, 10),
+      }),
+    ).not.toThrow();
   });
 });
 
@@ -67,9 +119,10 @@ describe("kdp daily profit day schema", () => {
 });
 
 describe("kdp daily profit schema", () => {
-  it("carries the month, flags, and the daily series", () => {
+  it("carries the range, flags, and the daily series", () => {
     const parsed = kdpDailyProfitSchema.parse({
-      month: "2026-08-01",
+      start: "2026-08-01",
+      end: "2026-08-31",
       currency: "USD",
       ratesAvailable: true,
       economicsMissing: false,
@@ -88,14 +141,15 @@ describe("kdp daily profit schema", () => {
     expect(parsed.daily).toHaveLength(1);
 
     const notImported = kdpDailyProfitSchema.parse({
-      month: "2026-07-01",
+      start: "2026-07-15",
+      end: "2026-08-14",
       currency: "EUR",
       ratesAvailable: true,
       economicsMissing: true,
       kdpImported: false,
       daily: [
         {
-          date: "2026-07-01",
+          date: "2026-07-15",
           adSpend: "4.0000",
           adRoyalty: null,
           organicRoyalty: null,
@@ -110,14 +164,16 @@ describe("kdp daily profit schema", () => {
   it("requires the flags explicitly and a valid currency", () => {
     expect(() =>
       kdpDailyProfitSchema.parse({
-        month: "2026-08-01",
+        start: "2026-08-01",
+        end: "2026-08-31",
         currency: "USD",
         daily: [],
       }),
     ).toThrow();
     expect(() =>
       kdpDailyProfitSchema.parse({
-        month: "2026-08-01",
+        start: "2026-08-01",
+        end: "2026-08-31",
         currency: "usd",
         ratesAvailable: true,
         economicsMissing: false,

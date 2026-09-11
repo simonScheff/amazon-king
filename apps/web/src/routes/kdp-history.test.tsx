@@ -37,8 +37,8 @@ vi.mock("../api/endpoints", () => ({
     mocks.transactionFilters.push(filters);
     return { isPending: false, error: null, data: mocks.transactions };
   },
-  useKdpDailyProfit: (month: unknown, book: unknown) => {
-    mocks.dailyProfitParams.push([month, book]);
+  useKdpDailyProfit: (params: unknown) => {
+    mocks.dailyProfitParams.push(params);
     return { isPending: false, error: null, data: mocks.dailyProfit };
   },
 }));
@@ -144,7 +144,8 @@ const SALE: KdpSaleTransaction = {
 };
 
 const DAILY_PROFIT: KdpDailyProfit = {
-  month: "2026-08-01",
+  start: "2026-08-01",
+  end: "2026-08-31",
   currency: "USD",
   ratesAvailable: true,
   economicsMissing: false,
@@ -390,10 +391,10 @@ describe("KdpHistoryPage", () => {
     expect(screen.getByLabelText("Daily profit chart")).toBeInTheDocument();
     expect(screen.getByLabelText("Daily profit month")).toBeInTheDocument();
     // All books selected: no book filter on the query.
-    expect(mocks.dailyProfitParams.at(-1)).toEqual([
-      expect.any(String),
-      undefined,
-    ]);
+    expect(mocks.dailyProfitParams.at(-1)).toEqual({
+      month: expect.any(String),
+      book: undefined,
+    });
   });
 
   it("keeps the daily-profit month selector in the URL", () => {
@@ -420,7 +421,10 @@ describe("KdpHistoryPage", () => {
     mocks.search = { book: "book-2", month: "2026-07-01" };
     render(<KdpHistoryPage />);
 
-    expect(mocks.dailyProfitParams.at(-1)).toEqual(["2026-07-01", "book-2"]);
+    expect(mocks.dailyProfitParams.at(-1)).toEqual({
+      month: "2026-07-01",
+      book: "book-2",
+    });
     expect(
       (screen.getByLabelText("Daily profit month") as HTMLSelectElement).value,
     ).toBe("2026-07-01");

@@ -469,6 +469,7 @@ export function useUpdateWorkspaceSettings() {
         qc.invalidateQueries({ queryKey: ["dashboard-country-spend"] }),
         qc.invalidateQueries({ queryKey: ["spend-breakdown"] }),
         qc.invalidateQueries({ queryKey: ["spend-tree"] }),
+        qc.invalidateQueries({ queryKey: ["kdp-daily-profit"] }),
       ]);
     },
   });
@@ -1132,16 +1133,29 @@ export function useKdpSaleTransactions(filters: {
 }
 
 /**
- * Daily profitability of one calendar month (ads + organic) for the
- * /kdp-history organic tab. The query key carries both filter dimensions
- * (month, book) or the cache would serve another view's numbers.
+ * Daily profitability (ads + organic) over a calendar month (the /kdp-history
+ * organic tab) or an explicit day range (the overview card, fed by the
+ * page's shared timeframe window). The query key carries every filter
+ * dimension or the cache would serve another view's numbers.
  */
-export function useKdpDailyProfit(month: string, book?: string) {
+export function useKdpDailyProfit(params: {
+  month?: string;
+  start?: string;
+  end?: string;
+  book?: string;
+}) {
+  const { month, start, end, book } = params;
   return useQuery({
-    queryKey: ["kdp-daily-profit", month, book ?? null],
+    queryKey: [
+      "kdp-daily-profit",
+      month ?? null,
+      start ?? null,
+      end ?? null,
+      book ?? null,
+    ],
     queryFn: () =>
       apiFetch("/api/kdp/daily-profit", {
-        query: { month, book },
+        query: { month, start, end, book },
         schema: kdpDailyProfitSchema,
       }),
   });

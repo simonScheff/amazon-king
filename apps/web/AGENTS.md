@@ -183,8 +183,14 @@ counts, so summing across books and markets needs no FX conversion.
 The **Organic data** tab leads with the "Daily profit — ads + organic" card
 (`DailyProfitCard` inline in `src/routes/kdp-history.tsx`, chart in
 `src/components/kdp-daily-profit-chart.tsx`): one calendar month of per-day
-profitability from `useKdpDailyProfit(month, book)` (key
-`["kdp-daily-profit", month, book ?? null]` → `GET /api/kdp/daily-profit`).
+profitability from `useKdpDailyProfit({ month, book })` →
+`GET /api/kdp/daily-profit`. The same card also renders on the **overview**
+(`OverviewKdpDailyProfitCard` in `src/routes/overview.tsx`, directly under
+the estimated Daily profitability card): there it has no selector of its own
+and follows the page's shared timeframe by passing the summary's
+`dateRange` as `useKdpDailyProfit({ start, end })` — the endpoint takes a
+`month` XOR a `start`/`end` range (≤ 93 days). The query key carries month,
+start, end, and book or the cache would serve another window's numbers.
 Stacked bars show the royalty split — estimated ad-attributed (`#a078ff`)
 and real organic (`#34d399`, per day `max(0, total − ad)`, the same clamp as
 the sales mix) — against the day's ad spend (red line) and a cumulative
@@ -194,12 +200,18 @@ currency — the endpoint owns the FX conversion (same USD-pivot convention
 as `country=all` on the summary) and can answer `ratesAvailable: false`
 (empty state) or 409 `FX_RATES_INCOMPLETE`. profit = real KDP royalty −
 spend needs no book economics; only the ad/organic split does (missing
-economics drop the split with a footnote, profit stays). A month without a
-KDP import shows the estimated ad side only, footnoted. The URL-backed
-`?month=` selector (first-of-month ISO, validated in `src/router.tsx`) sits
-in the card header; options are the imported months plus the current one
-(default current, which shows the ad side only until its report lands), and
-the page's `?book=` selector filters the card too.
+economics drop the split with a footnote, profit stays), so the overview
+card renders even when `economicsMissing` hides the estimated card. A month
+without a KDP import shows the estimated ad side only, footnoted. The chart
+is all-markets by construction: the overview country selector and the
+sidebar product filter do not apply there (the endpoint's `book` takes a
+single id), and the header notes "All markets · in ‹currency›" with the
+response's display currency, which can differ from the summary's
+single-market currency. On `/kdp-history` the URL-backed `?month=` selector
+(first-of-month ISO, validated in `src/router.tsx`) sits in the card header;
+options are the imported months plus the current one (default current, which
+shows the ad side only until its report lands), and the page's `?book=`
+selector filters the card too.
 
 ## Settings page
 
@@ -224,7 +236,11 @@ only the list entry — negatives already applied on Amazon stay, and open
 exclusion drafts are unaffected. Books that still need setup auto-expand;
 each market's economics edit in a single table row, with the effective-from
 date and notes behind the row's **Details** toggle, and market linking
-behind the collapsed **Link another market** section.
+behind the collapsed **Link another market** section. Saving changed
+economics with an unchanged effective-from date requires an explicit choice
+— correct in place (overwrite the version in effect) or keep history (new
+version starting today) — because the versioned rows drive per-day
+historical profit; a prop update never resets a row that has unsaved edits.
 
 The Books & economics card header carries **Import from KDP report**
 (`src/components/kdp-royalty-import.tsx`): the owner picks a KDP Royalties
@@ -273,7 +289,7 @@ Data comes from `useKdpHistory` (key `["kdp-history"]` →
 `GET /api/kdp/history`), `useKdpSaleTransactions` (key
 `["kdp-sale-transactions", bookId, profileId, month, page]` →
 `GET /api/kdp/transactions`), and `useKdpDailyProfit` (key
-`["kdp-daily-profit", month, book ?? null]` → `GET /api/kdp/daily-profit`). The transaction browser is server-side
+`["kdp-daily-profit", month, start, end, book]` → `GET /api/kdp/daily-profit`). The transaction browser is server-side
 paginated at `KDP_SALES_PAGE_SIZE` (50) rows: the hook sends
 `limit`/`offset`, the API answers `{ transactions, total }`, and the card
 renders Previous/Next controls once the filtered total exceeds one page —
@@ -396,7 +412,12 @@ read side derives each row's identity from the stored `targets.expression` —
 keyword text with a `Keyword · <match type>` badge, the ASIN for product
 targets (leading with the catalog book title when the ASIN is one of the
 owner's books, plus an Amazon retail link), and an "Auto · …" label for
-automatic predicates — and carries the synced `bid` as its own column.
+automatic predicates — and carries the `bid` as its own column (the synced
+target bid, falling back to the ad group's default bid when the target has
+none). The campaigns **list** has a matching sortable **Bid** column that
+renders `maxCpc ?? defaultBid` — the configured ceiling when set, otherwise
+the ad-group default (null when ad groups disagree); `ProfitabilityResult`
+always receives the policy-only `maxCpc` so "Not configured" stays truthful.
 
 The **Search terms** tab adds a per-row **Exclude** action
 (`src/components/exclude-search-term.tsx`, a `MetricsTable` `renderAction`

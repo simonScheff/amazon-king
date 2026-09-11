@@ -54,10 +54,30 @@ const fxUpToDate: FxRatesStatus = {
   stale: false,
 };
 
+const dailyProfit = {
+  start: "2026-07-22",
+  end: "2026-08-20",
+  currency: "USD",
+  ratesAvailable: true,
+  economicsMissing: false,
+  kdpImported: true,
+  daily: [
+    {
+      date: "2026-08-20",
+      adSpend: "10.0000",
+      adRoyalty: "6.8000",
+      organicRoyalty: "1.2000",
+      totalRoyalty: "8.0000",
+      profit: "-2.0000",
+    },
+  ],
+};
+
 const mocks = vi.hoisted(() => ({
   search: {} as Record<string, unknown>,
   currency: "USD",
   ratesAvailable: true,
+  dailyProfitParams: undefined as unknown,
   fxRates: undefined as FxRatesStatus | undefined,
   freshnessProfiles: [] as DataFreshness[],
   countrySpend: undefined as CountrySpend | undefined,
@@ -129,6 +149,10 @@ vi.mock("../api/endpoints", () => ({
     error: null,
     data: mocks.countrySpend,
   }),
+  useKdpDailyProfit: (params: unknown) => {
+    mocks.dailyProfitParams = params;
+    return { isPending: false, error: null, data: dailyProfit };
+  },
   useUpdateWorkspaceSettings: () => ({
     isPending: false,
     mutate: mocks.saveSettings,
@@ -198,6 +222,21 @@ describe("OverviewPage default view", () => {
     render(<OverviewPage />);
 
     expect(mocks.summaryRequest).toEqual({ days: 7, country: "US" });
+  });
+
+  it("renders the KDP daily-profit card for the summary's date range", () => {
+    render(<OverviewPage />);
+
+    // No own selector: the card follows the page window (the summary's
+    // resolved dateRange) and always shows all markets.
+    expect(
+      screen.getByText("Daily profit — ads + organic"),
+    ).toBeInTheDocument();
+    expect(mocks.dailyProfitParams).toEqual({
+      start: "2026-07-22",
+      end: "2026-08-20",
+    });
+    expect(screen.getByText("All markets · in USD")).toBeInTheDocument();
   });
 });
 

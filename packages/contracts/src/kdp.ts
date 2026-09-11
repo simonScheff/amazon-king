@@ -256,8 +256,9 @@ export const kdpTransactionsPageSchema = z.object({
 export type KdpTransactionsPage = z.infer<typeof kdpTransactionsPageSchema>;
 
 /**
- * GET /api/kdp/daily-profit — daily profitability of one calendar month for
- * the /kdp-history organic tab: real KDP royalty per royalty posting date
+ * GET /api/kdp/daily-profit — daily profitability over a day range for the
+ * /kdp-history organic tab (one calendar month) and the overview card (the
+ * page's shared timeframe window): real KDP royalty per royalty posting date
  * (organic included — the day KDP posted the royalty, matching the KDP
  * dashboard's own display and the royalty-month import periods) next to the
  * estimated ad-attributed royalty and the ad spend, all
@@ -271,13 +272,55 @@ export type KdpTransactionsPage = z.infer<typeof kdpTransactionsPageSchema>;
  * economics; only the ad/organic split does.
  */
 
-/** GET /api/kdp/daily-profit query params. */
-export const kdpDailyProfitQuerySchema = z.object({
-  /** First-of-month ISO date; the month to observe. */
-  month: isoDateSchema,
-  /** Catalog book id; absent sums every book (and unlinked-ASIN sales). */
-  book: z.string().min(1).optional(),
-});
+/** Longest range the endpoint answers; bounds the per-day series. */
+export const KDP_DAILY_PROFIT_MAX_RANGE_DAYS = 93;
+
+const DAY_MS = 86_400_000;
+
+/** GET /api/kdp/daily-profit query params: a month XOR a start/end range. */
+export const kdpDailyProfitQuerySchema = z
+  .object({
+    /** First-of-month ISO date; the month to observe. */
+    month: isoDateSchema.optional(),
+    /** Explicit day range (alternative to `month`), both ends inclusive. */
+    start: isoDateSchema.optional(),
+    end: isoDateSchema.optional(),
+    /** Catalog book id; absent sums every book (and unlinked-ASIN sales). */
+    book: z.string().min(1).optional(),
+  })
+  .superRefine((query, ctx) => {
+    const hasMonth = query.month !== undefined;
+    const hasRange = query.start !== undefined || query.end !== undefined;
+    if (hasMonth === hasRange) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Provide either month or both start and end",
+      });
+      return;
+    }
+    if (hasMonth) return;
+    if (query.start === undefined || query.end === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "start and end must be provided together",
+      });
+      return;
+    }
+    if (query.start > query.end) {
+      ctx.addIssue({ code: "custom", message: "start must not be after end" });
+      return;
+    }
+    const spanDays =
+      (Date.parse(`${query.end}T00:00:00.000Z`) -
+        Date.parse(`${query.start}T00:00:00.000Z`)) /
+      DAY_MS;
+    if (spanDays + 1 > KDP_DAILY_PROFIT_MAX_RANGE_DAYS) {
+      ctx.addIssue({
+        code: "custom",
+        message: `Range must not exceed ${KDP_DAILY_PROFIT_MAX_RANGE_DAYS} days`,
+      });
+    }
+  });
 export type KdpDailyProfitQuery = z.infer<typeof kdpDailyProfitQuerySchema>;
 
 /** One day of the monthly profitability series. */
@@ -292,31 +335,32 @@ export const kdpDailyProfitDaySchema = z.object({
   adRoyalty: nonNegativeDecimalStringSchema.nullable(),
   /**
    * max(0, totalRoyalty − adRoyalty); null when the split is unavailable
-   * (economics missing) or the month was never imported.
+   * (economics missing) or the range was never imported.
    */
   organicRoyalty: nonNegativeDecimalStringSchema.nullable(),
   /**
    * Real summed KDP royalty for the royalty posting date (signed — refunds
-   * go negative); null when the month was never imported.
+   * go negative); null when the range was never imported.
    */
   totalRoyalty: decimalStringSchema.nullable(),
-  /** totalRoyalty − adSpend; null when the month was never imported. */
+  /** totalRoyalty − adSpend; null when the range was never imported. */
   profit: decimalStringSchema.nullable(),
 });
 export type KdpDailyProfitDay = z.infer<typeof kdpDailyProfitDaySchema>;
 
 export const kdpDailyProfitSchema = z.object({
-  /** First of the observed month (echo of the query). */
-  month: isoDateSchema,
+  /** Observed day range (echo of the resolved query, both ends inclusive). */
+  start: isoDateSchema,
+  end: isoDateSchema,
   /** Display currency every figure is converted into. */
   currency: currencyCodeSchema,
   /** False when fx_rates is empty — daily is then empty, never unconverted. */
   ratesAvailable: z.boolean(),
   /** True when any day lacked the economics needed for the ad/organic split. */
   economicsMissing: z.boolean(),
-  /** False when the month has no KDP transactions (never imported). */
+  /** False when the range has no KDP transactions (never imported). */
   kdpImported: z.boolean(),
-  /** Every day of the month, ascending (current month capped at today). */
+  /** Every day of the range, ascending (capped at today). */
   daily: z.array(kdpDailyProfitDaySchema),
 });
 export type KdpDailyProfit = z.infer<typeof kdpDailyProfitSchema>;

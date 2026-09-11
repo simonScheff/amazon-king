@@ -744,7 +744,8 @@ describe("GET /api/kdp history and transactions", () => {
     currency: "USD",
   };
   const DAILY_PROFIT = {
-    month: "2026-08-01",
+    start: "2026-08-01",
+    end: "2026-08-31",
     currency: "USD",
     ratesAvailable: true,
     economicsMissing: false,
@@ -893,6 +894,28 @@ describe("GET /api/kdp history and transactions", () => {
       url: "/api/kdp/daily-profit?month=2026-08",
     });
     expect(badMonth.statusCode).toBe(400);
+
+    const range = await app!.inject({
+      method: "GET",
+      url: "/api/kdp/daily-profit?start=2026-08-10&end=2026-09-08",
+    });
+    expect(range.statusCode).toBe(200);
+    expect(read.kdpDailyProfit).toHaveBeenCalledWith("1", {
+      start: "2026-08-10",
+      end: "2026-09-08",
+    });
+
+    for (const url of [
+      // Mixing month with a range, a partial range, an inverted range, and
+      // an over-long range all fail validation.
+      "/api/kdp/daily-profit?month=2026-08-01&start=2026-08-01&end=2026-08-31",
+      "/api/kdp/daily-profit?start=2026-08-01",
+      "/api/kdp/daily-profit?start=2026-09-08&end=2026-08-10",
+      "/api/kdp/daily-profit?start=2026-01-01&end=2026-12-31",
+    ]) {
+      const invalid = await app!.inject({ method: "GET", url });
+      expect(invalid.statusCode, url).toBe(400);
+    }
 
     const unauthenticated = await start({ authenticated: false });
     const unauthorized = await app!.inject({

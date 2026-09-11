@@ -149,7 +149,7 @@ export function KdpDailyProfitChart({ data }: { data: KdpDailyProfit }) {
               dataKey="date"
               stroke="#958ea0"
               fontSize={12}
-              tickFormatter={(value: string) => value.slice(8)}
+              tickFormatter={(value: string) => formatDate(value)}
             />
             <YAxis stroke="#958ea0" fontSize={12} />
             <Tooltip

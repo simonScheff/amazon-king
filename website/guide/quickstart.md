@@ -47,7 +47,11 @@ your US market), and both selectors write their choice into the URL.
 - **Six KPI cards** — Spend, Sales, Orders, ACoS, Est. royalty, and Est. ad
   profit. Clicking a card toggles its series on the trend charts.
 - **Daily performance chart** — spend, sales, and orders over the selected
-  range. A **daily profitability** chart appears once book economics exist.
+  range. A **daily profitability** chart appears once book economics exist,
+  and a **Daily profit — ads + organic** chart below it shows real KDP
+  royalty (ads + organic) against the day's ad spend over the same window —
+  all markets in the display currency, so it does not follow the country
+  selector or product filter.
 - **Amber banner** — shown when advertised products have no economics yet.
   Profit-based numbers are withheld, not guessed, until you fill them in.
 - **Top problems & opportunities** — the five highest-priority pending

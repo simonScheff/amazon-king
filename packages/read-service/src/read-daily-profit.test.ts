@@ -4,9 +4,9 @@ import { createReadService } from "./read.js";
 import { FakeDb } from "@amazon-king/database/testing";
 
 /**
- * KDP daily profit (GET /api/kdp/daily-profit): one month of per-day
- * profitability — real KDP royalty per royalty posting date next to the
- * estimated
+ * KDP daily profit (GET /api/kdp/daily-profit): per-day profitability over a
+ * month or an explicit day range — real KDP royalty per royalty posting date
+ * next to the estimated
  * ad-attributed royalty and the ad spend, all markets converted per day into
  * the display currency. Runs the real read service against the
  * SQL-matching FakeDb.
@@ -140,7 +140,8 @@ describe("kdp daily profit", () => {
 
     const result = await service.kdpDailyProfit("1", { month: "2026-08-01" });
 
-    expect(result.month).toBe("2026-08-01");
+    expect(result.start).toBe("2026-08-01");
+    expect(result.end).toBe("2026-08-15");
     expect(result.currency).toBe("USD");
     expect(result.ratesAvailable).toBe(true);
     expect(result.economicsMissing).toBe(false);
@@ -343,6 +344,55 @@ describe("kdp daily profit", () => {
     await expect(
       service.kdpDailyProfit("1", { month: "2026-08-01", book: "999" }),
     ).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  it("answers an explicit start/end range, including across a month boundary", async () => {
+    const { db, service } = setup();
+    seedUsBook(db);
+    seedEurRate(db);
+    db.seedCampaignMetric({
+      profile_id: "profile-us",
+      metric_date: "2026-07-30",
+      cost: "4.0000",
+    });
+    db.seedKdpSaleTransaction({
+      book_id: "7",
+      profile_id: "profile-us",
+      order_date: "2026-08-01",
+      royalty_date: "2026-08-02",
+      royalty: "3.43",
+    });
+
+    const result = await service.kdpDailyProfit("1", {
+      start: "2026-07-28",
+      end: "2026-08-10",
+    });
+
+    expect(result.start).toBe("2026-07-28");
+    expect(result.end).toBe("2026-08-10");
+    expect(result.daily).toHaveLength(14);
+    expect(result.daily[0]!.date).toBe("2026-07-28");
+    expect(result.daily[13]!.date).toBe("2026-08-10");
+    expect(dayOf(result, "2026-07-30").adSpend).toBe("4.0000");
+    expect(dayOf(result, "2026-08-02")).toMatchObject({
+      totalRoyalty: "3.4300",
+      profit: "3.4300",
+    });
+  });
+
+  it("caps a range end at today — future days have no facts", async () => {
+    const { db, service } = setup();
+    seedUsBook(db);
+    seedEurRate(db);
+
+    const result = await service.kdpDailyProfit("1", {
+      start: "2026-08-14",
+      end: "2026-08-31",
+    });
+
+    expect(result.start).toBe("2026-08-14");
+    expect(result.end).toBe("2026-08-15");
+    expect(result.daily).toHaveLength(2);
   });
 
   it("returns ratesAvailable false with an empty series when fx_rates is empty", async () => {

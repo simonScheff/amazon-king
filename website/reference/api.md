@@ -677,26 +677,29 @@ The individual stored sale rows, newest order date first.
   carry null book/profile ids) plus the total row count matching the filters
   across all pages.
 
-### `GET /api/kdp/daily-profit?month&book`
+### `GET /api/kdp/daily-profit?month&start&end&book`
 
-Daily profitability of one calendar month — the organic tab's "Daily profit"
-chart. Per royalty posting day (how the KDP dashboard itself displays the
+Daily profitability over a calendar month or an explicit day range — the
+organic tab's "Daily profit" chart and the overview card (which passes the
+page's shared timeframe window). Per royalty posting day (how the KDP
+dashboard itself displays the
 data): the ad spend and estimated ad-attributed royalty next
 to the real summed KDP royalty (organic included), all markets converted per
 day into the workspace display currency (same USD-pivot convention as the
 all-market dashboard summary).
 
 - **Auth:** session.
-- `month` is a required first-of-month ISO date; `book` is an optional
+- `month` (a first-of-month ISO date) XOR `start`+`end` (an inclusive ISO
+  day range, ≤ 93 days) is required; `book` is an optional
   catalog book id (absent sums every book, including unlinked-ASIN sales).
-- Response `200`: `{ month, currency, ratesAvailable, economicsMissing,
+- Response `200`: `{ start, end, currency, ratesAvailable, economicsMissing,
   kdpImported, daily }` with days of `{ date, adSpend, adRoyalty,
-  organicRoyalty, totalRoyalty, profit }`, zero-filled over the month (the
-  current month capped at today). `organicRoyalty = max(0, totalRoyalty −
+  organicRoyalty, totalRoyalty, profit }`, zero-filled over the observed
+  range (capped at today). `organicRoyalty = max(0, totalRoyalty −
   adRoyalty)` — ad-driven sales are in the KDP total too, so the clamp avoids
   double counting; `profit = totalRoyalty − adSpend` is real money and works
   without book economics (only the split needs them; missing economics nulls
-  `adRoyalty`/`organicRoyalty` and sets `economicsMissing`). A month with no
+  `adRoyalty`/`organicRoyalty` and sets `economicsMissing`). A range with no
   KDP import returns null `totalRoyalty`/`organicRoyalty`/`profit` with
   `kdpImported: false`; an empty `fx_rates` table returns
   `ratesAvailable: false` with an empty series. Errors: `409

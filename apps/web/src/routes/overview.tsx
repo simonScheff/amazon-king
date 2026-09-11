@@ -5,6 +5,7 @@ import {
   useCountrySpend,
   useDashboardSummary,
   useDataFreshness,
+  useKdpDailyProfit,
   useProfiles,
   useRecommendations,
   useSyncRuns,
@@ -22,6 +23,7 @@ import {
   type TrendSeries,
 } from "../components/performance-trend-chart";
 import { DailyProfitChart } from "../components/daily-profit-chart";
+import { KdpDailyProfitChart } from "../components/kdp-daily-profit-chart";
 import { TopPerformers } from "../components/top-performers";
 import { Badge } from "../components/ui/badge";
 import { Card, CardBody, CardHeader } from "../components/ui/card";
@@ -328,6 +330,11 @@ export function OverviewPage() {
                 </Card>
               )}
 
+              <OverviewKdpDailyProfitCard
+                start={summary.data.dateRange.start}
+                end={summary.data.dateRange.end}
+              />
+
               <TopPerformers
                 days={days}
                 country={country}
@@ -581,4 +588,52 @@ function runProgressText(run: SyncRunSummary): string {
   return current
     ? `${base} · ${labelize(current.status)} ${labelize(current.reportType)} (${formatDate(current.dateStart)} – ${formatDate(current.dateEnd)})`
     : base;
+}
+
+/**
+ * Real-money daily profit (KDP royalty − ad spend, ads + organic) for the
+ * summary's date range, so the card follows the page's shared timeframe with
+ * no selector of its own. Unlike the estimated Daily profitability card it
+ * renders even when book economics are missing — profit is real KDP money;
+ * only the ad/organic split footnotes. The endpoint is all-markets by
+ * construction (KDP royalty has no per-market ad view here) and converts into
+ * the workspace display currency, which can differ from the summary's
+ * single-market currency, so the header takes the response's currency. The
+ * sidebar product filter does not apply (the endpoint takes a single book).
+ */
+function OverviewKdpDailyProfitCard({
+  start,
+  end,
+}: {
+  start: string;
+  end: string;
+}) {
+  const dailyProfit = useKdpDailyProfit({ start, end });
+  return (
+    <Card>
+      <CardHeader
+        title="Daily profit — ads + organic"
+        action={
+          dailyProfit.data ? (
+            <span className="text-xs text-zinc-500">
+              All markets · in {dailyProfit.data.currency}
+            </span>
+          ) : undefined
+        }
+      />
+      {dailyProfit.isPending ? (
+        <CardBody>
+          <Loading />
+        </CardBody>
+      ) : dailyProfit.error ? (
+        <CardBody>
+          <ErrorState error={dailyProfit.error} />
+        </CardBody>
+      ) : dailyProfit.data ? (
+        <CardBody>
+          <KdpDailyProfitChart data={dailyProfit.data} />
+        </CardBody>
+      ) : null}
+    </Card>
+  );
 }

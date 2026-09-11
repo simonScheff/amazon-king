@@ -19,8 +19,10 @@ import {
 import { conflict, notFound } from "./errors.js";
 
 /**
- * KDP daily-profit read (GET /api/kdp/daily-profit): one calendar month of
- * per-day profitability for the /kdp-history organic tab. Per day, all
+ * KDP daily-profit read (GET /api/kdp/daily-profit): per-day profitability
+ * over a calendar month (the /kdp-history organic tab) or an explicit day
+ * range (the overview card, fed by the page's shared timeframe window). Per
+ * day, all
  * markets converted into the workspace display currency at each date's own
  * fixing (the country=all convention): the ad spend and estimated
  * ad-attributed royalty come from the same converting dashboard queries the
@@ -89,9 +91,12 @@ export async function getKdpDailyProfit(
   query: KdpDailyProfitQuery,
   now: () => Date,
 ): Promise<KdpDailyProfit> {
-  const start = query.month;
-  // The current month is still accumulating; future days have no facts.
-  const end = [monthEnd(query.month), isoDay(utcToday(now()))].sort()[0]!;
+  const today = isoDay(utcToday(now()));
+  // Month mode observes the whole calendar month; range mode the explicit
+  // window. Either way the end caps at today — future days have no facts.
+  const start = query.month ?? query.start!;
+  const rangeEnd = query.month ? monthEnd(query.month) : query.end!;
+  const end = rangeEnd < today ? rangeEnd : today;
   const bookPk = await requireBookPk(db, workspaceId, query.book);
   const bookPks = bookPk === null ? null : [bookPk];
   const all = await profiles.listProfilesByWorkspace(db, workspaceId);
@@ -105,7 +110,8 @@ export async function getKdpDailyProfit(
   if (latestRateDate === null) {
     // Same posture as the all-market summary: never unconverted numbers.
     return {
-      month: query.month,
+      start,
+      end,
       currency: displayCurrency,
       ratesAvailable: false,
       economicsMissing: false,
@@ -146,7 +152,7 @@ export async function getKdpDailyProfit(
   ) {
     throw conflict(
       "FX_RATES_INCOMPLETE",
-      "Stored exchange rates do not cover every fact in this month yet; the next fx_sync run closes the gap",
+      "Stored exchange rates do not cover every fact in this range yet; the next fx_sync run closes the gap",
     );
   }
 
@@ -162,7 +168,7 @@ export async function getKdpDailyProfit(
     ]),
   );
   // Imports replace whole months, so the presence of any transaction dates
-  // the month as imported; days without sales are real zeros, not gaps.
+  // the range as imported; days without sales are real zeros, not gaps.
   const kdpByDate = new Map(
     kdpRows.map((row) => [row.date, microsFromDecimalString(row.royalty)]),
   );
@@ -194,7 +200,8 @@ export async function getKdpDailyProfit(
   });
 
   return {
-    month: query.month,
+    start,
+    end,
     currency: displayCurrency,
     ratesAvailable: true,
     economicsMissing,
