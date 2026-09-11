@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   bookSchema,
+  loginRequestSchema,
   bookMappingInputSchema,
   bookProfileLinkInputSchema,
   campaignDetailSchema,
@@ -549,5 +550,19 @@ describe("contracts smoke test", () => {
       hasSearchTermFacts: true,
     });
     expect(detail.blockingCampaigns[0]?.currentlyBlocks).toBe(true);
+  });
+});
+
+describe("loginRequestSchema", () => {
+  it("trims whitespace around the email before validating", () => {
+    expect(loginRequestSchema.parse({ email: "  owner@example.com " })).toEqual(
+      { email: "owner@example.com" },
+    );
+  });
+
+  it("still rejects invalid emails after trimming", () => {
+    expect(() =>
+      loginRequestSchema.parse({ email: " not-an-email " }),
+    ).toThrow();
   });
 });

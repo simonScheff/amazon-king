@@ -28,7 +28,10 @@ export function LoginPage() {
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     setInvalidToken(false);
-    login.mutate({ email: email.trim(), next }, { onSuccess: () => setSent(true) });
+    login.mutate(
+      { email: email.trim(), next },
+      { onSuccess: () => setSent(true) },
+    );
   }
 
   return (
