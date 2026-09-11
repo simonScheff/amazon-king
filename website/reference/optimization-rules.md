@@ -122,7 +122,7 @@ guessed — when economics are missing**.
 | Purpose    | The same shopper term has spend/orders in `≥ 2` campaigns → campaigns bid against each other; consolidate or separate intent. |
 | Trigger    | `campaigns ≥ 2` carrying the same search term, counting only spend/orders **inside the evidence window**. |
 | Proposal   | None — resolution is a human decision (route to an existing campaign or create a new one via the [campaign-creation flow](/guide/campaign-tools), which then drafts locked negatives). |
-| Suppressed | Campaigns that can no longer serve the term are excluded before the `≥ 2` check, so a conflict you already resolved with a negative stops being raised (see below). No economics needed. |
+| Suppressed | Campaigns that can no longer serve the term are excluded before the `≥ 2` check — blocked by a synced negative, paused (campaign or serving ad group), or with every ad in the serving ad groups disabled — so a conflict you already resolved stops being raised (see below). No economics needed. |
 | Impact     | The combined spend across the still-competing campaigns. |
 | Human review | **Yes.** Advisory-only. |
 | Version    | `cannibalization_conflict@2` |
@@ -133,7 +133,9 @@ synced from Amazon (`negative_keywords` and `negative_targets`) rather than
 the metrics alone. A campaign counts as blocked when an enabled campaign-level
 negative exact or negative phrase matches the term, when an enabled campaign-level
 negative ASIN target matches an ASIN-shaped shopper term, or when every ad group
-that served the term has a matching ad-group-level negative. Blocked campaigns
+that served the term has a matching ad-group-level negative. A campaign is
+also excluded when the campaign or the serving ad group is paused, or when
+every ad in the serving ad groups is disabled. Blocked campaigns
 are recorded under `excludedCampaigns` in the evidence and do not count toward
 the threshold; when that leaves fewer than two competing campaigns, any pending
 or approved finding an earlier run raised for the term is expired instead of

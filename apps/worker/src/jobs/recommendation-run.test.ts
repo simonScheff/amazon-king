@@ -464,6 +464,111 @@ describe("recommendation_run", () => {
     ).toHaveLength(0);
   });
 
+  it("expires a pending conflict once a campaign pause resolves it", async () => {
+    const store = cannibalizationStore();
+    store.recommendations.push({
+      profileId: PROFILE.id,
+      type: "cannibalization_conflict",
+      campaignId: null,
+      adGroupId: null,
+      targetId: null,
+      searchTerm: "tractor colouring book",
+      priority: 1,
+      evidenceWindowStart: "2026-06-07",
+      evidenceWindowEnd: "2026-08-05",
+      currentValue: null,
+      proposedValue: null,
+      rationale: "raised by an earlier run",
+      confidence: "0.500",
+      ruleVersion: "cannibalization_conflict@2",
+      dataFreshnessAt: "2026-08-06T06:00:00.000Z",
+      expiresAt: "2026-08-09T06:00:00.000Z",
+      evidenceInputs: {},
+    });
+    store.structure.campaigns = store.structure.campaigns.map((c) =>
+      c.id === "11" ? { ...c, state: "paused" } : c,
+    );
+    await runHandler(
+      createRecommendationRunHandler(makeDeps({ store, now: () => NOW })),
+      PAYLOAD,
+    );
+    expect(
+      store.recommendations.some(
+        (rec) => rec.type === "cannibalization_conflict",
+      ),
+    ).toBe(false);
+  });
+
+  it("expires a pending conflict once the competing campaign's ads are disabled", async () => {
+    const store = cannibalizationStore();
+    store.recommendations.push({
+      profileId: PROFILE.id,
+      type: "cannibalization_conflict",
+      campaignId: null,
+      adGroupId: null,
+      targetId: null,
+      searchTerm: "tractor colouring book",
+      priority: 1,
+      evidenceWindowStart: "2026-06-07",
+      evidenceWindowEnd: "2026-08-05",
+      currentValue: null,
+      proposedValue: null,
+      rationale: "raised by an earlier run",
+      confidence: "0.500",
+      ruleVersion: "cannibalization_conflict@2",
+      dataFreshnessAt: "2026-08-06T06:00:00.000Z",
+      expiresAt: "2026-08-09T06:00:00.000Z",
+      evidenceInputs: {},
+    });
+    store.structure.ads = store.structure.ads.map((ad) =>
+      ad.adGroupId === "21" ? { ...ad, state: "paused" } : ad,
+    );
+    await runHandler(
+      createRecommendationRunHandler(makeDeps({ store, now: () => NOW })),
+      PAYLOAD,
+    );
+    expect(
+      store.recommendations.some(
+        (rec) => rec.type === "cannibalization_conflict",
+      ),
+    ).toBe(false);
+  });
+
+  it("expires a pending conflict once the competing campaign's ad group is paused", async () => {
+    const store = cannibalizationStore();
+    store.recommendations.push({
+      profileId: PROFILE.id,
+      type: "cannibalization_conflict",
+      campaignId: null,
+      adGroupId: null,
+      targetId: null,
+      searchTerm: "tractor colouring book",
+      priority: 1,
+      evidenceWindowStart: "2026-06-07",
+      evidenceWindowEnd: "2026-08-05",
+      currentValue: null,
+      proposedValue: null,
+      rationale: "raised by an earlier run",
+      confidence: "0.500",
+      ruleVersion: "cannibalization_conflict@2",
+      dataFreshnessAt: "2026-08-06T06:00:00.000Z",
+      expiresAt: "2026-08-09T06:00:00.000Z",
+      evidenceInputs: {},
+    });
+    store.structure.adGroups = store.structure.adGroups.map((adGroup) =>
+      adGroup.id === "21" ? { ...adGroup, state: "paused" } : adGroup,
+    );
+    await runHandler(
+      createRecommendationRunHandler(makeDeps({ store, now: () => NOW })),
+      PAYLOAD,
+    );
+    expect(
+      store.recommendations.some(
+        (rec) => rec.type === "cannibalization_conflict",
+      ),
+    ).toBe(false);
+  });
+
   it("does not flag a wasteful term a campaign negative already blocks", async () => {
     const store = storeWithData();
     store.structure = {

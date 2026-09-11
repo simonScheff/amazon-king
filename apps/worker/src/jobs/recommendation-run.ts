@@ -54,7 +54,7 @@ import type {
  * profit rules stay disabled for entities without KDP economics.
  */
 
-enum CampaignState {
+enum EntityState {
   Enabled = "enabled",
   Active = "active",
 }
@@ -332,8 +332,9 @@ function parseWastefulKey(key: string): {
 export interface EvaluationResult {
   drafts: RecommendationDraft[];
   /**
-   * Search terms that would have been cannibalization conflicts if negatives
-   * did not already block enough campaigns. Findings raised by earlier runs
+   * Search terms that would have been cannibalization conflicts if negatives,
+   * a paused campaign, or fully disabled ads did not already reduce the
+   * competing campaigns below the minimum. Findings raised by earlier runs
    * are expired so a resolved conflict leaves the inbox immediately instead of
    * lingering until `expires_at`.
    */
@@ -455,8 +456,8 @@ export function evaluateAllRules(inputs: EvaluationInputs): EvaluationResult {
         (target) =>
           target.targetKind === "keyword" &&
           target.matchType === "exact" &&
-          (target.state === CampaignState.Enabled ||
-            target.state === CampaignState.Active),
+          (target.state === EntityState.Enabled ||
+            target.state === EntityState.Active),
       )
       .map((target) =>
         normalizeTerm(
@@ -490,7 +491,7 @@ export function evaluateAllRules(inputs: EvaluationInputs): EvaluationResult {
         ? microsFromDecimalString(bidString)
         : null;
       if (
-        target.state === CampaignState.Enabled &&
+        target.state === EntityState.Enabled &&
         currentBidMicros !== null &&
         currentBidMicros > 0
       ) {
@@ -639,8 +640,8 @@ export function evaluateAllRules(inputs: EvaluationInputs): EvaluationResult {
       const withBlocked = campaigns.map((entry) => {
         const campaign = campaignById.get(entry.campaignId);
         const isActiveCampaign =
-          campaign?.state === CampaignState.Enabled ||
-          campaign?.state === CampaignState.Active;
+          campaign?.state === EntityState.Enabled ||
+          campaign?.state === EntityState.Active;
 
         const adGroupIds =
           servingAdGroups.get(entry.campaignId) || new Set<string>();
@@ -649,8 +650,8 @@ export function evaluateAllRules(inputs: EvaluationInputs): EvaluationResult {
           const adGroup = adGroupById.get(adGroupId);
           if (
             !adGroup ||
-            (adGroup.state !== CampaignState.Enabled &&
-              adGroup.state !== CampaignState.Active)
+            (adGroup.state !== EntityState.Enabled &&
+              adGroup.state !== EntityState.Active)
           ) {
             continue;
           }
@@ -660,8 +661,8 @@ export function evaluateAllRules(inputs: EvaluationInputs): EvaluationResult {
           if (
             adsInGroup.some(
               (ad) =>
-                ad.state === CampaignState.Enabled ||
-                ad.state === CampaignState.Active,
+                ad.state === EntityState.Enabled ||
+                ad.state === EntityState.Active,
             )
           ) {
             hasActiveAd = true;
@@ -677,9 +678,8 @@ export function evaluateAllRules(inputs: EvaluationInputs): EvaluationResult {
         };
       });
       if (
-        blocked.size > 0 &&
         withBlocked.filter((entry) => !entry.blockedByNegative).length <
-          config.cannibalizationConflict.minCampaigns
+        config.cannibalizationConflict.minCampaigns
       ) {
         resolvedTerms.add(searchTerm);
       }

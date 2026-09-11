@@ -98,7 +98,9 @@ Suppression rules that must hold:
   the optimizer as `protectedSearchTerms`, so `wasteful_search_term` never
   proposes an excluded term — the exclusion mechanism owns those.
 - Expire pending or approved `cannibalization_conflict` findings whose term a
-  negative keyword or negative ASIN target now blocks.
+  negative keyword or negative ASIN target now blocks, or that a paused
+  campaign, paused serving ad group, or fully disabled ads reduce below the
+  minimum competing-campaign count.
 - Expire pending or approved `wasteful_search_term` findings whose campaign a
   synced negative already blocks for that term.
 - Expire pending or approved `high_ctr_poor_conversion` findings when the
