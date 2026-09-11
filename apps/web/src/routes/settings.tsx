@@ -8,8 +8,10 @@ import {
   type Book,
   type BookEconomics,
   type BookFormat,
+  type DataFreshness,
   type GoalMode,
   type KdpRoyaltyImport,
+  type SyncRunSummary,
 } from "@amazon-king/contracts";
 import {
   useAuditEvents,
@@ -24,6 +26,7 @@ import {
   useSaveBookCover,
   useSaveBookEconomics,
   useSearchTermExclusions,
+  useSyncRuns,
   useUnmappedAdvertisedProducts,
   useUpdateProfile,
   useWorkspaceSettings,
@@ -910,6 +913,8 @@ function ExclusionsCard() {
 
 function ProfilesCard() {
   const profiles = useProfiles();
+  const freshness = useDataFreshness();
+  const syncRuns = useSyncRuns();
   return (
     <Card>
       <CardHeader title="Profiles: sync & write access" />
@@ -923,20 +928,35 @@ function ProfilesCard() {
         <Table>
           <thead>
             <tr>
-              <Th>Profile</Th>
-              <Th>Region</Th>
-              <Th>Currency</Th>
-              <Th>Read (sync)</Th>
-              <Th>Writes</Th>
-              <Th>
+              <Th className="whitespace-nowrap">Profile</Th>
+              <Th className="whitespace-nowrap">Country</Th>
+              <Th className="whitespace-nowrap">Region</Th>
+              <Th className="whitespace-nowrap">Currency</Th>
+              <Th className="whitespace-nowrap">Read (sync)</Th>
+              <Th className="whitespace-nowrap">Last synced</Th>
+              <Th className="whitespace-nowrap">Writes</Th>
+              <Th className="whitespace-nowrap">
                 <span className="sr-only">Actions</span>
               </Th>
             </tr>
           </thead>
           <tbody>
-            {profiles.data.map((p) => (
-              <ProfileSettingsRow key={p.profileId} profile={p} />
-            ))}
+            {profiles.data.map((p) => {
+              const pFreshness = freshness.data?.profiles.find(
+                (f) => f.profileId === p.profileId,
+              );
+              const latestRun = syncRuns.data?.find(
+                (r) => r.profileId === p.profileId,
+              );
+              return (
+                <ProfileSettingsRow
+                  key={p.profileId}
+                  profile={p}
+                  freshness={pFreshness}
+                  latestRun={latestRun}
+                />
+              );
+            })}
           </tbody>
         </Table>
       )}
@@ -1231,17 +1251,33 @@ export function SettingsPage() {
   );
 }
 
-function ProfileSettingsRow({ profile }: { profile: AmazonProfile }) {
+function ProfileSettingsRow({
+  profile,
+  freshness,
+  latestRun,
+}: {
+  profile: AmazonProfile;
+  freshness?: DataFreshness;
+  latestRun?: SyncRunSummary;
+}) {
   const update = useUpdateProfile(profile.profileId);
   const sync = useEnqueueSync(profile.profileId);
   const toast = useToast();
   return (
     <tr>
-      <Td className="font-mono text-xs">{profile.profileId}</Td>
-      <Td>{profile.region}</Td>
-      <Td>{profile.currencyCode}</Td>
-      <Td>
-        <label className="inline-flex items-center gap-2 text-sm">
+      <Td className="font-mono text-xs whitespace-nowrap">
+        {profile.profileId}
+      </Td>
+      <Td className="whitespace-nowrap">
+        <span className="inline-flex items-center gap-2 font-medium text-zinc-200">
+          <Flag countryCode={profile.countryCode} />
+          <span>{countryNameForCode(profile.countryCode)}</span>
+        </span>
+      </Td>
+      <Td className="whitespace-nowrap">{profile.region}</Td>
+      <Td className="whitespace-nowrap">{profile.currencyCode}</Td>
+      <Td className="whitespace-nowrap">
+        <label className="inline-flex items-center gap-2 whitespace-nowrap text-sm">
           <input
             type="checkbox"
             className="h-4 w-4 accent-sky-500"
@@ -1260,11 +1296,25 @@ function ProfileSettingsRow({ profile }: { profile: AmazonProfile }) {
           {profile.enabled ? "On" : "Off"}
         </label>
       </Td>
-      <Td>
-        <Badge tone="neutral">read-only</Badge>
+      <Td className="whitespace-nowrap text-xs text-zinc-400">
+        {latestRun?.status === "running" ? (
+          <Badge tone="info">syncing…</Badge>
+        ) : freshness?.lastSuccessAt ? (
+          formatDateTime(freshness.lastSuccessAt)
+        ) : latestRun?.finishedAt ? (
+          formatDateTime(latestRun.finishedAt)
+        ) : latestRun?.status === "failed" ? (
+          <Badge tone="danger" title={latestRun.error ?? undefined}>
+            failed
+          </Badge>
+        ) : (
+          <span className="text-zinc-500">Never</span>
+        )}
+      </Td>
+      <Td className="whitespace-nowrap">
         <WriteToggle profile={profile} />
       </Td>
-      <Td>
+      <Td className="whitespace-nowrap">
         <Button
           size="sm"
           disabled={sync.isPending || !profile.enabled}
@@ -1284,31 +1334,43 @@ function ProfileSettingsRow({ profile }: { profile: AmazonProfile }) {
 }
 
 /**
- * Per-profile write toggle. AmazonProfile has no writeEnabled field in the
- * contracts yet, so the toggle is only rendered when the API returns one.
+ * Per-profile write toggle allowing human approval of changes to be sent to Amazon.
  */
 function WriteToggle({ profile }: { profile: AmazonProfile }) {
   const update = useUpdateProfile(profile.profileId);
   const toast = useToast();
-  const writeEnabled = (profile as { writeEnabled?: boolean }).writeEnabled;
-  if (writeEnabled === undefined) return null;
+  const canWrite = profile.enabled && profile.writeEnabled;
   return (
-    <label className="ml-2 inline-flex items-center gap-2 text-sm">
+    <label
+      className={`inline-flex items-center gap-2 whitespace-nowrap text-sm ${
+        !profile.enabled ? "cursor-not-allowed opacity-40" : ""
+      }`}
+      title={
+        !profile.enabled
+          ? "Enable Read (sync) first before enabling writes"
+          : undefined
+      }
+    >
       <input
         type="checkbox"
-        className="h-4 w-4 accent-red-500"
-        checked={writeEnabled}
-        disabled={update.isPending}
-        onChange={(e) =>
+        className="h-4 w-4 accent-red-500 disabled:cursor-not-allowed"
+        checked={canWrite}
+        disabled={update.isPending || !profile.enabled}
+        onChange={(e) => {
+          if (!profile.enabled) return;
           update.mutate(
             { writeEnabled: e.target.checked },
             {
               onError: (err) => toast(`Update failed: ${err.message}`, "error"),
             },
-          )
-        }
+          );
+        }}
       />
-      {writeEnabled ? "write-enabled" : "read-only"}
+      {canWrite ? (
+        <Badge tone="danger">write-enabled</Badge>
+      ) : (
+        <Badge tone="neutral">read-only</Badge>
+      )}
     </label>
   );
 }

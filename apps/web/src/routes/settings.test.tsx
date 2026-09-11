@@ -126,6 +126,11 @@ vi.mock("../api/endpoints", () => ({
     error: null,
     data: { exclusions: mocks.exclusions },
   }),
+  useSyncRuns: () => ({
+    isPending: false,
+    error: null,
+    data: [],
+  }),
   useDeleteSearchTermExclusion: () => ({
     isPending: false,
     mutate: mocks.removeExclusion,
