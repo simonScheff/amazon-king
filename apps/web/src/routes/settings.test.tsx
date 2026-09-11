@@ -17,6 +17,9 @@ const mocks = vi.hoisted(() => ({
   workspaceSettings: undefined as { displayCurrency: string } | undefined,
   fxRates: undefined as FxRatesStatus | undefined,
   freshnessOptions: [] as unknown[],
+  freshnessProfiles: [] as unknown[],
+  profiles: [] as unknown[],
+  syncRuns: [] as unknown[],
   navigate: vi.fn(),
   mapBook: vi.fn(),
   linkMarkets: vi.fn(),
@@ -48,7 +51,7 @@ vi.mock("../api/endpoints", () => ({
     return {
       isPending: false,
       error: null,
-      data: { profiles: [], fxRates: mocks.fxRates },
+      data: { profiles: mocks.freshnessProfiles, fxRates: mocks.fxRates },
     };
   },
   useEnqueueFxSync: () => ({ isPending: false, mutate: mocks.fxSync }),
@@ -64,36 +67,7 @@ vi.mock("../api/endpoints", () => ({
   useProfiles: () => ({
     isPending: false,
     error: null,
-    data: [
-      {
-        profileId: "profile-us",
-        region: "NA",
-        countryCode: "US",
-        currencyCode: "USD",
-        enabled: true,
-      },
-      {
-        profileId: "profile-ca",
-        region: "NA",
-        countryCode: "CA",
-        currencyCode: "CAD",
-        enabled: true,
-      },
-      {
-        profileId: "profile-uk",
-        region: "EU",
-        countryCode: "GB",
-        currencyCode: "GBP",
-        enabled: true,
-      },
-      {
-        profileId: "profile-au",
-        region: "FE",
-        countryCode: "AU",
-        currencyCode: "AUD",
-        enabled: true,
-      },
-    ],
+    data: mocks.profiles,
   }),
   useSaveBookEconomics: () => ({
     isPending: false,
@@ -129,7 +103,7 @@ vi.mock("../api/endpoints", () => ({
   useSyncRuns: () => ({
     isPending: false,
     error: null,
-    data: [],
+    data: mocks.syncRuns,
   }),
   useDeleteSearchTermExclusion: () => ({
     isPending: false,
@@ -160,6 +134,42 @@ describe("SettingsPage book mapping", () => {
     mocks.workspaceSettings = undefined;
     mocks.fxRates = undefined;
     mocks.freshnessOptions = [];
+    mocks.freshnessProfiles = [];
+    mocks.profiles = [
+      {
+        profileId: "profile-us",
+        region: "NA",
+        countryCode: "US",
+        currencyCode: "USD",
+        enabled: true,
+        writeEnabled: false,
+      },
+      {
+        profileId: "profile-ca",
+        region: "NA",
+        countryCode: "CA",
+        currencyCode: "CAD",
+        enabled: true,
+        writeEnabled: false,
+      },
+      {
+        profileId: "profile-uk",
+        region: "EU",
+        countryCode: "GB",
+        currencyCode: "GBP",
+        enabled: true,
+        writeEnabled: false,
+      },
+      {
+        profileId: "profile-au",
+        region: "FE",
+        countryCode: "AU",
+        currencyCode: "AUD",
+        enabled: true,
+        writeEnabled: false,
+      },
+    ];
+    mocks.syncRuns = [];
     mocks.exclusions = [];
     mocks.kdpImports = [];
     mocks.parseKdpReport.mockReset();
@@ -259,6 +269,77 @@ describe("SettingsPage book mapping", () => {
     expect(
       screen.getByRole("button", { name: "Sync rates now" }),
     ).toBeEnabled();
+  });
+
+  it("shows the failed badge for a profile whose latest sync run failed", () => {
+    mocks.search = { tab: "profiles" };
+    mocks.syncRuns = [
+      {
+        id: "run-1",
+        profileId: "profile-us",
+        kind: "metrics",
+        status: "failed",
+        startedAt: "2026-09-10T08:00:00.000Z",
+        finishedAt: "2026-09-10T08:05:00.000Z",
+        error: "Amazon Ads API rate limited",
+        reports: [],
+      },
+    ];
+    render(<SettingsPage />);
+
+    // Failed runs always carry finished_at, so the badge must win over the
+    // finishedAt timestamp fallback.
+    const badge = screen.getByText("failed");
+    expect(badge).toHaveAttribute("title", "Amazon Ads API rate limited");
+  });
+
+  it("renders writes as enabled and revocable when sync is off but writeEnabled is true", () => {
+    mocks.search = { tab: "profiles" };
+    mocks.profiles = [
+      {
+        profileId: "profile-us",
+        region: "NA",
+        countryCode: "US",
+        currencyCode: "USD",
+        enabled: false,
+        writeEnabled: true,
+      },
+    ];
+    render(<SettingsPage />);
+
+    // The server gates applies on write_enabled alone: the toggle must show
+    // the real state and let the owner revoke without re-enabling sync.
+    const toggle = screen.getByRole("checkbox", { name: "write-enabled" });
+    expect(toggle).toBeChecked();
+    expect(toggle).toBeEnabled();
+
+    fireEvent.click(toggle);
+    expect(mocks.mutation).toHaveBeenCalledWith(
+      { writeEnabled: false },
+      expect.objectContaining({ onError: expect.any(Function) }),
+    );
+  });
+
+  it("blocks enabling writes while sync is disabled", () => {
+    mocks.search = { tab: "profiles" };
+    mocks.profiles = [
+      {
+        profileId: "profile-us",
+        region: "NA",
+        countryCode: "US",
+        currencyCode: "USD",
+        enabled: false,
+        writeEnabled: false,
+      },
+    ];
+    render(<SettingsPage />);
+
+    const toggle = screen.getByRole("checkbox", { name: "read-only" });
+    expect(toggle).not.toBeChecked();
+    expect(toggle).toBeDisabled();
+
+    fireEvent.click(toggle);
+    expect(mocks.mutation).not.toHaveBeenCalled();
   });
 
   it("lists excluded search terms and removes one from the list", () => {

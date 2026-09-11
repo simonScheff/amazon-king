@@ -8,7 +8,6 @@ import {
   type Book,
   type BookEconomics,
   type BookFormat,
-  type DataFreshness,
   type GoalMode,
   type KdpRoyaltyImport,
   type SyncRunSummary,
@@ -942,9 +941,18 @@ function ProfilesCard() {
           </thead>
           <tbody>
             {profiles.data.map((p) => {
-              const pFreshness = freshness.data?.profiles.find(
-                (f) => f.profileId === p.profileId,
-              );
+              // Freshness is per (profile × dataset); the cell shows the
+              // latest success across all of the profile's datasets.
+              const lastSuccessAt = freshness.data?.profiles
+                .filter((f) => f.profileId === p.profileId)
+                .reduce<string | null>(
+                  (max, f) =>
+                    f.lastSuccessAt !== null &&
+                    (max === null || f.lastSuccessAt > max)
+                      ? f.lastSuccessAt
+                      : max,
+                  null,
+                );
               const latestRun = syncRuns.data?.find(
                 (r) => r.profileId === p.profileId,
               );
@@ -952,7 +960,7 @@ function ProfilesCard() {
                 <ProfileSettingsRow
                   key={p.profileId}
                   profile={p}
-                  freshness={pFreshness}
+                  lastSuccessAt={lastSuccessAt ?? null}
                   latestRun={latestRun}
                 />
               );
@@ -1253,11 +1261,11 @@ export function SettingsPage() {
 
 function ProfileSettingsRow({
   profile,
-  freshness,
+  lastSuccessAt,
   latestRun,
 }: {
   profile: AmazonProfile;
-  freshness?: DataFreshness;
+  lastSuccessAt: string | null;
   latestRun?: SyncRunSummary;
 }) {
   const update = useUpdateProfile(profile.profileId);
@@ -1299,14 +1307,14 @@ function ProfileSettingsRow({
       <Td className="whitespace-nowrap text-xs text-zinc-400">
         {latestRun?.status === "running" ? (
           <Badge tone="info">syncing…</Badge>
-        ) : freshness?.lastSuccessAt ? (
-          formatDateTime(freshness.lastSuccessAt)
-        ) : latestRun?.finishedAt ? (
-          formatDateTime(latestRun.finishedAt)
         ) : latestRun?.status === "failed" ? (
           <Badge tone="danger" title={latestRun.error ?? undefined}>
             failed
           </Badge>
+        ) : lastSuccessAt ? (
+          formatDateTime(lastSuccessAt)
+        ) : latestRun?.finishedAt ? (
+          formatDateTime(latestRun.finishedAt)
         ) : (
           <span className="text-zinc-500">Never</span>
         )}
@@ -1339,14 +1347,18 @@ function ProfileSettingsRow({
 function WriteToggle({ profile }: { profile: AmazonProfile }) {
   const update = useUpdateProfile(profile.profileId);
   const toast = useToast();
-  const canWrite = profile.enabled && profile.writeEnabled;
+  // The server gates applies on write_enabled alone, so the toggle must
+  // reflect it directly — even when sync is off, writes stay on until revoked.
+  const canWrite = profile.writeEnabled;
+  // Only the enable direction is guarded: disabling writes is always allowed.
+  const enableBlocked = !profile.enabled && !profile.writeEnabled;
   return (
     <label
       className={`inline-flex items-center gap-2 whitespace-nowrap text-sm ${
-        !profile.enabled ? "cursor-not-allowed opacity-40" : ""
+        enableBlocked ? "cursor-not-allowed opacity-40" : ""
       }`}
       title={
-        !profile.enabled
+        enableBlocked
           ? "Enable Read (sync) first before enabling writes"
           : undefined
       }
@@ -1355,9 +1367,9 @@ function WriteToggle({ profile }: { profile: AmazonProfile }) {
         type="checkbox"
         className="h-4 w-4 accent-red-500 disabled:cursor-not-allowed"
         checked={canWrite}
-        disabled={update.isPending || !profile.enabled}
+        disabled={update.isPending || enableBlocked}
         onChange={(e) => {
-          if (!profile.enabled) return;
+          if (!profile.enabled && e.target.checked) return;
           update.mutate(
             { writeEnabled: e.target.checked },
             {
