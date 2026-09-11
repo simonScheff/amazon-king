@@ -183,6 +183,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       "0020",
       "0021",
       "0022",
+      "0023",
     ]);
     const again = await migrate(pool);
     expect(again).toEqual([]);

@@ -337,7 +337,7 @@ erDiagram
 - `change_sets.kind` is `recommendation`, `max_cpc`, `rollback`,
   `campaign_creation`, or `campaign_update`; `status` walks
   `draft → previewed → applying → applied | partially_applied | failed |
-  blocked`. `fingerprint` is unique, making creation idempotent.
+  blocked`, with terminal `rejected` for dismissed unapplied sets. `fingerprint` is unique, making creation idempotent.
   `metadata.dependsOnChangeSetId` orders dependent sets — apply rejects a set
   with `DEPENDENCY_NOT_APPLIED` until the referenced set is `applied`.
 - `change_actions.action_type` allows fourteen values (twelve since launch,

@@ -93,7 +93,8 @@ Kinds: `recommendation` (created by approving recommendations), `max_cpc`
 `campaign_update` (one-click pause/enable or rename from the campaign page).
 A change
 set moves through statuses: `draft` → `previewed` → `applying` →
-`applied`, `partially_applied`, `failed`, or `blocked`. Applying re-reads
+`applied`, `partially_applied`, `failed`, or `blocked` — plus the terminal
+`rejected` when the owner dismisses an unapplied set. Applying re-reads
 Amazon state, compares it against the stored before-snapshot, re-checks
 guardrails, applies item by item (handling Amazon's per-item 207 results),
 and verifies with a post-write re-read.
