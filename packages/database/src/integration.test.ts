@@ -1304,12 +1304,15 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     const workspace = await pool.query<{
       connection_id: string;
       workspace_id: string;
+      amazon_profile_id: string;
     }>(
-      `select c.id::text as connection_id, c.workspace_id::text from amazon_connections c
+      `select c.id::text as connection_id, c.workspace_id::text, p.profile_id as amazon_profile_id
+       from amazon_connections c
        join amazon_profiles p on p.connection_id = c.id where p.id = $1`,
       [profileId],
     );
     const workspaceId = workspace.rows[0]!.workspace_id;
+    const amazonProfileId = workspace.rows[0]!.amazon_profile_id;
 
     // Create an existing book in the workspace catalog (e.g. from another marketplace)
     const book = await createBook(pool, {
@@ -1346,7 +1349,10 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       workspaceId,
     );
     expect(unmappedBefore).toContainEqual(
-      expect.objectContaining({ asin: "B0AUTO1234", profileId }),
+      expect.objectContaining({
+        asin: "B0AUTO1234",
+        profileId: amazonProfileId,
+      }),
     );
 
     // Run autoLinkMatchingBooks
@@ -1362,7 +1368,145 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     );
 
     const reloadedBook = await getBook(pool, book.id);
-    expect(reloadedBook?.profileIds).toContain(profileId);
+    expect(reloadedBook?.marketplaceAsins).toContainEqual({
+      profileId: amazonProfileId,
+      asin: "B0AUTO1234",
+    });
+  });
+
+  it("leaves an ASIN unmapped when it matches multiple catalog books", async () => {
+    const profileId = await seedProfile(pool);
+    const workspace = await pool.query<{ workspace_id: string }>(
+      `select c.workspace_id::text from amazon_connections c
+       join amazon_profiles p on p.connection_id = c.id where p.id = $1`,
+      [profileId],
+    );
+    const workspaceId = workspace.rows[0]!.workspace_id;
+
+    // The same ASIN exists as both a paperback and an ebook catalog book.
+    await createBook(pool, {
+      workspaceId,
+      asin: "B0AMBIG001",
+      title: "Ambiguous Book",
+      format: "paperback",
+    });
+    await createBook(pool, {
+      workspaceId,
+      asin: "B0AMBIG001",
+      title: "Ambiguous Book",
+      format: "ebook",
+    });
+
+    const campaign = await upsertCampaign(pool, {
+      profileId,
+      amazonCampaignId: "amzn-campaign-ambiguous",
+      name: "Ambiguous Campaign",
+      state: "enabled",
+    });
+    const adGroup = await upsertAdGroup(pool, {
+      profileId,
+      campaignId: campaign.id,
+      amazonAdGroupId: "amzn-ad-group-ambiguous",
+      name: "Ambiguous ad group",
+      state: "enabled",
+    });
+    await upsertAd(pool, {
+      profileId,
+      adGroupId: adGroup.id,
+      amazonAdId: "amzn-ad-ambiguous",
+      asin: "B0AMBIG001",
+      state: "enabled",
+    });
+
+    // Auto-link must not throw on the ambiguous ASIN and must not guess.
+    await autoLinkMatchingBooks(pool, profileId);
+
+    const unmapped = await listUnmappedAdvertisedProducts(pool, workspaceId);
+    expect(unmapped).toContainEqual(
+      expect.objectContaining({ asin: "B0AMBIG001" }),
+    );
+    const links = await pool.query<{ count: string }>(
+      `select count(*)::text as count from book_profile_links where profile_id = $1`,
+      [profileId],
+    );
+    expect(links.rows[0]).toEqual({ count: "0" });
+  });
+
+  it("leaves an ASIN unmapped when it is already linked to another book", async () => {
+    const profileId = await seedProfile(pool);
+    const workspace = await pool.query<{ workspace_id: string }>(
+      `select c.workspace_id::text from amazon_connections c
+       join amazon_profiles p on p.connection_id = c.id where p.id = $1`,
+      [profileId],
+    );
+    const workspaceId = workspace.rows[0]!.workspace_id;
+
+    // The owner already linked the ASIN to another book in this profile.
+    const linkedBook = await createBook(pool, {
+      workspaceId,
+      asin: "B0OTHER001",
+      title: "Owner Linked Book",
+      format: "paperback",
+    });
+    const linkResult = await linkBookToProfiles(pool, {
+      workspaceId,
+      bookId: linkedBook.id,
+      profileIds: [profileId],
+      asin: "B0TAKEN001",
+    });
+    expect(linkResult.ok).toBe(true);
+
+    // A second catalog book carries the same ASIN as its catalog ASIN.
+    const candidateBook = await createBook(pool, {
+      workspaceId,
+      asin: "B0TAKEN001",
+      title: "Candidate Book",
+      format: "paperback",
+    });
+
+    const campaign = await upsertCampaign(pool, {
+      profileId,
+      amazonCampaignId: "amzn-campaign-taken",
+      name: "Taken Campaign",
+      state: "enabled",
+    });
+    const adGroup = await upsertAdGroup(pool, {
+      profileId,
+      campaignId: campaign.id,
+      amazonAdGroupId: "amzn-ad-group-taken",
+      name: "Taken ad group",
+      state: "enabled",
+    });
+    await upsertAd(pool, {
+      profileId,
+      adGroupId: adGroup.id,
+      amazonAdId: "amzn-ad-taken",
+      asin: "B0TAKEN001",
+      state: "enabled",
+    });
+
+    // Auto-link must not throw on the already-resolved ASIN, must not steal
+    // the link for the candidate book, and must leave the existing link alone.
+    await autoLinkMatchingBooks(pool, profileId);
+
+    const candidate = await getBook(pool, candidateBook.id);
+    expect(candidate?.marketplaceAsins).toEqual([]);
+    const existingLink = await pool.query<{
+      book_id: string;
+      marketplace_asin: string;
+      enabled: boolean;
+    }>(
+      `select book_id::text, marketplace_asin, enabled from book_profile_links
+       where profile_id = $1 and marketplace_asin = $2`,
+      [profileId, "B0TAKEN001"],
+    );
+    expect(existingLink.rows).toEqual([
+      { book_id: linkedBook.id, marketplace_asin: "B0TAKEN001", enabled: true },
+    ]);
+    const unmapped = await listUnmappedAdvertisedProducts(pool, workspaceId);
+    expect(unmapped).not.toContainEqual(
+      expect.objectContaining({ asin: "B0TAKEN001" }),
+    );
   });
 
   it("links a catalog book to a marketplace that has no ads yet", async () => {

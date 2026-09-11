@@ -83,6 +83,11 @@ To add a migration, use the `add-migration` skill.
   `(book_id, profile_id)`. Marketplace links come from advertised ASINs or from
   owner-confirmed `linkBookToProfiles` when a book has no ads in that market
   yet; two catalog books cannot claim the same ASIN in one profile.
+  `autoLinkMatchingBooks` (end of the worker's structure sync) links only
+  unambiguous, unlinked ASINs — exactly one catalog book in the workspace
+  carries the ASIN and no other book already claims it in that profile —
+  with `on conflict do nothing`, so it never rewrites an owner-set link;
+  ambiguous or already-resolved ASINs stay in the unmapped list.
 - `fx_rates` stores daily exchange-rate fixings against a single USD pivot and
   is append-only: `repositories/fx.ts` inserts with `ON CONFLICT DO NOTHING`,
   so a stored rate is never rewritten and converted numbers stay reproducible.

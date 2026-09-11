@@ -362,7 +362,11 @@ export async function mapAdvertisedProductToBook(
 
 /**
  * Automatically link advertised ASINs in a profile to existing catalog books
- * in the same workspace. Idempotent: enables the link if already present.
+ * in the same workspace. Only unambiguous, unlinked ASINs are linked: the ASIN
+ * must map to exactly one catalog book in the workspace and must not already
+ * be linked to a different book in this profile. Ambiguous or already-resolved
+ * ASINs stay unmapped for the owner to resolve, and an existing (book,
+ * profile) link is never rewritten.
  */
 export async function autoLinkMatchingBooks(
   db: Db,
@@ -377,9 +381,19 @@ export async function autoLinkMatchingBooks(
      join books b on b.workspace_id = c.workspace_id and b.asin = a.asin
      where p.id = $1
        and a.asin <> ''
-     on conflict (book_id, profile_id) do update set
-       marketplace_asin = excluded.marketplace_asin,
-       enabled = true`,
+       and not exists (
+         select 1 from books b2
+         where b2.workspace_id = b.workspace_id
+           and b2.asin = b.asin
+           and b2.id <> b.id
+       )
+       and not exists (
+         select 1 from book_profile_links x
+         where x.profile_id = p.id
+           and x.marketplace_asin = a.asin
+           and x.book_id <> b.id
+       )
+     on conflict (book_id, profile_id) do nothing`,
     [profileId],
   );
 }
