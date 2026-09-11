@@ -5,6 +5,7 @@ import {
   structure as structureRepo,
   recommendations as recommendationsRepo,
   exclusions as exclusionsRepo,
+  books as booksRepo,
   changeDrafts,
   fx as fxRepo,
   withTransaction,
@@ -798,6 +799,7 @@ export function createDbStore(pool: Pool): WorkerStore {
           profile.id,
           persistedNegativeTargetIds,
         );
+        await booksRepo.autoLinkMatchingBooks(client, profile.id);
       });
     },
 

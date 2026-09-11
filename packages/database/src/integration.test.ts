@@ -59,6 +59,7 @@ import {
   listLatestBookEconomicsByWorkspace,
   listUnmappedAdvertisedProducts,
   mapAdvertisedProductToBook,
+  autoLinkMatchingBooks,
   createBook,
   getBook,
   linkBookToProfiles,
@@ -1296,6 +1297,72 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         estimatedRoyalty: null,
       }),
     ]);
+  });
+
+  it("automatically links newly advertised ASINs to existing catalog books", async () => {
+    const profileId = await seedProfile(pool);
+    const workspace = await pool.query<{
+      connection_id: string;
+      workspace_id: string;
+    }>(
+      `select c.id::text as connection_id, c.workspace_id::text from amazon_connections c
+       join amazon_profiles p on p.connection_id = c.id where p.id = $1`,
+      [profileId],
+    );
+    const workspaceId = workspace.rows[0]!.workspace_id;
+
+    // Create an existing book in the workspace catalog (e.g. from another marketplace)
+    const book = await createBook(pool, {
+      workspaceId,
+      asin: "B0AUTO1234",
+      title: "Auto Linked Book",
+      format: "paperback",
+    });
+
+    const campaign = await upsertCampaign(pool, {
+      profileId,
+      amazonCampaignId: "amzn-campaign-autolink",
+      name: "Autolink Campaign",
+      state: "enabled",
+    });
+    const adGroup = await upsertAdGroup(pool, {
+      profileId,
+      campaignId: campaign.id,
+      amazonAdGroupId: "amzn-ad-group-autolink",
+      name: "Autolink ad group",
+      state: "enabled",
+    });
+    await upsertAd(pool, {
+      profileId,
+      adGroupId: adGroup.id,
+      amazonAdId: "amzn-ad-autolink",
+      asin: "B0AUTO1234",
+      state: "enabled",
+    });
+
+    // Before autoLink, it appears in unmapped products
+    const unmappedBefore = await listUnmappedAdvertisedProducts(
+      pool,
+      workspaceId,
+    );
+    expect(unmappedBefore).toContainEqual(
+      expect.objectContaining({ asin: "B0AUTO1234", profileId }),
+    );
+
+    // Run autoLinkMatchingBooks
+    await autoLinkMatchingBooks(pool, profileId);
+
+    // After autoLink, it is automatically linked and no longer unmapped
+    const unmappedAfter = await listUnmappedAdvertisedProducts(
+      pool,
+      workspaceId,
+    );
+    expect(unmappedAfter).not.toContainEqual(
+      expect.objectContaining({ asin: "B0AUTO1234" }),
+    );
+
+    const reloadedBook = await getBook(pool, book.id);
+    expect(reloadedBook?.profileIds).toContain(profileId);
   });
 
   it("links a catalog book to a marketplace that has no ads yet", async () => {
