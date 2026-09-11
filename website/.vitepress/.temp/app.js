@@ -1597,7 +1597,7 @@ const _sfc_main$15 = {
 const _sfc_setup$15 = _sfc_main$15.setup;
 _sfc_main$15.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress-plugin-mermaid@2.0.17_mermaid@11.17.2_vitepress@1.6.4_@algolia+client-search@_415bd2c92a563abd9bffdf21da8d471a/node_modules/vitepress-plugin-mermaid/dist/Mermaid.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress-plugin-mermaid@2.0.17_mermaid@11.17.2_vitepress@1.6.4_@algolia+client-search@_f4b634bd1cfa0725c920711ba2f54ef8/node_modules/vitepress-plugin-mermaid/dist/Mermaid.vue");
   return _sfc_setup$15 ? _sfc_setup$15(props, ctx) : void 0;
 };
 const _sfc_main$14 = /* @__PURE__ */ defineComponent({
@@ -1622,7 +1622,7 @@ const _sfc_main$14 = /* @__PURE__ */ defineComponent({
 const _sfc_setup$14 = _sfc_main$14.setup;
 _sfc_main$14.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPBadge.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPBadge.vue");
   return _sfc_setup$14 ? _sfc_setup$14(props, ctx) : void 0;
 };
 const _sfc_main$13 = /* @__PURE__ */ defineComponent({
@@ -1634,7 +1634,7 @@ const _sfc_main$13 = /* @__PURE__ */ defineComponent({
   setup(__props) {
     return (_ctx, _push, _parent, _attrs) => {
       if (__props.show) {
-        _push(`<div${ssrRenderAttrs(mergeProps({ class: "VPBackdrop" }, _attrs))} data-v-0a1ab34e></div>`);
+        _push(`<div${ssrRenderAttrs(mergeProps({ class: "VPBackdrop" }, _attrs))} data-v-45c6ceff></div>`);
       } else {
         _push(`<!---->`);
       }
@@ -1644,10 +1644,10 @@ const _sfc_main$13 = /* @__PURE__ */ defineComponent({
 const _sfc_setup$13 = _sfc_main$13.setup;
 _sfc_main$13.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPBackdrop.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPBackdrop.vue");
   return _sfc_setup$13 ? _sfc_setup$13(props, ctx) : void 0;
 };
-const VPBackdrop = /* @__PURE__ */ _export_sfc(_sfc_main$13, [["__scopeId", "data-v-0a1ab34e"]]);
+const VPBackdrop = /* @__PURE__ */ _export_sfc(_sfc_main$13, [["__scopeId", "data-v-45c6ceff"]]);
 const useData = useData$1;
 function throttleAndDebounce(fn, delay) {
   let timeoutId;
@@ -1699,17 +1699,17 @@ const _sfc_main$12 = /* @__PURE__ */ defineComponent({
     const { currentLang } = useLangs();
     return (_ctx, _push, _parent, _attrs) => {
       var _a, _b, _c, _d, _e;
-      _push(`<div${ssrRenderAttrs(mergeProps({ class: "NotFound" }, _attrs))} data-v-7be9017a><p class="code" data-v-7be9017a>${ssrInterpolate(((_a = unref(theme2).notFound) == null ? void 0 : _a.code) ?? "404")}</p><h1 class="title" data-v-7be9017a>${ssrInterpolate(((_b = unref(theme2).notFound) == null ? void 0 : _b.title) ?? "PAGE NOT FOUND")}</h1><div class="divider" data-v-7be9017a></div><blockquote class="quote" data-v-7be9017a>${ssrInterpolate(((_c = unref(theme2).notFound) == null ? void 0 : _c.quote) ?? "But if you don't change your direction, and if you keep looking, you may end up where you are heading.")}</blockquote><div class="action" data-v-7be9017a><a class="link"${ssrRenderAttr("href", unref(withBase)(unref(currentLang).link))}${ssrRenderAttr("aria-label", ((_d = unref(theme2).notFound) == null ? void 0 : _d.linkLabel) ?? "go to home")} data-v-7be9017a>${ssrInterpolate(((_e = unref(theme2).notFound) == null ? void 0 : _e.linkText) ?? "Take me home")}</a></div></div>`);
+      _push(`<div${ssrRenderAttrs(mergeProps({ class: "NotFound" }, _attrs))} data-v-6b6220c1><p class="code" data-v-6b6220c1>${ssrInterpolate(((_a = unref(theme2).notFound) == null ? void 0 : _a.code) ?? "404")}</p><h1 class="title" data-v-6b6220c1>${ssrInterpolate(((_b = unref(theme2).notFound) == null ? void 0 : _b.title) ?? "PAGE NOT FOUND")}</h1><div class="divider" data-v-6b6220c1></div><blockquote class="quote" data-v-6b6220c1>${ssrInterpolate(((_c = unref(theme2).notFound) == null ? void 0 : _c.quote) ?? "But if you don't change your direction, and if you keep looking, you may end up where you are heading.")}</blockquote><div class="action" data-v-6b6220c1><a class="link"${ssrRenderAttr("href", unref(withBase)(unref(currentLang).link))}${ssrRenderAttr("aria-label", ((_d = unref(theme2).notFound) == null ? void 0 : _d.linkLabel) ?? "go to home")} data-v-6b6220c1>${ssrInterpolate(((_e = unref(theme2).notFound) == null ? void 0 : _e.linkText) ?? "Take me home")}</a></div></div>`);
     };
   }
 });
 const _sfc_setup$12 = _sfc_main$12.setup;
 _sfc_main$12.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/NotFound.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/NotFound.vue");
   return _sfc_setup$12 ? _sfc_setup$12(props, ctx) : void 0;
 };
-const NotFound = /* @__PURE__ */ _export_sfc(_sfc_main$12, [["__scopeId", "data-v-7be9017a"]]);
+const NotFound = /* @__PURE__ */ _export_sfc(_sfc_main$12, [["__scopeId", "data-v-6b6220c1"]]);
 function getSidebar(_sidebar, path) {
   if (Array.isArray(_sidebar))
     return addBase(_sidebar);
@@ -2064,9 +2064,9 @@ const _sfc_main$11 = /* @__PURE__ */ defineComponent({
       const _component_VPDocOutlineItem = resolveComponent("VPDocOutlineItem", true);
       _push(`<ul${ssrRenderAttrs(mergeProps({
         class: ["VPDocOutlineItem", __props.root ? "root" : "nested"]
-      }, _attrs))} data-v-8b585ecf><!--[-->`);
+      }, _attrs))} data-v-e5c211f7><!--[-->`);
       ssrRenderList(__props.headers, ({ children, link: link2, title }) => {
-        _push(`<li data-v-8b585ecf><a class="outline-link"${ssrRenderAttr("href", link2)}${ssrRenderAttr("title", title)} data-v-8b585ecf>${ssrInterpolate(title)}</a>`);
+        _push(`<li data-v-e5c211f7><a class="outline-link"${ssrRenderAttr("href", link2)}${ssrRenderAttr("title", title)} data-v-e5c211f7>${ssrInterpolate(title)}</a>`);
         if (children == null ? void 0 : children.length) {
           _push(ssrRenderComponent(_component_VPDocOutlineItem, { headers: children }, null, _parent));
         } else {
@@ -2081,10 +2081,10 @@ const _sfc_main$11 = /* @__PURE__ */ defineComponent({
 const _sfc_setup$11 = _sfc_main$11.setup;
 _sfc_main$11.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPDocOutlineItem.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPDocOutlineItem.vue");
   return _sfc_setup$11 ? _sfc_setup$11(props, ctx) : void 0;
 };
-const VPDocOutlineItem = /* @__PURE__ */ _export_sfc(_sfc_main$11, [["__scopeId", "data-v-8b585ecf"]]);
+const VPDocOutlineItem = /* @__PURE__ */ _export_sfc(_sfc_main$11, [["__scopeId", "data-v-e5c211f7"]]);
 const _sfc_main$10 = /* @__PURE__ */ defineComponent({
   __name: "VPDocAsideOutline",
   __ssrInlineRender: true,
@@ -2103,7 +2103,7 @@ const _sfc_main$10 = /* @__PURE__ */ defineComponent({
         class: ["VPDocAsideOutline", { "has-outline": headers.value.length > 0 }],
         ref_key: "container",
         ref: container
-      }, _attrs))} data-v-748930d5><div class="content" data-v-748930d5><div class="outline-marker" data-v-748930d5></div><div aria-level="2" class="outline-title" id="doc-outline-aria-label" role="heading" data-v-748930d5>${ssrInterpolate(unref(resolveTitle)(unref(theme2)))}</div>`);
+      }, _attrs))} data-v-7db743d0><div class="content" data-v-7db743d0><div class="outline-marker" data-v-7db743d0></div><div aria-level="2" class="outline-title" id="doc-outline-aria-label" role="heading" data-v-7db743d0>${ssrInterpolate(unref(resolveTitle)(unref(theme2)))}</div>`);
       _push(ssrRenderComponent(VPDocOutlineItem, {
         headers: headers.value,
         root: true
@@ -2115,10 +2115,10 @@ const _sfc_main$10 = /* @__PURE__ */ defineComponent({
 const _sfc_setup$10 = _sfc_main$10.setup;
 _sfc_main$10.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPDocAsideOutline.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPDocAsideOutline.vue");
   return _sfc_setup$10 ? _sfc_setup$10(props, ctx) : void 0;
 };
-const VPDocAsideOutline = /* @__PURE__ */ _export_sfc(_sfc_main$10, [["__scopeId", "data-v-748930d5"]]);
+const VPDocAsideOutline = /* @__PURE__ */ _export_sfc(_sfc_main$10, [["__scopeId", "data-v-7db743d0"]]);
 const _sfc_main$$ = /* @__PURE__ */ defineComponent({
   __name: "VPDocAsideCarbonAds",
   __ssrInlineRender: true,
@@ -2137,7 +2137,7 @@ const _sfc_main$$ = /* @__PURE__ */ defineComponent({
 const _sfc_setup$$ = _sfc_main$$.setup;
 _sfc_main$$.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPDocAsideCarbonAds.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPDocAsideCarbonAds.vue");
   return _sfc_setup$$ ? _sfc_setup$$(props, ctx) : void 0;
 };
 const _sfc_main$_ = /* @__PURE__ */ defineComponent({
@@ -2146,12 +2146,12 @@ const _sfc_main$_ = /* @__PURE__ */ defineComponent({
   setup(__props) {
     const { theme: theme2 } = useData();
     return (_ctx, _push, _parent, _attrs) => {
-      _push(`<div${ssrRenderAttrs(mergeProps({ class: "VPDocAside" }, _attrs))} data-v-393385a2>`);
+      _push(`<div${ssrRenderAttrs(mergeProps({ class: "VPDocAside" }, _attrs))} data-v-90449345>`);
       ssrRenderSlot(_ctx.$slots, "aside-top", {}, null, _push, _parent);
       ssrRenderSlot(_ctx.$slots, "aside-outline-before", {}, null, _push, _parent);
       _push(ssrRenderComponent(VPDocAsideOutline, null, null, _parent));
       ssrRenderSlot(_ctx.$slots, "aside-outline-after", {}, null, _push, _parent);
-      _push(`<div class="spacer" data-v-393385a2></div>`);
+      _push(`<div class="spacer" data-v-90449345></div>`);
       ssrRenderSlot(_ctx.$slots, "aside-ads-before", {}, null, _push, _parent);
       if (unref(theme2).carbonAds) {
         _push(ssrRenderComponent(_sfc_main$$, {
@@ -2169,10 +2169,10 @@ const _sfc_main$_ = /* @__PURE__ */ defineComponent({
 const _sfc_setup$_ = _sfc_main$_.setup;
 _sfc_main$_.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPDocAside.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPDocAside.vue");
   return _sfc_setup$_ ? _sfc_setup$_(props, ctx) : void 0;
 };
-const VPDocAside = /* @__PURE__ */ _export_sfc(_sfc_main$_, [["__scopeId", "data-v-393385a2"]]);
+const VPDocAside = /* @__PURE__ */ _export_sfc(_sfc_main$_, [["__scopeId", "data-v-90449345"]]);
 function useEditLink() {
   const { theme: theme2, page } = useData();
   return computed(() => {
@@ -2261,7 +2261,7 @@ const _sfc_main$Z = /* @__PURE__ */ defineComponent({
 const _sfc_setup$Z = _sfc_main$Z.setup;
 _sfc_main$Z.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPLink.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPLink.vue");
   return _sfc_setup$Z ? _sfc_setup$Z(props, ctx) : void 0;
 };
 const _sfc_main$Y = /* @__PURE__ */ defineComponent({
@@ -2288,17 +2288,17 @@ const _sfc_main$Y = /* @__PURE__ */ defineComponent({
     });
     return (_ctx, _push, _parent, _attrs) => {
       var _a;
-      _push(`<p${ssrRenderAttrs(mergeProps({ class: "VPLastUpdated" }, _attrs))} data-v-e262f59f>${ssrInterpolate(((_a = unref(theme2).lastUpdated) == null ? void 0 : _a.text) || unref(theme2).lastUpdatedText || "Last updated")}: <time${ssrRenderAttr("datetime", isoDatetime.value)} data-v-e262f59f>${ssrInterpolate(datetime.value)}</time></p>`);
+      _push(`<p${ssrRenderAttrs(mergeProps({ class: "VPLastUpdated" }, _attrs))} data-v-3b701806>${ssrInterpolate(((_a = unref(theme2).lastUpdated) == null ? void 0 : _a.text) || unref(theme2).lastUpdatedText || "Last updated")}: <time${ssrRenderAttr("datetime", isoDatetime.value)} data-v-3b701806>${ssrInterpolate(datetime.value)}</time></p>`);
     };
   }
 });
 const _sfc_setup$Y = _sfc_main$Y.setup;
 _sfc_main$Y.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPDocFooterLastUpdated.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPDocFooterLastUpdated.vue");
   return _sfc_setup$Y ? _sfc_setup$Y(props, ctx) : void 0;
 };
-const VPDocFooterLastUpdated = /* @__PURE__ */ _export_sfc(_sfc_main$Y, [["__scopeId", "data-v-e262f59f"]]);
+const VPDocFooterLastUpdated = /* @__PURE__ */ _export_sfc(_sfc_main$Y, [["__scopeId", "data-v-3b701806"]]);
 const _sfc_main$X = /* @__PURE__ */ defineComponent({
   __name: "VPDocFooter",
   __ssrInlineRender: true,
@@ -2316,12 +2316,12 @@ const _sfc_main$X = /* @__PURE__ */ defineComponent({
     return (_ctx, _push, _parent, _attrs) => {
       var _a, _b, _c, _d;
       if (showFooter.value) {
-        _push(`<footer${ssrRenderAttrs(mergeProps({ class: "VPDocFooter" }, _attrs))} data-v-3f7872f1>`);
+        _push(`<footer${ssrRenderAttrs(mergeProps({ class: "VPDocFooter" }, _attrs))} data-v-4d6e2a1b>`);
         ssrRenderSlot(_ctx.$slots, "doc-footer-before", {}, null, _push, _parent);
         if (hasEditLink.value || hasLastUpdated.value) {
-          _push(`<div class="edit-info" data-v-3f7872f1>`);
+          _push(`<div class="edit-info" data-v-4d6e2a1b>`);
           if (hasEditLink.value) {
-            _push(`<div class="edit-link" data-v-3f7872f1>`);
+            _push(`<div class="edit-link" data-v-4d6e2a1b>`);
             _push(ssrRenderComponent(_sfc_main$Z, {
               class: "edit-link-button",
               href: unref(editLink).url,
@@ -2329,7 +2329,7 @@ const _sfc_main$X = /* @__PURE__ */ defineComponent({
             }, {
               default: withCtx((_, _push2, _parent2, _scopeId) => {
                 if (_push2) {
-                  _push2(`<span class="vpi-square-pen edit-link-icon" data-v-3f7872f1${_scopeId}></span> ${ssrInterpolate(unref(editLink).text)}`);
+                  _push2(`<span class="vpi-square-pen edit-link-icon" data-v-4d6e2a1b${_scopeId}></span> ${ssrInterpolate(unref(editLink).text)}`);
                 } else {
                   return [
                     createVNode("span", { class: "vpi-square-pen edit-link-icon" }),
@@ -2344,7 +2344,7 @@ const _sfc_main$X = /* @__PURE__ */ defineComponent({
             _push(`<!---->`);
           }
           if (hasLastUpdated.value) {
-            _push(`<div class="last-updated" data-v-3f7872f1>`);
+            _push(`<div class="last-updated" data-v-4d6e2a1b>`);
             _push(ssrRenderComponent(VPDocFooterLastUpdated, null, null, _parent));
             _push(`</div>`);
           } else {
@@ -2355,7 +2355,7 @@ const _sfc_main$X = /* @__PURE__ */ defineComponent({
           _push(`<!---->`);
         }
         if (((_a = unref(control).prev) == null ? void 0 : _a.link) || ((_b = unref(control).next) == null ? void 0 : _b.link)) {
-          _push(`<nav class="prev-next" aria-labelledby="doc-footer-aria-label" data-v-3f7872f1><span class="visually-hidden" id="doc-footer-aria-label" data-v-3f7872f1>Pager</span><div class="pager" data-v-3f7872f1>`);
+          _push(`<nav class="prev-next" aria-labelledby="doc-footer-aria-label" data-v-4d6e2a1b><span class="visually-hidden" id="doc-footer-aria-label" data-v-4d6e2a1b>Pager</span><div class="pager" data-v-4d6e2a1b>`);
           if ((_c = unref(control).prev) == null ? void 0 : _c.link) {
             _push(ssrRenderComponent(_sfc_main$Z, {
               class: "pager-link prev",
@@ -2364,7 +2364,7 @@ const _sfc_main$X = /* @__PURE__ */ defineComponent({
               default: withCtx((_, _push2, _parent2, _scopeId) => {
                 var _a2, _b2;
                 if (_push2) {
-                  _push2(`<span class="desc" data-v-3f7872f1${_scopeId}>${(((_a2 = unref(theme2).docFooter) == null ? void 0 : _a2.prev) || "Previous page") ?? ""}</span><span class="title" data-v-3f7872f1${_scopeId}>${unref(control).prev.text ?? ""}</span>`);
+                  _push2(`<span class="desc" data-v-4d6e2a1b${_scopeId}>${(((_a2 = unref(theme2).docFooter) == null ? void 0 : _a2.prev) || "Previous page") ?? ""}</span><span class="title" data-v-4d6e2a1b${_scopeId}>${unref(control).prev.text ?? ""}</span>`);
                 } else {
                   return [
                     createVNode("span", {
@@ -2383,7 +2383,7 @@ const _sfc_main$X = /* @__PURE__ */ defineComponent({
           } else {
             _push(`<!---->`);
           }
-          _push(`</div><div class="pager" data-v-3f7872f1>`);
+          _push(`</div><div class="pager" data-v-4d6e2a1b>`);
           if ((_d = unref(control).next) == null ? void 0 : _d.link) {
             _push(ssrRenderComponent(_sfc_main$Z, {
               class: "pager-link next",
@@ -2392,7 +2392,7 @@ const _sfc_main$X = /* @__PURE__ */ defineComponent({
               default: withCtx((_, _push2, _parent2, _scopeId) => {
                 var _a2, _b2;
                 if (_push2) {
-                  _push2(`<span class="desc" data-v-3f7872f1${_scopeId}>${(((_a2 = unref(theme2).docFooter) == null ? void 0 : _a2.next) || "Next page") ?? ""}</span><span class="title" data-v-3f7872f1${_scopeId}>${unref(control).next.text ?? ""}</span>`);
+                  _push2(`<span class="desc" data-v-4d6e2a1b${_scopeId}>${(((_a2 = unref(theme2).docFooter) == null ? void 0 : _a2.next) || "Next page") ?? ""}</span><span class="title" data-v-4d6e2a1b${_scopeId}>${unref(control).next.text ?? ""}</span>`);
                 } else {
                   return [
                     createVNode("span", {
@@ -2425,10 +2425,10 @@ const _sfc_main$X = /* @__PURE__ */ defineComponent({
 const _sfc_setup$X = _sfc_main$X.setup;
 _sfc_main$X.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPDocFooter.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPDocFooter.vue");
   return _sfc_setup$X ? _sfc_setup$X(props, ctx) : void 0;
 };
-const VPDocFooter = /* @__PURE__ */ _export_sfc(_sfc_main$X, [["__scopeId", "data-v-3f7872f1"]]);
+const VPDocFooter = /* @__PURE__ */ _export_sfc(_sfc_main$X, [["__scopeId", "data-v-4d6e2a1b"]]);
 const _sfc_main$W = /* @__PURE__ */ defineComponent({
   __name: "VPDoc",
   __ssrInlineRender: true,
@@ -2443,11 +2443,11 @@ const _sfc_main$W = /* @__PURE__ */ defineComponent({
       const _component_Content = resolveComponent("Content");
       _push(`<div${ssrRenderAttrs(mergeProps({
         class: ["VPDoc", { "has-sidebar": unref(hasSidebar), "has-aside": unref(hasAside) }]
-      }, _attrs))} data-v-0bf45b60>`);
+      }, _attrs))} data-v-8886acb2>`);
       ssrRenderSlot(_ctx.$slots, "doc-top", {}, null, _push, _parent);
-      _push(`<div class="container" data-v-0bf45b60>`);
+      _push(`<div class="container" data-v-8886acb2>`);
       if (unref(hasAside)) {
-        _push(`<div class="${ssrRenderClass([{ "left-aside": unref(leftAside) }, "aside"])}" data-v-0bf45b60><div class="aside-curtain" data-v-0bf45b60></div><div class="aside-container" data-v-0bf45b60><div class="aside-content" data-v-0bf45b60>`);
+        _push(`<div class="${ssrRenderClass([{ "left-aside": unref(leftAside) }, "aside"])}" data-v-8886acb2><div class="aside-curtain" data-v-8886acb2></div><div class="aside-container" data-v-8886acb2><div class="aside-content" data-v-8886acb2>`);
         _push(ssrRenderComponent(VPDocAside, null, {
           "aside-top": withCtx((_, _push2, _parent2, _scopeId) => {
             if (_push2) {
@@ -2509,9 +2509,9 @@ const _sfc_main$W = /* @__PURE__ */ defineComponent({
       } else {
         _push(`<!---->`);
       }
-      _push(`<div class="content" data-v-0bf45b60><div class="content-container" data-v-0bf45b60>`);
+      _push(`<div class="content" data-v-8886acb2><div class="content-container" data-v-8886acb2>`);
       ssrRenderSlot(_ctx.$slots, "doc-before", {}, null, _push, _parent);
-      _push(`<main class="main" data-v-0bf45b60>`);
+      _push(`<main class="main" data-v-8886acb2>`);
       _push(ssrRenderComponent(_component_Content, {
         class: ["vp-doc", [
           pageName.value,
@@ -2541,10 +2541,10 @@ const _sfc_main$W = /* @__PURE__ */ defineComponent({
 const _sfc_setup$W = _sfc_main$W.setup;
 _sfc_main$W.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPDoc.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPDoc.vue");
   return _sfc_setup$W ? _sfc_setup$W(props, ctx) : void 0;
 };
-const VPDoc = /* @__PURE__ */ _export_sfc(_sfc_main$W, [["__scopeId", "data-v-0bf45b60"]]);
+const VPDoc = /* @__PURE__ */ _export_sfc(_sfc_main$W, [["__scopeId", "data-v-8886acb2"]]);
 const _sfc_main$V = /* @__PURE__ */ defineComponent({
   __name: "VPButton",
   __ssrInlineRender: true,
@@ -2589,10 +2589,10 @@ const _sfc_main$V = /* @__PURE__ */ defineComponent({
 const _sfc_setup$V = _sfc_main$V.setup;
 _sfc_main$V.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPButton.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPButton.vue");
   return _sfc_setup$V ? _sfc_setup$V(props, ctx) : void 0;
 };
-const VPButton = /* @__PURE__ */ _export_sfc(_sfc_main$V, [["__scopeId", "data-v-d1306ed0"]]);
+const VPButton = /* @__PURE__ */ _export_sfc(_sfc_main$V, [["__scopeId", "data-v-63cfb9e1"]]);
 const _sfc_main$U = /* @__PURE__ */ defineComponent({
   ...{ inheritAttrs: false },
   __name: "VPImage",
@@ -2610,7 +2610,7 @@ const _sfc_main$U = /* @__PURE__ */ defineComponent({
           _push(`<img${ssrRenderAttrs(mergeProps({ class: "VPImage" }, typeof __props.image === "string" ? _ctx.$attrs : { ...__props.image, ..._ctx.$attrs }, {
             src: unref(withBase)(typeof __props.image === "string" ? __props.image : __props.image.src),
             alt: __props.alt ?? (typeof __props.image === "string" ? "" : __props.image.alt || "")
-          }))} data-v-42c60993>`);
+          }))} data-v-380ff88b>`);
         } else {
           _push(`<!--[-->`);
           _push(ssrRenderComponent(_component_VPImage, mergeProps({
@@ -2635,10 +2635,10 @@ const _sfc_main$U = /* @__PURE__ */ defineComponent({
 const _sfc_setup$U = _sfc_main$U.setup;
 _sfc_main$U.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPImage.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPImage.vue");
   return _sfc_setup$U ? _sfc_setup$U(props, ctx) : void 0;
 };
-const VPImage = /* @__PURE__ */ _export_sfc(_sfc_main$U, [["__scopeId", "data-v-42c60993"]]);
+const VPImage = /* @__PURE__ */ _export_sfc(_sfc_main$U, [["__scopeId", "data-v-380ff88b"]]);
 const _sfc_main$T = /* @__PURE__ */ defineComponent({
   __name: "VPHero",
   __ssrInlineRender: true,
@@ -2654,32 +2654,32 @@ const _sfc_main$T = /* @__PURE__ */ defineComponent({
     return (_ctx, _push, _parent, _attrs) => {
       _push(`<div${ssrRenderAttrs(mergeProps({
         class: ["VPHero", { "has-image": __props.image || unref(heroImageSlotExists) }]
-      }, _attrs))} data-v-36471552><div class="container" data-v-36471552><div class="main" data-v-36471552>`);
+      }, _attrs))} data-v-267211d9><div class="container" data-v-267211d9><div class="main" data-v-267211d9>`);
       ssrRenderSlot(_ctx.$slots, "home-hero-info-before", {}, null, _push, _parent);
       ssrRenderSlot(_ctx.$slots, "home-hero-info", {}, () => {
-        _push(`<h1 class="heading" data-v-36471552>`);
+        _push(`<h1 class="heading" data-v-267211d9>`);
         if (__props.name) {
-          _push(`<span class="name clip" data-v-36471552>${__props.name ?? ""}</span>`);
+          _push(`<span class="name clip" data-v-267211d9>${__props.name ?? ""}</span>`);
         } else {
           _push(`<!---->`);
         }
         if (__props.text) {
-          _push(`<span class="text" data-v-36471552>${__props.text ?? ""}</span>`);
+          _push(`<span class="text" data-v-267211d9>${__props.text ?? ""}</span>`);
         } else {
           _push(`<!---->`);
         }
         _push(`</h1>`);
         if (__props.tagline) {
-          _push(`<p class="tagline" data-v-36471552>${__props.tagline ?? ""}</p>`);
+          _push(`<p class="tagline" data-v-267211d9>${__props.tagline ?? ""}</p>`);
         } else {
           _push(`<!---->`);
         }
       }, _push, _parent);
       ssrRenderSlot(_ctx.$slots, "home-hero-info-after", {}, null, _push, _parent);
       if (__props.actions) {
-        _push(`<div class="actions" data-v-36471552><!--[-->`);
+        _push(`<div class="actions" data-v-267211d9><!--[-->`);
         ssrRenderList(__props.actions, (action) => {
-          _push(`<div class="action" data-v-36471552>`);
+          _push(`<div class="action" data-v-267211d9>`);
           _push(ssrRenderComponent(VPButton, {
             tag: "a",
             size: "medium",
@@ -2698,7 +2698,7 @@ const _sfc_main$T = /* @__PURE__ */ defineComponent({
       ssrRenderSlot(_ctx.$slots, "home-hero-actions-after", {}, null, _push, _parent);
       _push(`</div>`);
       if (__props.image || unref(heroImageSlotExists)) {
-        _push(`<div class="image" data-v-36471552><div class="image-container" data-v-36471552><div class="image-bg" data-v-36471552></div>`);
+        _push(`<div class="image" data-v-267211d9><div class="image-container" data-v-267211d9><div class="image-bg" data-v-267211d9></div>`);
         ssrRenderSlot(_ctx.$slots, "home-hero-image", {}, () => {
           if (__props.image) {
             _push(ssrRenderComponent(VPImage, {
@@ -2720,10 +2720,10 @@ const _sfc_main$T = /* @__PURE__ */ defineComponent({
 const _sfc_setup$T = _sfc_main$T.setup;
 _sfc_main$T.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPHero.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPHero.vue");
   return _sfc_setup$T ? _sfc_setup$T(props, ctx) : void 0;
 };
-const VPHero = /* @__PURE__ */ _export_sfc(_sfc_main$T, [["__scopeId", "data-v-36471552"]]);
+const VPHero = /* @__PURE__ */ _export_sfc(_sfc_main$T, [["__scopeId", "data-v-267211d9"]]);
 const _sfc_main$S = /* @__PURE__ */ defineComponent({
   __name: "VPHomeHero",
   __ssrInlineRender: true,
@@ -2795,7 +2795,7 @@ const _sfc_main$S = /* @__PURE__ */ defineComponent({
 const _sfc_setup$S = _sfc_main$S.setup;
 _sfc_main$S.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPHomeHero.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPHomeHero.vue");
   return _sfc_setup$S ? _sfc_setup$S(props, ctx) : void 0;
 };
 const _sfc_main$R = /* @__PURE__ */ defineComponent({
@@ -2822,9 +2822,9 @@ const _sfc_main$R = /* @__PURE__ */ defineComponent({
       }, _attrs), {
         default: withCtx((_, _push2, _parent2, _scopeId) => {
           if (_push2) {
-            _push2(`<article class="box" data-v-496654f9${_scopeId}>`);
+            _push2(`<article class="box" data-v-f35d01f5${_scopeId}>`);
             if (typeof __props.icon === "object" && __props.icon.wrap) {
-              _push2(`<div class="icon" data-v-496654f9${_scopeId}>`);
+              _push2(`<div class="icon" data-v-f35d01f5${_scopeId}>`);
               _push2(ssrRenderComponent(VPImage, {
                 image: __props.icon,
                 alt: __props.icon.alt,
@@ -2840,18 +2840,18 @@ const _sfc_main$R = /* @__PURE__ */ defineComponent({
                 width: __props.icon.width || 48
               }, null, _parent2, _scopeId));
             } else if (__props.icon) {
-              _push2(`<div class="icon" data-v-496654f9${_scopeId}>${__props.icon ?? ""}</div>`);
+              _push2(`<div class="icon" data-v-f35d01f5${_scopeId}>${__props.icon ?? ""}</div>`);
             } else {
               _push2(`<!---->`);
             }
-            _push2(`<h2 class="title" data-v-496654f9${_scopeId}>${__props.title ?? ""}</h2>`);
+            _push2(`<h2 class="title" data-v-f35d01f5${_scopeId}>${__props.title ?? ""}</h2>`);
             if (__props.details) {
-              _push2(`<p class="details" data-v-496654f9${_scopeId}>${__props.details ?? ""}</p>`);
+              _push2(`<p class="details" data-v-f35d01f5${_scopeId}>${__props.details ?? ""}</p>`);
             } else {
               _push2(`<!---->`);
             }
             if (__props.linkText) {
-              _push2(`<div class="link-text" data-v-496654f9${_scopeId}><p class="link-text-value" data-v-496654f9${_scopeId}>${ssrInterpolate(__props.linkText)} <span class="vpi-arrow-right link-text-icon" data-v-496654f9${_scopeId}></span></p></div>`);
+              _push2(`<div class="link-text" data-v-f35d01f5${_scopeId}><p class="link-text-value" data-v-f35d01f5${_scopeId}>${ssrInterpolate(__props.linkText)} <span class="vpi-arrow-right link-text-icon" data-v-f35d01f5${_scopeId}></span></p></div>`);
             } else {
               _push2(`<!---->`);
             }
@@ -2910,10 +2910,10 @@ const _sfc_main$R = /* @__PURE__ */ defineComponent({
 const _sfc_setup$R = _sfc_main$R.setup;
 _sfc_main$R.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPFeature.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPFeature.vue");
   return _sfc_setup$R ? _sfc_setup$R(props, ctx) : void 0;
 };
-const VPFeature = /* @__PURE__ */ _export_sfc(_sfc_main$R, [["__scopeId", "data-v-496654f9"]]);
+const VPFeature = /* @__PURE__ */ _export_sfc(_sfc_main$R, [["__scopeId", "data-v-f35d01f5"]]);
 const _sfc_main$Q = /* @__PURE__ */ defineComponent({
   __name: "VPFeatures",
   __ssrInlineRender: true,
@@ -2938,9 +2938,9 @@ const _sfc_main$Q = /* @__PURE__ */ defineComponent({
     });
     return (_ctx, _push, _parent, _attrs) => {
       if (__props.features) {
-        _push(`<div${ssrRenderAttrs(mergeProps({ class: "VPFeatures" }, _attrs))} data-v-5dd3cfe2><div class="container" data-v-5dd3cfe2><div class="items" data-v-5dd3cfe2><!--[-->`);
+        _push(`<div${ssrRenderAttrs(mergeProps({ class: "VPFeatures" }, _attrs))} data-v-89d44134><div class="container" data-v-89d44134><div class="items" data-v-89d44134><!--[-->`);
         ssrRenderList(__props.features, (feature) => {
-          _push(`<div class="${ssrRenderClass([[grid.value], "item"])}" data-v-5dd3cfe2>`);
+          _push(`<div class="${ssrRenderClass([[grid.value], "item"])}" data-v-89d44134>`);
           _push(ssrRenderComponent(VPFeature, {
             icon: feature.icon,
             title: feature.title,
@@ -2962,10 +2962,10 @@ const _sfc_main$Q = /* @__PURE__ */ defineComponent({
 const _sfc_setup$Q = _sfc_main$Q.setup;
 _sfc_main$Q.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPFeatures.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPFeatures.vue");
   return _sfc_setup$Q ? _sfc_setup$Q(props, ctx) : void 0;
 };
-const VPFeatures = /* @__PURE__ */ _export_sfc(_sfc_main$Q, [["__scopeId", "data-v-5dd3cfe2"]]);
+const VPFeatures = /* @__PURE__ */ _export_sfc(_sfc_main$Q, [["__scopeId", "data-v-89d44134"]]);
 const _sfc_main$P = /* @__PURE__ */ defineComponent({
   __name: "VPHomeFeatures",
   __ssrInlineRender: true,
@@ -2986,7 +2986,7 @@ const _sfc_main$P = /* @__PURE__ */ defineComponent({
 const _sfc_setup$P = _sfc_main$P.setup;
 _sfc_main$P.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPHomeFeatures.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPHomeFeatures.vue");
   return _sfc_setup$P ? _sfc_setup$P(props, ctx) : void 0;
 };
 const _sfc_main$O = /* @__PURE__ */ defineComponent({
@@ -3001,7 +3001,7 @@ const _sfc_main$O = /* @__PURE__ */ defineComponent({
       _push(`<div${ssrRenderAttrs(mergeProps({
         class: "vp-doc container",
         style: unref(vw) ? { "--vp-offset": `calc(50% - ${unref(vw) / 2}px)` } : {}
-      }, _attrs))} data-v-09ffd188>`);
+      }, _attrs))} data-v-fa929706>`);
       ssrRenderSlot(_ctx.$slots, "default", {}, null, _push, _parent);
       _push(`</div>`);
     };
@@ -3010,10 +3010,10 @@ const _sfc_main$O = /* @__PURE__ */ defineComponent({
 const _sfc_setup$O = _sfc_main$O.setup;
 _sfc_main$O.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPHomeContent.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPHomeContent.vue");
   return _sfc_setup$O ? _sfc_setup$O(props, ctx) : void 0;
 };
-const VPHomeContent = /* @__PURE__ */ _export_sfc(_sfc_main$O, [["__scopeId", "data-v-09ffd188"]]);
+const VPHomeContent = /* @__PURE__ */ _export_sfc(_sfc_main$O, [["__scopeId", "data-v-fa929706"]]);
 const _sfc_main$N = /* @__PURE__ */ defineComponent({
   __name: "VPHome",
   __ssrInlineRender: true,
@@ -3025,7 +3025,7 @@ const _sfc_main$N = /* @__PURE__ */ defineComponent({
         class: ["VPHome", {
           "external-link-icon-enabled": unref(theme2).externalLinkIcon
         }]
-      }, _attrs))} data-v-e59f84e6>`);
+      }, _attrs))} data-v-0fa03fc0>`);
       ssrRenderSlot(_ctx.$slots, "home-hero-before", {}, null, _push, _parent);
       _push(ssrRenderComponent(_sfc_main$S, null, {
         "home-hero-info-before": withCtx((_, _push2, _parent2, _scopeId) => {
@@ -3102,10 +3102,10 @@ const _sfc_main$N = /* @__PURE__ */ defineComponent({
 const _sfc_setup$N = _sfc_main$N.setup;
 _sfc_main$N.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPHome.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPHome.vue");
   return _sfc_setup$N ? _sfc_setup$N(props, ctx) : void 0;
 };
-const VPHome = /* @__PURE__ */ _export_sfc(_sfc_main$N, [["__scopeId", "data-v-e59f84e6"]]);
+const VPHome = /* @__PURE__ */ _export_sfc(_sfc_main$N, [["__scopeId", "data-v-0fa03fc0"]]);
 const _sfc_main$M = {};
 function _sfc_ssrRender$1(_ctx, _push, _parent, _attrs) {
   const _component_Content = resolveComponent("Content");
@@ -3118,7 +3118,7 @@ function _sfc_ssrRender$1(_ctx, _push, _parent, _attrs) {
 const _sfc_setup$M = _sfc_main$M.setup;
 _sfc_main$M.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPPage.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPPage.vue");
   return _sfc_setup$M ? _sfc_setup$M(props, ctx) : void 0;
 };
 const VPPage = /* @__PURE__ */ _export_sfc(_sfc_main$M, [["ssrRender", _sfc_ssrRender$1]]);
@@ -3135,7 +3135,7 @@ const _sfc_main$L = /* @__PURE__ */ defineComponent({
           "is-home": unref(frontmatter).layout === "home"
         }],
         id: "VPContent"
-      }, _attrs))} data-v-1d3f93e9>`);
+      }, _attrs))} data-v-208dc7bc>`);
       if (unref(page).isNotFound) {
         ssrRenderSlot(_ctx.$slots, "not-found", {}, () => {
           _push(ssrRenderComponent(NotFound, null, null, _parent));
@@ -3360,10 +3360,10 @@ const _sfc_main$L = /* @__PURE__ */ defineComponent({
 const _sfc_setup$L = _sfc_main$L.setup;
 _sfc_main$L.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPContent.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPContent.vue");
   return _sfc_setup$L ? _sfc_setup$L(props, ctx) : void 0;
 };
-const VPContent = /* @__PURE__ */ _export_sfc(_sfc_main$L, [["__scopeId", "data-v-1d3f93e9"]]);
+const VPContent = /* @__PURE__ */ _export_sfc(_sfc_main$L, [["__scopeId", "data-v-208dc7bc"]]);
 const _sfc_main$K = /* @__PURE__ */ defineComponent({
   __name: "VPFooter",
   __ssrInlineRender: true,
@@ -3374,14 +3374,14 @@ const _sfc_main$K = /* @__PURE__ */ defineComponent({
       if (unref(theme2).footer && unref(frontmatter).footer !== false) {
         _push(`<footer${ssrRenderAttrs(mergeProps({
           class: ["VPFooter", { "has-sidebar": unref(hasSidebar) }]
-        }, _attrs))} data-v-2ffd8989><div class="container" data-v-2ffd8989>`);
+        }, _attrs))} data-v-f7ae34a4><div class="container" data-v-f7ae34a4>`);
         if (unref(theme2).footer.message) {
-          _push(`<p class="message" data-v-2ffd8989>${unref(theme2).footer.message ?? ""}</p>`);
+          _push(`<p class="message" data-v-f7ae34a4>${unref(theme2).footer.message ?? ""}</p>`);
         } else {
           _push(`<!---->`);
         }
         if (unref(theme2).footer.copyright) {
-          _push(`<p class="copyright" data-v-2ffd8989>${unref(theme2).footer.copyright ?? ""}</p>`);
+          _push(`<p class="copyright" data-v-f7ae34a4>${unref(theme2).footer.copyright ?? ""}</p>`);
         } else {
           _push(`<!---->`);
         }
@@ -3395,10 +3395,10 @@ const _sfc_main$K = /* @__PURE__ */ defineComponent({
 const _sfc_setup$K = _sfc_main$K.setup;
 _sfc_main$K.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPFooter.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPFooter.vue");
   return _sfc_setup$K ? _sfc_setup$K(props, ctx) : void 0;
 };
-const VPFooter = /* @__PURE__ */ _export_sfc(_sfc_main$K, [["__scopeId", "data-v-2ffd8989"]]);
+const VPFooter = /* @__PURE__ */ _export_sfc(_sfc_main$K, [["__scopeId", "data-v-f7ae34a4"]]);
 function useLocalNav() {
   const { theme: theme2, frontmatter } = useData();
   const headers = shallowRef([]);
@@ -3451,14 +3451,14 @@ const _sfc_main$J = /* @__PURE__ */ defineComponent({
         style: { "--vp-vh": vh.value + "px" },
         ref_key: "main",
         ref: main
-      }, _attrs))} data-v-759c3763>`);
+      }, _attrs))} data-v-0ab6094d>`);
       if (__props.headers.length > 0) {
-        _push(`<button class="${ssrRenderClass({ open: open.value })}" data-v-759c3763><span class="menu-text" data-v-759c3763>${ssrInterpolate(unref(resolveTitle)(unref(theme2)))}</span><span class="vpi-chevron-right icon" data-v-759c3763></span></button>`);
+        _push(`<button class="${ssrRenderClass({ open: open.value })}" data-v-0ab6094d><span class="menu-text" data-v-0ab6094d>${ssrInterpolate(unref(resolveTitle)(unref(theme2)))}</span><span class="vpi-chevron-right icon" data-v-0ab6094d></span></button>`);
       } else {
-        _push(`<button data-v-759c3763>${ssrInterpolate(unref(theme2).returnToTopLabel || "Return to top")}</button>`);
+        _push(`<button data-v-0ab6094d>${ssrInterpolate(unref(theme2).returnToTopLabel || "Return to top")}</button>`);
       }
       if (open.value) {
-        _push(`<div class="items" data-v-759c3763><div class="header" data-v-759c3763><a class="top-link" href="#" data-v-759c3763>${ssrInterpolate(unref(theme2).returnToTopLabel || "Return to top")}</a></div><div class="outline" data-v-759c3763>`);
+        _push(`<div class="items" data-v-0ab6094d><div class="header" data-v-0ab6094d><a class="top-link" href="#" data-v-0ab6094d>${ssrInterpolate(unref(theme2).returnToTopLabel || "Return to top")}</a></div><div class="outline" data-v-0ab6094d>`);
         _push(ssrRenderComponent(VPDocOutlineItem, { headers: __props.headers }, null, _parent));
         _push(`</div></div>`);
       } else {
@@ -3471,10 +3471,10 @@ const _sfc_main$J = /* @__PURE__ */ defineComponent({
 const _sfc_setup$J = _sfc_main$J.setup;
 _sfc_main$J.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPLocalNavOutlineDropdown.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPLocalNavOutlineDropdown.vue");
   return _sfc_setup$J ? _sfc_setup$J(props, ctx) : void 0;
 };
-const VPLocalNavOutlineDropdown = /* @__PURE__ */ _export_sfc(_sfc_main$J, [["__scopeId", "data-v-759c3763"]]);
+const VPLocalNavOutlineDropdown = /* @__PURE__ */ _export_sfc(_sfc_main$J, [["__scopeId", "data-v-0ab6094d"]]);
 const _sfc_main$I = /* @__PURE__ */ defineComponent({
   __name: "VPLocalNav",
   __ssrInlineRender: true,
@@ -3514,9 +3514,9 @@ const _sfc_main$I = /* @__PURE__ */ defineComponent({
     });
     return (_ctx, _push, _parent, _attrs) => {
       if (unref(frontmatter).layout !== "home" && (!emptyAndNoSidebar.value || unref(y) >= navHeight.value)) {
-        _push(`<div${ssrRenderAttrs(mergeProps({ class: classes.value }, _attrs))} data-v-365c962a><div class="container" data-v-365c962a>`);
+        _push(`<div${ssrRenderAttrs(mergeProps({ class: classes.value }, _attrs))} data-v-0825c23b><div class="container" data-v-0825c23b>`);
         if (unref(hasSidebar)) {
-          _push(`<button class="menu"${ssrRenderAttr("aria-expanded", __props.open)} aria-controls="VPSidebarNav" data-v-365c962a><span class="vpi-align-left menu-icon" data-v-365c962a></span><span class="menu-text" data-v-365c962a>${ssrInterpolate(unref(theme2).sidebarMenuLabel || "Menu")}</span></button>`);
+          _push(`<button class="menu"${ssrRenderAttr("aria-expanded", __props.open)} aria-controls="VPSidebarNav" data-v-0825c23b><span class="vpi-align-left menu-icon" data-v-0825c23b></span><span class="menu-text" data-v-0825c23b>${ssrInterpolate(unref(theme2).sidebarMenuLabel || "Menu")}</span></button>`);
         } else {
           _push(`<!---->`);
         }
@@ -3534,10 +3534,10 @@ const _sfc_main$I = /* @__PURE__ */ defineComponent({
 const _sfc_setup$I = _sfc_main$I.setup;
 _sfc_main$I.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPLocalNav.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPLocalNav.vue");
   return _sfc_setup$I ? _sfc_setup$I(props, ctx) : void 0;
 };
-const VPLocalNav = /* @__PURE__ */ _export_sfc(_sfc_main$I, [["__scopeId", "data-v-365c962a"]]);
+const VPLocalNav = /* @__PURE__ */ _export_sfc(_sfc_main$I, [["__scopeId", "data-v-0825c23b"]]);
 function useNav() {
   const isScreenOpen = ref(false);
   function openScreen() {
@@ -3569,9 +3569,9 @@ function _sfc_ssrRender(_ctx, _push, _parent, _attrs) {
     class: "VPSwitch",
     type: "button",
     role: "switch"
-  }, _attrs))} data-v-6c273ade><span class="check" data-v-6c273ade>`);
+  }, _attrs))} data-v-2807f748><span class="check" data-v-2807f748>`);
   if (_ctx.$slots.default) {
-    _push(`<span class="icon" data-v-6c273ade>`);
+    _push(`<span class="icon" data-v-2807f748>`);
     ssrRenderSlot(_ctx.$slots, "default", {}, null, _push, _parent);
     _push(`</span>`);
   } else {
@@ -3582,10 +3582,10 @@ function _sfc_ssrRender(_ctx, _push, _parent, _attrs) {
 const _sfc_setup$H = _sfc_main$H.setup;
 _sfc_main$H.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPSwitch.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPSwitch.vue");
   return _sfc_setup$H ? _sfc_setup$H(props, ctx) : void 0;
 };
-const VPSwitch = /* @__PURE__ */ _export_sfc(_sfc_main$H, [["ssrRender", _sfc_ssrRender], ["__scopeId", "data-v-6c273ade"]]);
+const VPSwitch = /* @__PURE__ */ _export_sfc(_sfc_main$H, [["ssrRender", _sfc_ssrRender], ["__scopeId", "data-v-2807f748"]]);
 const _sfc_main$G = /* @__PURE__ */ defineComponent({
   __name: "VPSwitchAppearance",
   __ssrInlineRender: true,
@@ -3607,7 +3607,7 @@ const _sfc_main$G = /* @__PURE__ */ defineComponent({
       }, _attrs), {
         default: withCtx((_, _push2, _parent2, _scopeId) => {
           if (_push2) {
-            _push2(`<span class="vpi-sun sun" data-v-39588a48${_scopeId}></span><span class="vpi-moon moon" data-v-39588a48${_scopeId}></span>`);
+            _push2(`<span class="vpi-sun sun" data-v-e4722ede${_scopeId}></span><span class="vpi-moon moon" data-v-e4722ede${_scopeId}></span>`);
           } else {
             return [
               createVNode("span", { class: "vpi-sun sun" }),
@@ -3623,10 +3623,10 @@ const _sfc_main$G = /* @__PURE__ */ defineComponent({
 const _sfc_setup$G = _sfc_main$G.setup;
 _sfc_main$G.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPSwitchAppearance.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPSwitchAppearance.vue");
   return _sfc_setup$G ? _sfc_setup$G(props, ctx) : void 0;
 };
-const VPSwitchAppearance = /* @__PURE__ */ _export_sfc(_sfc_main$G, [["__scopeId", "data-v-39588a48"]]);
+const VPSwitchAppearance = /* @__PURE__ */ _export_sfc(_sfc_main$G, [["__scopeId", "data-v-e4722ede"]]);
 const _sfc_main$F = /* @__PURE__ */ defineComponent({
   __name: "VPNavBarAppearance",
   __ssrInlineRender: true,
@@ -3634,7 +3634,7 @@ const _sfc_main$F = /* @__PURE__ */ defineComponent({
     const { site } = useData();
     return (_ctx, _push, _parent, _attrs) => {
       if (unref(site).appearance && unref(site).appearance !== "force-dark" && unref(site).appearance !== "force-auto") {
-        _push(`<div${ssrRenderAttrs(mergeProps({ class: "VPNavBarAppearance" }, _attrs))} data-v-30856074>`);
+        _push(`<div${ssrRenderAttrs(mergeProps({ class: "VPNavBarAppearance" }, _attrs))} data-v-d9f1cadf>`);
         _push(ssrRenderComponent(VPSwitchAppearance, null, null, _parent));
         _push(`</div>`);
       } else {
@@ -3646,10 +3646,10 @@ const _sfc_main$F = /* @__PURE__ */ defineComponent({
 const _sfc_setup$F = _sfc_main$F.setup;
 _sfc_main$F.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPNavBarAppearance.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPNavBarAppearance.vue");
   return _sfc_setup$F ? _sfc_setup$F(props, ctx) : void 0;
 };
-const VPNavBarAppearance = /* @__PURE__ */ _export_sfc(_sfc_main$F, [["__scopeId", "data-v-30856074"]]);
+const VPNavBarAppearance = /* @__PURE__ */ _export_sfc(_sfc_main$F, [["__scopeId", "data-v-d9f1cadf"]]);
 const focusedElement = ref();
 let active = false;
 let listeners = 0;
@@ -3698,7 +3698,7 @@ const _sfc_main$E = /* @__PURE__ */ defineComponent({
   setup(__props) {
     const { page } = useData();
     return (_ctx, _push, _parent, _attrs) => {
-      _push(`<div${ssrRenderAttrs(mergeProps({ class: "VPMenuLink" }, _attrs))} data-v-e24391ea>`);
+      _push(`<div${ssrRenderAttrs(mergeProps({ class: "VPMenuLink" }, _attrs))} data-v-204cf35a>`);
       _push(ssrRenderComponent(_sfc_main$Z, {
         class: {
           active: unref(isActive)(
@@ -3714,7 +3714,7 @@ const _sfc_main$E = /* @__PURE__ */ defineComponent({
       }, {
         default: withCtx((_, _push2, _parent2, _scopeId) => {
           if (_push2) {
-            _push2(`<span data-v-e24391ea${_scopeId}>${__props.item.text ?? ""}</span>`);
+            _push2(`<span data-v-204cf35a${_scopeId}>${__props.item.text ?? ""}</span>`);
           } else {
             return [
               createVNode("span", {
@@ -3732,10 +3732,10 @@ const _sfc_main$E = /* @__PURE__ */ defineComponent({
 const _sfc_setup$E = _sfc_main$E.setup;
 _sfc_main$E.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPMenuLink.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPMenuLink.vue");
   return _sfc_setup$E ? _sfc_setup$E(props, ctx) : void 0;
 };
-const VPMenuLink = /* @__PURE__ */ _export_sfc(_sfc_main$E, [["__scopeId", "data-v-e24391ea"]]);
+const VPMenuLink = /* @__PURE__ */ _export_sfc(_sfc_main$E, [["__scopeId", "data-v-204cf35a"]]);
 const _sfc_main$D = /* @__PURE__ */ defineComponent({
   __name: "VPMenuGroup",
   __ssrInlineRender: true,
@@ -3745,9 +3745,9 @@ const _sfc_main$D = /* @__PURE__ */ defineComponent({
   },
   setup(__props) {
     return (_ctx, _push, _parent, _attrs) => {
-      _push(`<div${ssrRenderAttrs(mergeProps({ class: "VPMenuGroup" }, _attrs))} data-v-949a5004>`);
+      _push(`<div${ssrRenderAttrs(mergeProps({ class: "VPMenuGroup" }, _attrs))} data-v-bc3ff1dc>`);
       if (__props.text) {
-        _push(`<p class="title" data-v-949a5004>${ssrInterpolate(__props.text)}</p>`);
+        _push(`<p class="title" data-v-bc3ff1dc>${ssrInterpolate(__props.text)}</p>`);
       } else {
         _push(`<!---->`);
       }
@@ -3768,10 +3768,10 @@ const _sfc_main$D = /* @__PURE__ */ defineComponent({
 const _sfc_setup$D = _sfc_main$D.setup;
 _sfc_main$D.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPMenuGroup.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPMenuGroup.vue");
   return _sfc_setup$D ? _sfc_setup$D(props, ctx) : void 0;
 };
-const VPMenuGroup = /* @__PURE__ */ _export_sfc(_sfc_main$D, [["__scopeId", "data-v-949a5004"]]);
+const VPMenuGroup = /* @__PURE__ */ _export_sfc(_sfc_main$D, [["__scopeId", "data-v-bc3ff1dc"]]);
 const _sfc_main$C = /* @__PURE__ */ defineComponent({
   __name: "VPMenu",
   __ssrInlineRender: true,
@@ -3780,9 +3780,9 @@ const _sfc_main$C = /* @__PURE__ */ defineComponent({
   },
   setup(__props) {
     return (_ctx, _push, _parent, _attrs) => {
-      _push(`<div${ssrRenderAttrs(mergeProps({ class: "VPMenu" }, _attrs))} data-v-f30aa34d>`);
+      _push(`<div${ssrRenderAttrs(mergeProps({ class: "VPMenu" }, _attrs))} data-v-68b84f7a>`);
       if (__props.items) {
-        _push(`<div class="items" data-v-f30aa34d><!--[-->`);
+        _push(`<div class="items" data-v-68b84f7a><!--[-->`);
         ssrRenderList(__props.items, (item) => {
           _push(`<!--[-->`);
           if ("link" in item) {
@@ -3809,10 +3809,10 @@ const _sfc_main$C = /* @__PURE__ */ defineComponent({
 const _sfc_setup$C = _sfc_main$C.setup;
 _sfc_main$C.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPMenu.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPMenu.vue");
   return _sfc_setup$C ? _sfc_setup$C(props, ctx) : void 0;
 };
-const VPMenu = /* @__PURE__ */ _export_sfc(_sfc_main$C, [["__scopeId", "data-v-f30aa34d"]]);
+const VPMenu = /* @__PURE__ */ _export_sfc(_sfc_main$C, [["__scopeId", "data-v-68b84f7a"]]);
 const _sfc_main$B = /* @__PURE__ */ defineComponent({
   __name: "VPFlyout",
   __ssrInlineRender: true,
@@ -3834,24 +3834,24 @@ const _sfc_main$B = /* @__PURE__ */ defineComponent({
         class: "VPFlyout",
         ref_key: "el",
         ref: el
-      }, _attrs))} data-v-7b989c35><button type="button" class="button" aria-haspopup="true"${ssrRenderAttr("aria-expanded", open.value)}${ssrRenderAttr("aria-label", __props.label)} data-v-7b989c35>`);
+      }, _attrs))} data-v-5150d5b9><button type="button" class="button" aria-haspopup="true"${ssrRenderAttr("aria-expanded", open.value)}${ssrRenderAttr("aria-label", __props.label)} data-v-5150d5b9>`);
       if (__props.button || __props.icon) {
-        _push(`<span class="text" data-v-7b989c35>`);
+        _push(`<span class="text" data-v-5150d5b9>`);
         if (__props.icon) {
-          _push(`<span class="${ssrRenderClass([__props.icon, "option-icon"])}" data-v-7b989c35></span>`);
+          _push(`<span class="${ssrRenderClass([__props.icon, "option-icon"])}" data-v-5150d5b9></span>`);
         } else {
           _push(`<!---->`);
         }
         if (__props.button) {
-          _push(`<span data-v-7b989c35>${__props.button ?? ""}</span>`);
+          _push(`<span data-v-5150d5b9>${__props.button ?? ""}</span>`);
         } else {
           _push(`<!---->`);
         }
-        _push(`<span class="vpi-chevron-down text-icon" data-v-7b989c35></span></span>`);
+        _push(`<span class="vpi-chevron-down text-icon" data-v-5150d5b9></span></span>`);
       } else {
-        _push(`<span class="vpi-more-horizontal icon" data-v-7b989c35></span>`);
+        _push(`<span class="vpi-more-horizontal icon" data-v-5150d5b9></span>`);
       }
-      _push(`</button><div class="menu" data-v-7b989c35>`);
+      _push(`</button><div class="menu" data-v-5150d5b9>`);
       _push(ssrRenderComponent(VPMenu, { items: __props.items }, {
         default: withCtx((_, _push2, _parent2, _scopeId) => {
           if (_push2) {
@@ -3871,10 +3871,10 @@ const _sfc_main$B = /* @__PURE__ */ defineComponent({
 const _sfc_setup$B = _sfc_main$B.setup;
 _sfc_main$B.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPFlyout.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPFlyout.vue");
   return _sfc_setup$B ? _sfc_setup$B(props, ctx) : void 0;
 };
-const VPFlyout = /* @__PURE__ */ _export_sfc(_sfc_main$B, [["__scopeId", "data-v-7b989c35"]]);
+const VPFlyout = /* @__PURE__ */ _export_sfc(_sfc_main$B, [["__scopeId", "data-v-5150d5b9"]]);
 const _sfc_main$A = /* @__PURE__ */ defineComponent({
   __name: "VPSocialLink",
   __ssrInlineRender: true,
@@ -3914,17 +3914,17 @@ const _sfc_main$A = /* @__PURE__ */ defineComponent({
         "aria-label": __props.ariaLabel ?? (typeof __props.icon === "string" ? __props.icon : ""),
         target: "_blank",
         rel: "noopener"
-      }, _attrs))} data-v-088e8c67>${svg.value ?? ""}</a>`);
+      }, _attrs))} data-v-38fd76bc>${svg.value ?? ""}</a>`);
     };
   }
 });
 const _sfc_setup$A = _sfc_main$A.setup;
 _sfc_main$A.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPSocialLink.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPSocialLink.vue");
   return _sfc_setup$A ? _sfc_setup$A(props, ctx) : void 0;
 };
-const VPSocialLink = /* @__PURE__ */ _export_sfc(_sfc_main$A, [["__scopeId", "data-v-088e8c67"]]);
+const VPSocialLink = /* @__PURE__ */ _export_sfc(_sfc_main$A, [["__scopeId", "data-v-38fd76bc"]]);
 const _sfc_main$z = /* @__PURE__ */ defineComponent({
   __name: "VPSocialLinks",
   __ssrInlineRender: true,
@@ -3933,7 +3933,7 @@ const _sfc_main$z = /* @__PURE__ */ defineComponent({
   },
   setup(__props) {
     return (_ctx, _push, _parent, _attrs) => {
-      _push(`<div${ssrRenderAttrs(mergeProps({ class: "VPSocialLinks" }, _attrs))} data-v-309c61c9><!--[-->`);
+      _push(`<div${ssrRenderAttrs(mergeProps({ class: "VPSocialLinks" }, _attrs))} data-v-e6f2c025><!--[-->`);
       ssrRenderList(__props.links, ({ link: link2, icon, ariaLabel }) => {
         _push(ssrRenderComponent(VPSocialLink, {
           key: link2,
@@ -3949,10 +3949,10 @@ const _sfc_main$z = /* @__PURE__ */ defineComponent({
 const _sfc_setup$z = _sfc_main$z.setup;
 _sfc_main$z.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPSocialLinks.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPSocialLinks.vue");
   return _sfc_setup$z ? _sfc_setup$z(props, ctx) : void 0;
 };
-const VPSocialLinks = /* @__PURE__ */ _export_sfc(_sfc_main$z, [["__scopeId", "data-v-309c61c9"]]);
+const VPSocialLinks = /* @__PURE__ */ _export_sfc(_sfc_main$z, [["__scopeId", "data-v-e6f2c025"]]);
 const _sfc_main$y = /* @__PURE__ */ defineComponent({
   __name: "VPNavBarExtra",
   __ssrInlineRender: true,
@@ -3971,7 +3971,7 @@ const _sfc_main$y = /* @__PURE__ */ defineComponent({
           default: withCtx((_, _push2, _parent2, _scopeId) => {
             if (_push2) {
               if (unref(localeLinks).length && unref(currentLang).label) {
-                _push2(`<div class="group translations" data-v-136f843b${_scopeId}><p class="trans-title" data-v-136f843b${_scopeId}>${ssrInterpolate(unref(currentLang).label)}</p><!--[-->`);
+                _push2(`<div class="group translations" data-v-27340329${_scopeId}><p class="trans-title" data-v-27340329${_scopeId}>${ssrInterpolate(unref(currentLang).label)}</p><!--[-->`);
                 ssrRenderList(unref(localeLinks), (locale) => {
                   _push2(ssrRenderComponent(VPMenuLink, { item: locale }, null, _parent2, _scopeId));
                 });
@@ -3980,14 +3980,14 @@ const _sfc_main$y = /* @__PURE__ */ defineComponent({
                 _push2(`<!---->`);
               }
               if (unref(site).appearance && unref(site).appearance !== "force-dark" && unref(site).appearance !== "force-auto") {
-                _push2(`<div class="group" data-v-136f843b${_scopeId}><div class="item appearance" data-v-136f843b${_scopeId}><p class="label" data-v-136f843b${_scopeId}>${ssrInterpolate(unref(theme2).darkModeSwitchLabel || "Appearance")}</p><div class="appearance-action" data-v-136f843b${_scopeId}>`);
+                _push2(`<div class="group" data-v-27340329${_scopeId}><div class="item appearance" data-v-27340329${_scopeId}><p class="label" data-v-27340329${_scopeId}>${ssrInterpolate(unref(theme2).darkModeSwitchLabel || "Appearance")}</p><div class="appearance-action" data-v-27340329${_scopeId}>`);
                 _push2(ssrRenderComponent(VPSwitchAppearance, null, null, _parent2, _scopeId));
                 _push2(`</div></div></div>`);
               } else {
                 _push2(`<!---->`);
               }
               if (unref(theme2).socialLinks) {
-                _push2(`<div class="group" data-v-136f843b${_scopeId}><div class="item social-links" data-v-136f843b${_scopeId}>`);
+                _push2(`<div class="group" data-v-27340329${_scopeId}><div class="item social-links" data-v-27340329${_scopeId}>`);
                 _push2(ssrRenderComponent(VPSocialLinks, {
                   class: "social-links-list",
                   links: unref(theme2).socialLinks
@@ -4046,10 +4046,10 @@ const _sfc_main$y = /* @__PURE__ */ defineComponent({
 const _sfc_setup$y = _sfc_main$y.setup;
 _sfc_main$y.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPNavBarExtra.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPNavBarExtra.vue");
   return _sfc_setup$y ? _sfc_setup$y(props, ctx) : void 0;
 };
-const VPNavBarExtra = /* @__PURE__ */ _export_sfc(_sfc_main$y, [["__scopeId", "data-v-136f843b"]]);
+const VPNavBarExtra = /* @__PURE__ */ _export_sfc(_sfc_main$y, [["__scopeId", "data-v-27340329"]]);
 const _sfc_main$x = /* @__PURE__ */ defineComponent({
   __name: "VPNavBarHamburger",
   __ssrInlineRender: true,
@@ -4065,17 +4065,17 @@ const _sfc_main$x = /* @__PURE__ */ defineComponent({
         "aria-label": "mobile navigation",
         "aria-expanded": __props.active,
         "aria-controls": "VPNavScreen"
-      }, _attrs))} data-v-e9e0f2e8><span class="container" data-v-e9e0f2e8><span class="top" data-v-e9e0f2e8></span><span class="middle" data-v-e9e0f2e8></span><span class="bottom" data-v-e9e0f2e8></span></span></button>`);
+      }, _attrs))} data-v-02c6567d><span class="container" data-v-02c6567d><span class="top" data-v-02c6567d></span><span class="middle" data-v-02c6567d></span><span class="bottom" data-v-02c6567d></span></span></button>`);
     };
   }
 });
 const _sfc_setup$x = _sfc_main$x.setup;
 _sfc_main$x.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPNavBarHamburger.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPNavBarHamburger.vue");
   return _sfc_setup$x ? _sfc_setup$x(props, ctx) : void 0;
 };
-const VPNavBarHamburger = /* @__PURE__ */ _export_sfc(_sfc_main$x, [["__scopeId", "data-v-e9e0f2e8"]]);
+const VPNavBarHamburger = /* @__PURE__ */ _export_sfc(_sfc_main$x, [["__scopeId", "data-v-02c6567d"]]);
 const _sfc_main$w = /* @__PURE__ */ defineComponent({
   __name: "VPNavBarMenuLink",
   __ssrInlineRender: true,
@@ -4102,7 +4102,7 @@ const _sfc_main$w = /* @__PURE__ */ defineComponent({
       }, _attrs), {
         default: withCtx((_, _push2, _parent2, _scopeId) => {
           if (_push2) {
-            _push2(`<span data-v-129265b7${_scopeId}>${__props.item.text ?? ""}</span>`);
+            _push2(`<span data-v-2bcce868${_scopeId}>${__props.item.text ?? ""}</span>`);
           } else {
             return [
               createVNode("span", {
@@ -4119,10 +4119,10 @@ const _sfc_main$w = /* @__PURE__ */ defineComponent({
 const _sfc_setup$w = _sfc_main$w.setup;
 _sfc_main$w.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPNavBarMenuLink.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPNavBarMenuLink.vue");
   return _sfc_setup$w ? _sfc_setup$w(props, ctx) : void 0;
 };
-const VPNavBarMenuLink = /* @__PURE__ */ _export_sfc(_sfc_main$w, [["__scopeId", "data-v-129265b7"]]);
+const VPNavBarMenuLink = /* @__PURE__ */ _export_sfc(_sfc_main$w, [["__scopeId", "data-v-2bcce868"]]);
 const _sfc_main$v = /* @__PURE__ */ defineComponent({
   __name: "VPNavBarMenuGroup",
   __ssrInlineRender: true,
@@ -4159,7 +4159,7 @@ const _sfc_main$v = /* @__PURE__ */ defineComponent({
 const _sfc_setup$v = _sfc_main$v.setup;
 _sfc_main$v.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPNavBarMenuGroup.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPNavBarMenuGroup.vue");
   return _sfc_setup$v ? _sfc_setup$v(props, ctx) : void 0;
 };
 const _sfc_main$u = /* @__PURE__ */ defineComponent({
@@ -4172,7 +4172,7 @@ const _sfc_main$u = /* @__PURE__ */ defineComponent({
         _push(`<nav${ssrRenderAttrs(mergeProps({
           "aria-labelledby": "main-nav-aria-label",
           class: "VPNavBarMenu"
-        }, _attrs))} data-v-8489cff0><span id="main-nav-aria-label" class="visually-hidden" data-v-8489cff0> Main Navigation </span><!--[-->`);
+        }, _attrs))} data-v-8040ad95><span id="main-nav-aria-label" class="visually-hidden" data-v-8040ad95> Main Navigation </span><!--[-->`);
         ssrRenderList(unref(theme2).nav, (item) => {
           _push(`<!--[-->`);
           if ("link" in item) {
@@ -4194,10 +4194,10 @@ const _sfc_main$u = /* @__PURE__ */ defineComponent({
 const _sfc_setup$u = _sfc_main$u.setup;
 _sfc_main$u.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPNavBarMenu.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPNavBarMenu.vue");
   return _sfc_setup$u ? _sfc_setup$u(props, ctx) : void 0;
 };
-const VPNavBarMenu = /* @__PURE__ */ _export_sfc(_sfc_main$u, [["__scopeId", "data-v-8489cff0"]]);
+const VPNavBarMenu = /* @__PURE__ */ _export_sfc(_sfc_main$u, [["__scopeId", "data-v-8040ad95"]]);
 function createSearchTranslate(defaultTranslations) {
   const { localeIndex, theme: theme2 } = useData();
   function translate(key) {
@@ -4262,14 +4262,14 @@ const _sfc_main$t = /* @__PURE__ */ defineComponent({
 const _sfc_setup$t = _sfc_main$t.setup;
 _sfc_main$t.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPNavBarSearchButton.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPNavBarSearchButton.vue");
   return _sfc_setup$t ? _sfc_setup$t(props, ctx) : void 0;
 };
 const _sfc_main$s = /* @__PURE__ */ defineComponent({
   __name: "VPNavBarSearch",
   __ssrInlineRender: true,
   setup(__props) {
-    const VPLocalSearchBox = defineAsyncComponent(() => import("./VPLocalSearchBox.BVoURI8_.js"));
+    const VPLocalSearchBox = defineAsyncComponent(() => import("./VPLocalSearchBox.DHmESjMy.js"));
     const VPAlgoliaSearchBox = () => null;
     const { theme: theme2 } = useData();
     const loaded = ref(false);
@@ -4362,7 +4362,7 @@ const _sfc_main$s = /* @__PURE__ */ defineComponent({
 const _sfc_setup$s = _sfc_main$s.setup;
 _sfc_main$s.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPNavBarSearch.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPNavBarSearch.vue");
   return _sfc_setup$s ? _sfc_setup$s(props, ctx) : void 0;
 };
 const _sfc_main$r = /* @__PURE__ */ defineComponent({
@@ -4385,10 +4385,10 @@ const _sfc_main$r = /* @__PURE__ */ defineComponent({
 const _sfc_setup$r = _sfc_main$r.setup;
 _sfc_main$r.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPNavBarSocialLinks.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPNavBarSocialLinks.vue");
   return _sfc_setup$r ? _sfc_setup$r(props, ctx) : void 0;
 };
-const VPNavBarSocialLinks = /* @__PURE__ */ _export_sfc(_sfc_main$r, [["__scopeId", "data-v-f5944966"]]);
+const VPNavBarSocialLinks = /* @__PURE__ */ _export_sfc(_sfc_main$r, [["__scopeId", "data-v-4ed8bc3b"]]);
 const _sfc_main$q = /* @__PURE__ */ defineComponent({
   __name: "VPNavBarTitle",
   __ssrInlineRender: true,
@@ -4417,7 +4417,7 @@ const _sfc_main$q = /* @__PURE__ */ defineComponent({
     return (_ctx, _push, _parent, _attrs) => {
       _push(`<div${ssrRenderAttrs(mergeProps({
         class: ["VPNavBarTitle", { "has-sidebar": unref(hasSidebar) }]
-      }, _attrs))} data-v-c003c81f><a class="title"${ssrRenderAttr("href", link2.value ?? unref(normalizeLink$1)(unref(currentLang).link))}${ssrRenderAttr("rel", rel.value)}${ssrRenderAttr("target", target.value)} data-v-c003c81f>`);
+      }, _attrs))} data-v-a3488c45><a class="title"${ssrRenderAttr("href", link2.value ?? unref(normalizeLink$1)(unref(currentLang).link))}${ssrRenderAttr("rel", rel.value)}${ssrRenderAttr("target", target.value)} data-v-a3488c45>`);
       ssrRenderSlot(_ctx.$slots, "nav-bar-title-before", {}, null, _push, _parent);
       if (unref(theme2).logo) {
         _push(ssrRenderComponent(VPImage, {
@@ -4428,9 +4428,9 @@ const _sfc_main$q = /* @__PURE__ */ defineComponent({
         _push(`<!---->`);
       }
       if (unref(theme2).siteTitle) {
-        _push(`<span data-v-c003c81f>${unref(theme2).siteTitle ?? ""}</span>`);
+        _push(`<span data-v-a3488c45>${unref(theme2).siteTitle ?? ""}</span>`);
       } else if (unref(theme2).siteTitle === void 0) {
-        _push(`<span data-v-c003c81f>${ssrInterpolate(unref(site).title)}</span>`);
+        _push(`<span data-v-a3488c45>${ssrInterpolate(unref(site).title)}</span>`);
       } else {
         _push(`<!---->`);
       }
@@ -4442,10 +4442,10 @@ const _sfc_main$q = /* @__PURE__ */ defineComponent({
 const _sfc_setup$q = _sfc_main$q.setup;
 _sfc_main$q.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPNavBarTitle.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPNavBarTitle.vue");
   return _sfc_setup$q ? _sfc_setup$q(props, ctx) : void 0;
 };
-const VPNavBarTitle = /* @__PURE__ */ _export_sfc(_sfc_main$q, [["__scopeId", "data-v-c003c81f"]]);
+const VPNavBarTitle = /* @__PURE__ */ _export_sfc(_sfc_main$q, [["__scopeId", "data-v-a3488c45"]]);
 const _sfc_main$p = /* @__PURE__ */ defineComponent({
   __name: "VPNavBarTranslations",
   __ssrInlineRender: true,
@@ -4461,7 +4461,7 @@ const _sfc_main$p = /* @__PURE__ */ defineComponent({
         }, _attrs), {
           default: withCtx((_, _push2, _parent2, _scopeId) => {
             if (_push2) {
-              _push2(`<div class="items" data-v-e7aa323c${_scopeId}><p class="title" data-v-e7aa323c${_scopeId}>${ssrInterpolate(unref(currentLang).label)}</p><!--[-->`);
+              _push2(`<div class="items" data-v-254ca4d6${_scopeId}><p class="title" data-v-254ca4d6${_scopeId}>${ssrInterpolate(unref(currentLang).label)}</p><!--[-->`);
               ssrRenderList(unref(localeLinks), (locale) => {
                 _push2(ssrRenderComponent(VPMenuLink, { item: locale }, null, _parent2, _scopeId));
               });
@@ -4491,10 +4491,10 @@ const _sfc_main$p = /* @__PURE__ */ defineComponent({
 const _sfc_setup$p = _sfc_main$p.setup;
 _sfc_main$p.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPNavBarTranslations.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPNavBarTranslations.vue");
   return _sfc_setup$p ? _sfc_setup$p(props, ctx) : void 0;
 };
-const VPNavBarTranslations = /* @__PURE__ */ _export_sfc(_sfc_main$p, [["__scopeId", "data-v-e7aa323c"]]);
+const VPNavBarTranslations = /* @__PURE__ */ _export_sfc(_sfc_main$p, [["__scopeId", "data-v-254ca4d6"]]);
 const _sfc_main$o = /* @__PURE__ */ defineComponent({
   __name: "VPNavBar",
   __ssrInlineRender: true,
@@ -4519,7 +4519,7 @@ const _sfc_main$o = /* @__PURE__ */ defineComponent({
     return (_ctx, _push, _parent, _attrs) => {
       _push(`<div${ssrRenderAttrs(mergeProps({
         class: ["VPNavBar", classes.value]
-      }, _attrs))} data-v-3ea14f5c><div class="wrapper" data-v-3ea14f5c><div class="container" data-v-3ea14f5c><div class="title" data-v-3ea14f5c>`);
+      }, _attrs))} data-v-b98a4b86><div class="wrapper" data-v-b98a4b86><div class="container" data-v-b98a4b86><div class="title" data-v-b98a4b86>`);
       _push(ssrRenderComponent(VPNavBarTitle, null, {
         "nav-bar-title-before": withCtx((_, _push2, _parent2, _scopeId) => {
           if (_push2) {
@@ -4541,7 +4541,7 @@ const _sfc_main$o = /* @__PURE__ */ defineComponent({
         }),
         _: 3
       }, _parent));
-      _push(`</div><div class="content" data-v-3ea14f5c><div class="content-body" data-v-3ea14f5c>`);
+      _push(`</div><div class="content" data-v-b98a4b86><div class="content-body" data-v-b98a4b86>`);
       ssrRenderSlot(_ctx.$slots, "nav-bar-content-before", {}, null, _push, _parent);
       _push(ssrRenderComponent(_sfc_main$s, { class: "search" }, null, _parent));
       _push(ssrRenderComponent(VPNavBarMenu, { class: "menu" }, null, _parent));
@@ -4555,17 +4555,17 @@ const _sfc_main$o = /* @__PURE__ */ defineComponent({
         active: __props.isScreenOpen,
         onClick: ($event) => _ctx.$emit("toggle-screen")
       }, null, _parent));
-      _push(`</div></div></div></div><div class="divider" data-v-3ea14f5c><div class="divider-line" data-v-3ea14f5c></div></div></div>`);
+      _push(`</div></div></div></div><div class="divider" data-v-b98a4b86><div class="divider-line" data-v-b98a4b86></div></div></div>`);
     };
   }
 });
 const _sfc_setup$o = _sfc_main$o.setup;
 _sfc_main$o.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPNavBar.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPNavBar.vue");
   return _sfc_setup$o ? _sfc_setup$o(props, ctx) : void 0;
 };
-const VPNavBar = /* @__PURE__ */ _export_sfc(_sfc_main$o, [["__scopeId", "data-v-3ea14f5c"]]);
+const VPNavBar = /* @__PURE__ */ _export_sfc(_sfc_main$o, [["__scopeId", "data-v-b98a4b86"]]);
 const _sfc_main$n = /* @__PURE__ */ defineComponent({
   __name: "VPNavScreenAppearance",
   __ssrInlineRender: true,
@@ -4573,7 +4573,7 @@ const _sfc_main$n = /* @__PURE__ */ defineComponent({
     const { site, theme: theme2 } = useData();
     return (_ctx, _push, _parent, _attrs) => {
       if (unref(site).appearance && unref(site).appearance !== "force-dark" && unref(site).appearance !== "force-auto") {
-        _push(`<div${ssrRenderAttrs(mergeProps({ class: "VPNavScreenAppearance" }, _attrs))} data-v-c6da26cf><p class="text" data-v-c6da26cf>${ssrInterpolate(unref(theme2).darkModeSwitchLabel || "Appearance")}</p>`);
+        _push(`<div${ssrRenderAttrs(mergeProps({ class: "VPNavScreenAppearance" }, _attrs))} data-v-70d5cf05><p class="text" data-v-70d5cf05>${ssrInterpolate(unref(theme2).darkModeSwitchLabel || "Appearance")}</p>`);
         _push(ssrRenderComponent(VPSwitchAppearance, null, null, _parent));
         _push(`</div>`);
       } else {
@@ -4585,10 +4585,10 @@ const _sfc_main$n = /* @__PURE__ */ defineComponent({
 const _sfc_setup$n = _sfc_main$n.setup;
 _sfc_main$n.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPNavScreenAppearance.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPNavScreenAppearance.vue");
   return _sfc_setup$n ? _sfc_setup$n(props, ctx) : void 0;
 };
-const VPNavScreenAppearance = /* @__PURE__ */ _export_sfc(_sfc_main$n, [["__scopeId", "data-v-c6da26cf"]]);
+const VPNavScreenAppearance = /* @__PURE__ */ _export_sfc(_sfc_main$n, [["__scopeId", "data-v-70d5cf05"]]);
 const _sfc_main$m = /* @__PURE__ */ defineComponent({
   __name: "VPNavScreenMenuLink",
   __ssrInlineRender: true,
@@ -4608,7 +4608,7 @@ const _sfc_main$m = /* @__PURE__ */ defineComponent({
       }, _attrs), {
         default: withCtx((_, _push2, _parent2, _scopeId) => {
           if (_push2) {
-            _push2(`<span data-v-239519a3${_scopeId}>${__props.item.text ?? ""}</span>`);
+            _push2(`<span data-v-27390876${_scopeId}>${__props.item.text ?? ""}</span>`);
           } else {
             return [
               createVNode("span", {
@@ -4625,10 +4625,10 @@ const _sfc_main$m = /* @__PURE__ */ defineComponent({
 const _sfc_setup$m = _sfc_main$m.setup;
 _sfc_main$m.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPNavScreenMenuLink.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPNavScreenMenuLink.vue");
   return _sfc_setup$m ? _sfc_setup$m(props, ctx) : void 0;
 };
-const VPNavScreenMenuLink = /* @__PURE__ */ _export_sfc(_sfc_main$m, [["__scopeId", "data-v-239519a3"]]);
+const VPNavScreenMenuLink = /* @__PURE__ */ _export_sfc(_sfc_main$m, [["__scopeId", "data-v-27390876"]]);
 const _sfc_main$l = /* @__PURE__ */ defineComponent({
   __name: "VPNavScreenMenuGroupLink",
   __ssrInlineRender: true,
@@ -4648,7 +4648,7 @@ const _sfc_main$l = /* @__PURE__ */ defineComponent({
       }, _attrs), {
         default: withCtx((_, _push2, _parent2, _scopeId) => {
           if (_push2) {
-            _push2(`<span data-v-7223c7d1${_scopeId}>${__props.item.text ?? ""}</span>`);
+            _push2(`<span data-v-c2386c66${_scopeId}>${__props.item.text ?? ""}</span>`);
           } else {
             return [
               createVNode("span", {
@@ -4665,10 +4665,10 @@ const _sfc_main$l = /* @__PURE__ */ defineComponent({
 const _sfc_setup$l = _sfc_main$l.setup;
 _sfc_main$l.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPNavScreenMenuGroupLink.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPNavScreenMenuGroupLink.vue");
   return _sfc_setup$l ? _sfc_setup$l(props, ctx) : void 0;
 };
-const VPNavScreenMenuGroupLink = /* @__PURE__ */ _export_sfc(_sfc_main$l, [["__scopeId", "data-v-7223c7d1"]]);
+const VPNavScreenMenuGroupLink = /* @__PURE__ */ _export_sfc(_sfc_main$l, [["__scopeId", "data-v-c2386c66"]]);
 const _sfc_main$k = /* @__PURE__ */ defineComponent({
   __name: "VPNavScreenMenuGroupSection",
   __ssrInlineRender: true,
@@ -4678,9 +4678,9 @@ const _sfc_main$k = /* @__PURE__ */ defineComponent({
   },
   setup(__props) {
     return (_ctx, _push, _parent, _attrs) => {
-      _push(`<div${ssrRenderAttrs(mergeProps({ class: "VPNavScreenMenuGroupSection" }, _attrs))} data-v-f29492ee>`);
+      _push(`<div${ssrRenderAttrs(mergeProps({ class: "VPNavScreenMenuGroupSection" }, _attrs))} data-v-4821c2bd>`);
       if (__props.text) {
-        _push(`<p class="title" data-v-f29492ee>${ssrInterpolate(__props.text)}</p>`);
+        _push(`<p class="title" data-v-4821c2bd>${ssrInterpolate(__props.text)}</p>`);
       } else {
         _push(`<!---->`);
       }
@@ -4698,10 +4698,10 @@ const _sfc_main$k = /* @__PURE__ */ defineComponent({
 const _sfc_setup$k = _sfc_main$k.setup;
 _sfc_main$k.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPNavScreenMenuGroupSection.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPNavScreenMenuGroupSection.vue");
   return _sfc_setup$k ? _sfc_setup$k(props, ctx) : void 0;
 };
-const VPNavScreenMenuGroupSection = /* @__PURE__ */ _export_sfc(_sfc_main$k, [["__scopeId", "data-v-f29492ee"]]);
+const VPNavScreenMenuGroupSection = /* @__PURE__ */ _export_sfc(_sfc_main$k, [["__scopeId", "data-v-4821c2bd"]]);
 const _sfc_main$j = /* @__PURE__ */ defineComponent({
   __name: "VPNavScreenMenuGroup",
   __ssrInlineRender: true,
@@ -4718,19 +4718,19 @@ const _sfc_main$j = /* @__PURE__ */ defineComponent({
     return (_ctx, _push, _parent, _attrs) => {
       _push(`<div${ssrRenderAttrs(mergeProps({
         class: ["VPNavScreenMenuGroup", { open: isOpen.value }]
-      }, _attrs))} data-v-e62fbaec><button class="button"${ssrRenderAttr("aria-controls", groupId.value)}${ssrRenderAttr("aria-expanded", isOpen.value)} data-v-e62fbaec><span class="button-text" data-v-e62fbaec>${__props.text ?? ""}</span><span class="vpi-plus button-icon" data-v-e62fbaec></span></button><div${ssrRenderAttr("id", groupId.value)} class="items" data-v-e62fbaec><!--[-->`);
+      }, _attrs))} data-v-8ee17ab7><button class="button"${ssrRenderAttr("aria-controls", groupId.value)}${ssrRenderAttr("aria-expanded", isOpen.value)} data-v-8ee17ab7><span class="button-text" data-v-8ee17ab7>${__props.text ?? ""}</span><span class="vpi-plus button-icon" data-v-8ee17ab7></span></button><div${ssrRenderAttr("id", groupId.value)} class="items" data-v-8ee17ab7><!--[-->`);
       ssrRenderList(__props.items, (item) => {
         _push(`<!--[-->`);
         if ("link" in item) {
-          _push(`<div class="item" data-v-e62fbaec>`);
+          _push(`<div class="item" data-v-8ee17ab7>`);
           _push(ssrRenderComponent(VPNavScreenMenuGroupLink, { item }, null, _parent));
           _push(`</div>`);
         } else if ("component" in item) {
-          _push(`<div class="item" data-v-e62fbaec>`);
+          _push(`<div class="item" data-v-8ee17ab7>`);
           ssrRenderVNode(_push, createVNode(resolveDynamicComponent(item.component), mergeProps({ ref_for: true }, item.props, { "screen-menu": "" }), null), _parent);
           _push(`</div>`);
         } else {
-          _push(`<div class="group" data-v-e62fbaec>`);
+          _push(`<div class="group" data-v-8ee17ab7>`);
           _push(ssrRenderComponent(VPNavScreenMenuGroupSection, {
             text: item.text,
             items: item.items
@@ -4746,10 +4746,10 @@ const _sfc_main$j = /* @__PURE__ */ defineComponent({
 const _sfc_setup$j = _sfc_main$j.setup;
 _sfc_main$j.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPNavScreenMenuGroup.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPNavScreenMenuGroup.vue");
   return _sfc_setup$j ? _sfc_setup$j(props, ctx) : void 0;
 };
-const VPNavScreenMenuGroup = /* @__PURE__ */ _export_sfc(_sfc_main$j, [["__scopeId", "data-v-e62fbaec"]]);
+const VPNavScreenMenuGroup = /* @__PURE__ */ _export_sfc(_sfc_main$j, [["__scopeId", "data-v-8ee17ab7"]]);
 const _sfc_main$i = /* @__PURE__ */ defineComponent({
   __name: "VPNavScreenMenu",
   __ssrInlineRender: true,
@@ -4782,7 +4782,7 @@ const _sfc_main$i = /* @__PURE__ */ defineComponent({
 const _sfc_setup$i = _sfc_main$i.setup;
 _sfc_main$i.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPNavScreenMenu.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPNavScreenMenu.vue");
   return _sfc_setup$i ? _sfc_setup$i(props, ctx) : void 0;
 };
 const _sfc_main$h = /* @__PURE__ */ defineComponent({
@@ -4805,7 +4805,7 @@ const _sfc_main$h = /* @__PURE__ */ defineComponent({
 const _sfc_setup$h = _sfc_main$h.setup;
 _sfc_main$h.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPNavScreenSocialLinks.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPNavScreenSocialLinks.vue");
   return _sfc_setup$h ? _sfc_setup$h(props, ctx) : void 0;
 };
 const _sfc_main$g = /* @__PURE__ */ defineComponent({
@@ -4818,9 +4818,9 @@ const _sfc_main$g = /* @__PURE__ */ defineComponent({
       if (unref(localeLinks).length && unref(currentLang).label) {
         _push(`<div${ssrRenderAttrs(mergeProps({
           class: ["VPNavScreenTranslations", { open: isOpen.value }]
-        }, _attrs))} data-v-67897f7d><button class="title" data-v-67897f7d><span class="vpi-languages icon lang" data-v-67897f7d></span> ${ssrInterpolate(unref(currentLang).label)} <span class="vpi-chevron-down icon chevron" data-v-67897f7d></span></button><ul class="list" data-v-67897f7d><!--[-->`);
+        }, _attrs))} data-v-06d66dec><button class="title" data-v-06d66dec><span class="vpi-languages icon lang" data-v-06d66dec></span> ${ssrInterpolate(unref(currentLang).label)} <span class="vpi-chevron-down icon chevron" data-v-06d66dec></span></button><ul class="list" data-v-06d66dec><!--[-->`);
         ssrRenderList(unref(localeLinks), (locale) => {
-          _push(`<li class="item" data-v-67897f7d>`);
+          _push(`<li class="item" data-v-06d66dec>`);
           _push(ssrRenderComponent(_sfc_main$Z, {
             class: "link",
             href: locale.link
@@ -4848,10 +4848,10 @@ const _sfc_main$g = /* @__PURE__ */ defineComponent({
 const _sfc_setup$g = _sfc_main$g.setup;
 _sfc_main$g.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPNavScreenTranslations.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPNavScreenTranslations.vue");
   return _sfc_setup$g ? _sfc_setup$g(props, ctx) : void 0;
 };
-const VPNavScreenTranslations = /* @__PURE__ */ _export_sfc(_sfc_main$g, [["__scopeId", "data-v-67897f7d"]]);
+const VPNavScreenTranslations = /* @__PURE__ */ _export_sfc(_sfc_main$g, [["__scopeId", "data-v-06d66dec"]]);
 const _sfc_main$f = /* @__PURE__ */ defineComponent({
   __name: "VPNavScreen",
   __ssrInlineRender: true,
@@ -4868,7 +4868,7 @@ const _sfc_main$f = /* @__PURE__ */ defineComponent({
           ref_key: "screen",
           ref: screen,
           id: "VPNavScreen"
-        }, _attrs))} data-v-8ca50ca5><div class="container" data-v-8ca50ca5>`);
+        }, _attrs))} data-v-71c55f0f><div class="container" data-v-71c55f0f>`);
         ssrRenderSlot(_ctx.$slots, "nav-screen-content-before", {}, null, _push, _parent);
         _push(ssrRenderComponent(_sfc_main$i, { class: "menu" }, null, _parent));
         _push(ssrRenderComponent(VPNavScreenTranslations, { class: "translations" }, null, _parent));
@@ -4885,10 +4885,10 @@ const _sfc_main$f = /* @__PURE__ */ defineComponent({
 const _sfc_setup$f = _sfc_main$f.setup;
 _sfc_main$f.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPNavScreen.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPNavScreen.vue");
   return _sfc_setup$f ? _sfc_setup$f(props, ctx) : void 0;
 };
-const VPNavScreen = /* @__PURE__ */ _export_sfc(_sfc_main$f, [["__scopeId", "data-v-8ca50ca5"]]);
+const VPNavScreen = /* @__PURE__ */ _export_sfc(_sfc_main$f, [["__scopeId", "data-v-71c55f0f"]]);
 const _sfc_main$e = /* @__PURE__ */ defineComponent({
   __name: "VPNav",
   __ssrInlineRender: true,
@@ -4906,7 +4906,7 @@ const _sfc_main$e = /* @__PURE__ */ defineComponent({
     });
     return (_ctx, _push, _parent, _attrs) => {
       if (hasNavbar.value) {
-        _push(`<header${ssrRenderAttrs(mergeProps({ class: "VPNav" }, _attrs))} data-v-b81890af>`);
+        _push(`<header${ssrRenderAttrs(mergeProps({ class: "VPNav" }, _attrs))} data-v-b6b46075>`);
         _push(ssrRenderComponent(VPNavBar, {
           "is-screen-open": unref(isScreenOpen),
           onToggleScreen: unref(toggleScreen)
@@ -4980,10 +4980,10 @@ const _sfc_main$e = /* @__PURE__ */ defineComponent({
 const _sfc_setup$e = _sfc_main$e.setup;
 _sfc_main$e.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPNav.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPNav.vue");
   return _sfc_setup$e ? _sfc_setup$e(props, ctx) : void 0;
 };
-const VPNav = /* @__PURE__ */ _export_sfc(_sfc_main$e, [["__scopeId", "data-v-b81890af"]]);
+const VPNav = /* @__PURE__ */ _export_sfc(_sfc_main$e, [["__scopeId", "data-v-b6b46075"]]);
 const _sfc_main$d = /* @__PURE__ */ defineComponent({
   __name: "VPSidebarItem",
   __ssrInlineRender: true,
@@ -5033,7 +5033,7 @@ const _sfc_main$d = /* @__PURE__ */ defineComponent({
         default: withCtx((_, _push2, _parent2, _scopeId) => {
           if (_push2) {
             if (__props.item.text) {
-              _push2(`<div class="item"${ssrRenderAttr("role", itemRole.value)}${ssrRenderAttr("tabindex", __props.item.items && 0)} data-v-3d2862dd${_scopeId}><div class="indicator" data-v-3d2862dd${_scopeId}></div>`);
+              _push2(`<div class="item"${ssrRenderAttr("role", itemRole.value)}${ssrRenderAttr("tabindex", __props.item.items && 0)} data-v-10b36307${_scopeId}><div class="indicator" data-v-10b36307${_scopeId}></div>`);
               if (__props.item.link) {
                 _push2(ssrRenderComponent(_sfc_main$Z, {
                   tag: linkTag.value,
@@ -5060,7 +5060,7 @@ const _sfc_main$d = /* @__PURE__ */ defineComponent({
                 ssrRenderVNode(_push2, createVNode(resolveDynamicComponent(textTag.value), { class: "text" }, null), _parent2, _scopeId);
               }
               if (__props.item.collapsed != null && __props.item.items && __props.item.items.length) {
-                _push2(`<div class="caret" role="button" aria-label="toggle section" tabindex="0" data-v-3d2862dd${_scopeId}><span class="vpi-chevron-right caret-icon" data-v-3d2862dd${_scopeId}></span></div>`);
+                _push2(`<div class="caret" role="button" aria-label="toggle section" tabindex="0" data-v-10b36307${_scopeId}><span class="vpi-chevron-right caret-icon" data-v-10b36307${_scopeId}></span></div>`);
               } else {
                 _push2(`<!---->`);
               }
@@ -5069,7 +5069,7 @@ const _sfc_main$d = /* @__PURE__ */ defineComponent({
               _push2(`<!---->`);
             }
             if (__props.item.items && __props.item.items.length) {
-              _push2(`<div class="items" data-v-3d2862dd${_scopeId}>`);
+              _push2(`<div class="items" data-v-10b36307${_scopeId}>`);
               if (__props.depth < 5) {
                 _push2(`<!--[-->`);
                 ssrRenderList(__props.item.items, (i) => {
@@ -5155,10 +5155,10 @@ const _sfc_main$d = /* @__PURE__ */ defineComponent({
 const _sfc_setup$d = _sfc_main$d.setup;
 _sfc_main$d.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPSidebarItem.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPSidebarItem.vue");
   return _sfc_setup$d ? _sfc_setup$d(props, ctx) : void 0;
 };
-const VPSidebarItem = /* @__PURE__ */ _export_sfc(_sfc_main$d, [["__scopeId", "data-v-3d2862dd"]]);
+const VPSidebarItem = /* @__PURE__ */ _export_sfc(_sfc_main$d, [["__scopeId", "data-v-10b36307"]]);
 const _sfc_main$c = /* @__PURE__ */ defineComponent({
   __name: "VPSidebarGroup",
   __ssrInlineRender: true,
@@ -5183,7 +5183,7 @@ const _sfc_main$c = /* @__PURE__ */ defineComponent({
     return (_ctx, _push, _parent, _attrs) => {
       _push(`<!--[-->`);
       ssrRenderList(__props.items, (item) => {
-        _push(`<div class="${ssrRenderClass([{ "no-transition": disableTransition.value }, "group"])}" data-v-b0d540e4>`);
+        _push(`<div class="${ssrRenderClass([{ "no-transition": disableTransition.value }, "group"])}" data-v-e7dbea81>`);
         _push(ssrRenderComponent(VPSidebarItem, {
           item,
           depth: 0
@@ -5197,10 +5197,10 @@ const _sfc_main$c = /* @__PURE__ */ defineComponent({
 const _sfc_setup$c = _sfc_main$c.setup;
 _sfc_main$c.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPSidebarGroup.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPSidebarGroup.vue");
   return _sfc_setup$c ? _sfc_setup$c(props, ctx) : void 0;
 };
-const VPSidebarGroup = /* @__PURE__ */ _export_sfc(_sfc_main$c, [["__scopeId", "data-v-b0d540e4"]]);
+const VPSidebarGroup = /* @__PURE__ */ _export_sfc(_sfc_main$c, [["__scopeId", "data-v-e7dbea81"]]);
 const _sfc_main$b = /* @__PURE__ */ defineComponent({
   __name: "VPSidebar",
   __ssrInlineRender: true,
@@ -5237,7 +5237,7 @@ const _sfc_main$b = /* @__PURE__ */ defineComponent({
           class: ["VPSidebar", { open: __props.open }],
           ref_key: "navEl",
           ref: navEl
-        }, _attrs))} data-v-d09a335a><div class="curtain" data-v-d09a335a></div><nav class="nav" id="VPSidebarNav" aria-labelledby="sidebar-aria-label" tabindex="-1" data-v-d09a335a><span class="visually-hidden" id="sidebar-aria-label" data-v-d09a335a> Sidebar Navigation </span>`);
+        }, _attrs))} data-v-4659acc2><div class="curtain" data-v-4659acc2></div><nav class="nav" id="VPSidebarNav" aria-labelledby="sidebar-aria-label" tabindex="-1" data-v-4659acc2><span class="visually-hidden" id="sidebar-aria-label" data-v-4659acc2> Sidebar Navigation </span>`);
         ssrRenderSlot(_ctx.$slots, "sidebar-nav-before", {}, null, _push, _parent);
         _push(ssrRenderComponent(VPSidebarGroup, {
           items: unref(sidebarGroups),
@@ -5254,10 +5254,10 @@ const _sfc_main$b = /* @__PURE__ */ defineComponent({
 const _sfc_setup$b = _sfc_main$b.setup;
 _sfc_main$b.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPSidebar.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPSidebar.vue");
   return _sfc_setup$b ? _sfc_setup$b(props, ctx) : void 0;
 };
-const VPSidebar = /* @__PURE__ */ _export_sfc(_sfc_main$b, [["__scopeId", "data-v-d09a335a"]]);
+const VPSidebar = /* @__PURE__ */ _export_sfc(_sfc_main$b, [["__scopeId", "data-v-4659acc2"]]);
 const _sfc_main$a = /* @__PURE__ */ defineComponent({
   __name: "VPSkipLink",
   __ssrInlineRender: true,
@@ -5267,17 +5267,17 @@ const _sfc_main$a = /* @__PURE__ */ defineComponent({
     const backToTop = ref();
     watch(() => route.path, () => backToTop.value.focus());
     return (_ctx, _push, _parent, _attrs) => {
-      _push(`<!--[--><span tabindex="-1" data-v-b6ed215b></span><a href="#VPContent" class="VPSkipLink visually-hidden" data-v-b6ed215b>${ssrInterpolate(unref(theme2).skipToContentLabel || "Skip to content")}</a><!--]-->`);
+      _push(`<!--[--><span tabindex="-1" data-v-ce10c1c5></span><a href="#VPContent" class="VPSkipLink visually-hidden" data-v-ce10c1c5>${ssrInterpolate(unref(theme2).skipToContentLabel || "Skip to content")}</a><!--]-->`);
     };
   }
 });
 const _sfc_setup$a = _sfc_main$a.setup;
 _sfc_main$a.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPSkipLink.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPSkipLink.vue");
   return _sfc_setup$a ? _sfc_setup$a(props, ctx) : void 0;
 };
-const VPSkipLink = /* @__PURE__ */ _export_sfc(_sfc_main$a, [["__scopeId", "data-v-b6ed215b"]]);
+const VPSkipLink = /* @__PURE__ */ _export_sfc(_sfc_main$a, [["__scopeId", "data-v-ce10c1c5"]]);
 const _sfc_main$9 = /* @__PURE__ */ defineComponent({
   __name: "Layout",
   __ssrInlineRender: true,
@@ -5299,7 +5299,7 @@ const _sfc_main$9 = /* @__PURE__ */ defineComponent({
       if (unref(frontmatter).layout !== false) {
         _push(`<div${ssrRenderAttrs(mergeProps({
           class: ["Layout", unref(frontmatter).pageClass]
-        }, _attrs))} data-v-223a0073>`);
+        }, _attrs))} data-v-7df5a159>`);
         ssrRenderSlot(_ctx.$slots, "layout-top", {}, null, _push, _parent);
         _push(ssrRenderComponent(VPSkipLink, null, null, _parent));
         _push(ssrRenderComponent(VPBackdrop, {
@@ -5611,10 +5611,10 @@ const _sfc_main$9 = /* @__PURE__ */ defineComponent({
 const _sfc_setup$9 = _sfc_main$9.setup;
 _sfc_main$9.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/Layout.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/Layout.vue");
   return _sfc_setup$9 ? _sfc_setup$9(props, ctx) : void 0;
 };
-const Layout = /* @__PURE__ */ _export_sfc(_sfc_main$9, [["__scopeId", "data-v-223a0073"]]);
+const Layout = /* @__PURE__ */ _export_sfc(_sfc_main$9, [["__scopeId", "data-v-7df5a159"]]);
 const GridSettings = {
   xmini: [[0, 2]],
   mini: [],
@@ -5722,7 +5722,7 @@ const _sfc_main$8 = /* @__PURE__ */ defineComponent({
 const _sfc_setup$8 = _sfc_main$8.setup;
 _sfc_main$8.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPSponsorsGrid.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPSponsorsGrid.vue");
   return _sfc_setup$8 ? _sfc_setup$8(props, ctx) : void 0;
 };
 const _sfc_main$7 = /* @__PURE__ */ defineComponent({
@@ -5771,7 +5771,7 @@ const _sfc_main$7 = /* @__PURE__ */ defineComponent({
 const _sfc_setup$7 = _sfc_main$7.setup;
 _sfc_main$7.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPSponsors.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPSponsors.vue");
   return _sfc_setup$7 ? _sfc_setup$7(props, ctx) : void 0;
 };
 const _sfc_main$6 = /* @__PURE__ */ defineComponent({
@@ -5798,7 +5798,7 @@ const _sfc_main$6 = /* @__PURE__ */ defineComponent({
 const _sfc_setup$6 = _sfc_main$6.setup;
 _sfc_main$6.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPDocAsideSponsors.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPDocAsideSponsors.vue");
   return _sfc_setup$6 ? _sfc_setup$6(props, ctx) : void 0;
 };
 const _sfc_main$5 = /* @__PURE__ */ defineComponent({
@@ -5812,17 +5812,17 @@ const _sfc_main$5 = /* @__PURE__ */ defineComponent({
   },
   setup(__props) {
     return (_ctx, _push, _parent, _attrs) => {
-      _push(`<section${ssrRenderAttrs(mergeProps({ class: "VPHomeSponsors" }, _attrs))} data-v-ed690f9a><div class="container" data-v-ed690f9a><div class="header" data-v-ed690f9a><div class="love" data-v-ed690f9a><span class="vpi-heart icon" data-v-ed690f9a></span></div>`);
+      _push(`<section${ssrRenderAttrs(mergeProps({ class: "VPHomeSponsors" }, _attrs))} data-v-ff625c3b><div class="container" data-v-ff625c3b><div class="header" data-v-ff625c3b><div class="love" data-v-ff625c3b><span class="vpi-heart icon" data-v-ff625c3b></span></div>`);
       if (__props.message) {
-        _push(`<h2 class="message" data-v-ed690f9a>${ssrInterpolate(__props.message)}</h2>`);
+        _push(`<h2 class="message" data-v-ff625c3b>${ssrInterpolate(__props.message)}</h2>`);
       } else {
         _push(`<!---->`);
       }
-      _push(`</div><div class="sponsors" data-v-ed690f9a>`);
+      _push(`</div><div class="sponsors" data-v-ff625c3b>`);
       _push(ssrRenderComponent(_sfc_main$7, { data: __props.data }, null, _parent));
       _push(`</div>`);
       if (__props.actionLink) {
-        _push(`<div class="action" data-v-ed690f9a>`);
+        _push(`<div class="action" data-v-ff625c3b>`);
         _push(ssrRenderComponent(VPButton, {
           theme: "sponsor",
           text: __props.actionText,
@@ -5839,7 +5839,7 @@ const _sfc_main$5 = /* @__PURE__ */ defineComponent({
 const _sfc_setup$5 = _sfc_main$5.setup;
 _sfc_main$5.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPHomeSponsors.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPHomeSponsors.vue");
   return _sfc_setup$5 ? _sfc_setup$5(props, ctx) : void 0;
 };
 const _sfc_main$4 = /* @__PURE__ */ defineComponent({
@@ -5853,16 +5853,16 @@ const _sfc_main$4 = /* @__PURE__ */ defineComponent({
     return (_ctx, _push, _parent, _attrs) => {
       _push(`<article${ssrRenderAttrs(mergeProps({
         class: ["VPTeamMembersItem", [__props.size]]
-      }, _attrs))} data-v-ea478721><div class="profile" data-v-ea478721><figure class="avatar" data-v-ea478721><img class="avatar-img"${ssrRenderAttr("src", __props.member.avatar)}${ssrRenderAttr("alt", __props.member.name)} data-v-ea478721></figure><div class="data" data-v-ea478721><h1 class="name" data-v-ea478721>${ssrInterpolate(__props.member.name)}</h1>`);
+      }, _attrs))} data-v-f74bda84><div class="profile" data-v-f74bda84><figure class="avatar" data-v-f74bda84><img class="avatar-img"${ssrRenderAttr("src", __props.member.avatar)}${ssrRenderAttr("alt", __props.member.name)} data-v-f74bda84></figure><div class="data" data-v-f74bda84><h1 class="name" data-v-f74bda84>${ssrInterpolate(__props.member.name)}</h1>`);
       if (__props.member.title || __props.member.org) {
-        _push(`<p class="affiliation" data-v-ea478721>`);
+        _push(`<p class="affiliation" data-v-f74bda84>`);
         if (__props.member.title) {
-          _push(`<span class="title" data-v-ea478721>${ssrInterpolate(__props.member.title)}</span>`);
+          _push(`<span class="title" data-v-f74bda84>${ssrInterpolate(__props.member.title)}</span>`);
         } else {
           _push(`<!---->`);
         }
         if (__props.member.title && __props.member.org) {
-          _push(`<span class="at" data-v-ea478721> @ </span>`);
+          _push(`<span class="at" data-v-f74bda84> @ </span>`);
         } else {
           _push(`<!---->`);
         }
@@ -5891,12 +5891,12 @@ const _sfc_main$4 = /* @__PURE__ */ defineComponent({
         _push(`<!---->`);
       }
       if (__props.member.desc) {
-        _push(`<p class="desc" data-v-ea478721>${__props.member.desc ?? ""}</p>`);
+        _push(`<p class="desc" data-v-f74bda84>${__props.member.desc ?? ""}</p>`);
       } else {
         _push(`<!---->`);
       }
       if (__props.member.links) {
-        _push(`<div class="links" data-v-ea478721>`);
+        _push(`<div class="links" data-v-f74bda84>`);
         _push(ssrRenderComponent(VPSocialLinks, {
           links: __props.member.links
         }, null, _parent));
@@ -5906,7 +5906,7 @@ const _sfc_main$4 = /* @__PURE__ */ defineComponent({
       }
       _push(`</div></div>`);
       if (__props.member.sponsor) {
-        _push(`<div class="sp" data-v-ea478721>`);
+        _push(`<div class="sp" data-v-f74bda84>`);
         _push(ssrRenderComponent(_sfc_main$Z, {
           class: "sp-link",
           href: __props.member.sponsor,
@@ -5914,7 +5914,7 @@ const _sfc_main$4 = /* @__PURE__ */ defineComponent({
         }, {
           default: withCtx((_, _push2, _parent2, _scopeId) => {
             if (_push2) {
-              _push2(`<span class="vpi-heart sp-icon" data-v-ea478721${_scopeId}></span> ${ssrInterpolate(__props.member.actionText || "Sponsor")}`);
+              _push2(`<span class="vpi-heart sp-icon" data-v-f74bda84${_scopeId}></span> ${ssrInterpolate(__props.member.actionText || "Sponsor")}`);
             } else {
               return [
                 createVNode("span", { class: "vpi-heart sp-icon" }),
@@ -5935,10 +5935,10 @@ const _sfc_main$4 = /* @__PURE__ */ defineComponent({
 const _sfc_setup$4 = _sfc_main$4.setup;
 _sfc_main$4.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPTeamMembersItem.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPTeamMembersItem.vue");
   return _sfc_setup$4 ? _sfc_setup$4(props, ctx) : void 0;
 };
-const VPTeamMembersItem = /* @__PURE__ */ _export_sfc(_sfc_main$4, [["__scopeId", "data-v-ea478721"]]);
+const VPTeamMembersItem = /* @__PURE__ */ _export_sfc(_sfc_main$4, [["__scopeId", "data-v-f74bda84"]]);
 const _sfc_main$3 = /* @__PURE__ */ defineComponent({
   __name: "VPTeamMembers",
   __ssrInlineRender: true,
@@ -5952,9 +5952,9 @@ const _sfc_main$3 = /* @__PURE__ */ defineComponent({
     return (_ctx, _push, _parent, _attrs) => {
       _push(`<div${ssrRenderAttrs(mergeProps({
         class: ["VPTeamMembers", classes.value]
-      }, _attrs))} data-v-de77f509><div class="container" data-v-de77f509><!--[-->`);
+      }, _attrs))} data-v-10e7d6e5><div class="container" data-v-10e7d6e5><!--[-->`);
       ssrRenderList(__props.members, (member) => {
-        _push(`<div class="item" data-v-de77f509>`);
+        _push(`<div class="item" data-v-10e7d6e5>`);
         _push(ssrRenderComponent(VPTeamMembersItem, {
           size: __props.size,
           member
@@ -5968,28 +5968,28 @@ const _sfc_main$3 = /* @__PURE__ */ defineComponent({
 const _sfc_setup$3 = _sfc_main$3.setup;
 _sfc_main$3.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPTeamMembers.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPTeamMembers.vue");
   return _sfc_setup$3 ? _sfc_setup$3(props, ctx) : void 0;
 };
 const _sfc_main$2 = {};
 const _sfc_setup$2 = _sfc_main$2.setup;
 _sfc_main$2.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPTeamPage.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPTeamPage.vue");
   return _sfc_setup$2 ? _sfc_setup$2(props, ctx) : void 0;
 };
 const _sfc_main$1 = {};
 const _sfc_setup$1 = _sfc_main$1.setup;
 _sfc_main$1.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPTeamPageSection.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPTeamPageSection.vue");
   return _sfc_setup$1 ? _sfc_setup$1(props, ctx) : void 0;
 };
 const _sfc_main = {};
 const _sfc_setup = _sfc_main.setup;
 _sfc_main.setup = (props, ctx) => {
   const ssrContext = useSSRContext();
-  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.4.0_lightningcss@1.33.0_po_9499ad2677d955909774f0de3f462b49/node_modules/vitepress/dist/client/theme-default/components/VPTeamPageTitle.vue");
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("../node_modules/.pnpm/vitepress@1.6.4_@algolia+client-search@5.56.0_@types+node@26.5.0_lightningcss@1.33.0_po_11e488aaf2ea32cbd03da204dc27c8c0/node_modules/vitepress/dist/client/theme-default/components/VPTeamPageTitle.vue");
   return _sfc_setup ? _sfc_setup(props, ctx) : void 0;
 };
 const theme = {
