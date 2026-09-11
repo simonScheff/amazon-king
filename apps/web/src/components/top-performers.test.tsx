@@ -41,6 +41,7 @@ const campaignRow: CampaignListRow = {
   totals,
   amazonConsoleUrl: null,
   maxCpc: null,
+  defaultBid: null,
   profitability: {
     dateRange: { start: "2026-07-22", end: "2026-08-20" },
     currency: "USD",

@@ -36,9 +36,9 @@ export const ORDERS_COLUMN_TITLE =
 export const TARGET_BID_COLUMN_TITLE =
   "Target bid price (uses the ad group default bid when no target override is set).";
 
-/** Native tooltip on the Campaigns tab Bid column: configured ceiling or ad group default bid. */
+/** Native tooltip on the Campaigns tab Bid column: configured ceiling wins over the ad group default bid. */
 export const CAMPAIGN_BID_COLUMN_TITLE =
-  "Campaign bid price (uses the configured Max CPC ceiling or ad group default bid).";
+  "Campaign bid price: the configured Max CPC ceiling when set, otherwise the ad group default bid.";
 
 /**
  * KPI suffix beside Orders when Amazon attributed more units than checkouts.

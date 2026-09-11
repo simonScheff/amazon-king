@@ -25,6 +25,7 @@ import {
   listSearchTermCampaignRows,
   listSearchTermPresence,
   listSearchTermRollupRows,
+  listTargetRows,
   overviewRoyaltySeries,
   searchTermDailySeries,
 } from "./repositories/dashboard.js";
@@ -52,6 +53,7 @@ import {
   deleteMissingNegativeTargets,
   upsertNegativeKeyword,
   upsertNegativeTarget,
+  upsertTarget,
   listEntityChanges,
 } from "./repositories/structure.js";
 import {
@@ -3609,5 +3611,138 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       ["2026-08-15", "3.6000"],
     ]);
     expect(history[0]!.amazonProfileId).toBe("amzn-profile-kdp-reads");
+  });
+
+  it("keeps max_cpc policy-only and exposes an unambiguous default_bid", async () => {
+    const profileId = await seedProfile(pool);
+    const workspace = await pool.query<{ workspace_id: string }>(
+      `select c.workspace_id::text
+       from amazon_profiles p join amazon_connections c on c.id = p.connection_id
+       where p.id = $1`,
+      [profileId],
+    );
+    const workspaceId = workspace.rows[0]!.workspace_id;
+    const campaign = await upsertCampaign(pool, {
+      profileId,
+      amazonCampaignId: "amzn-campaign-bid-fallback",
+      name: "Bid fallback campaign",
+      state: "enabled",
+    });
+    const adGroupInput = {
+      profileId,
+      campaignId: campaign.id,
+      state: "enabled",
+    };
+    await upsertAdGroup(pool, {
+      ...adGroupInput,
+      amazonAdGroupId: "amzn-ad-group-bid-fallback-a",
+      name: "Ad group A",
+      defaultBid: "0.45",
+    });
+    await upsertAdGroup(pool, {
+      ...adGroupInput,
+      amazonAdGroupId: "amzn-ad-group-bid-fallback-b",
+      name: "Ad group B",
+      defaultBid: "0.45",
+    });
+
+    const readRow = async () => {
+      const rows = await listCampaignRows(
+        pool,
+        workspaceId,
+        "2026-08-13",
+        "2026-08-14",
+      );
+      const row = rows.find(
+        (r) => r.amazonCampaignId === "amzn-campaign-bid-fallback",
+      );
+      expect(row).toBeDefined();
+      return row!;
+    };
+
+    // No policy: max_cpc stays null (the "Max CPC not configured" signal)
+    // while the shared ad-group default bid surfaces separately.
+    expect(await readRow()).toMatchObject({
+      maxCpc: null,
+      defaultBid: "0.4500",
+    });
+
+    // A configured ceiling is reported as max_cpc; the default bid stays
+    // available alongside instead of being coalesced away.
+    await pool.query(
+      `insert into campaign_bid_policies (campaign_id, max_cpc, status)
+       values ($1, '0.75', 'active')`,
+      [campaign.id],
+    );
+    expect(await readRow()).toMatchObject({
+      maxCpc: "0.7500",
+      defaultBid: "0.4500",
+    });
+
+    // Ad groups disagreeing on default_bid make the fallback ambiguous:
+    // default_bid is null rather than an arbitrary ad group's value.
+    await upsertAdGroup(pool, {
+      ...adGroupInput,
+      amazonAdGroupId: "amzn-ad-group-bid-fallback-b",
+      name: "Ad group B",
+      defaultBid: "0.60",
+    });
+    expect(await readRow()).toMatchObject({
+      maxCpc: "0.7500",
+      defaultBid: null,
+    });
+  });
+
+  it("falls back a null target bid to its own ad group default", async () => {
+    const profileId = await seedProfile(pool);
+    const campaign = await upsertCampaign(pool, {
+      profileId,
+      amazonCampaignId: "amzn-campaign-target-bid",
+      name: "Target bid campaign",
+      state: "enabled",
+    });
+    const adGroup = await upsertAdGroup(pool, {
+      profileId,
+      campaignId: campaign.id,
+      amazonAdGroupId: "amzn-ad-group-target-bid",
+      name: "Target bid ad group",
+      state: "enabled",
+      defaultBid: "0.55",
+    });
+    await upsertTarget(pool, {
+      profileId,
+      campaignId: campaign.id,
+      adGroupId: adGroup.id,
+      amazonTargetId: "amzn-target-inherited-bid",
+      targetKind: "keyword",
+      expression: { type: "keyword", value: "inherited bid" },
+      matchType: "EXACT",
+      bid: null,
+      state: "ENABLED",
+    });
+    await upsertTarget(pool, {
+      profileId,
+      campaignId: campaign.id,
+      adGroupId: adGroup.id,
+      amazonTargetId: "amzn-target-explicit-bid",
+      targetKind: "keyword",
+      expression: { type: "keyword", value: "explicit bid" },
+      matchType: "EXACT",
+      bid: "0.90",
+      state: "ENABLED",
+    });
+
+    const rows = await listTargetRows(
+      pool,
+      campaign.id,
+      "2026-08-13",
+      "2026-08-14",
+    );
+    expect(
+      rows.find((row) => row.id === "amzn-target-inherited-bid")?.bid,
+    ).toBe("0.5500");
+    expect(rows.find((row) => row.id === "amzn-target-explicit-bid")?.bid).toBe(
+      "0.9000",
+    );
   });
 });

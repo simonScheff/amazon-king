@@ -418,11 +418,13 @@ describe("contracts smoke test", () => {
         dataCurrentThrough: "2026-08-13",
       },
       maxCpc: "0.7500",
+      defaultBid: "0.4500",
       bookIds: [],
     });
 
     expect(row.profitability.estimatedAdProfit).toBe("2.0000");
     expect(row.maxCpc).toBe("0.7500");
+    expect(row.defaultBid).toBe("0.4500");
     expect(row.bookIds).toEqual([]);
   });
 

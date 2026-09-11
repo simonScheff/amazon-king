@@ -189,6 +189,12 @@ export const campaignListRowSchema = campaignRowSchema.extend({
   /** Campaign-wide CPC ceiling, or null when the owner has not configured one. */
   maxCpc: nonNegativeDecimalStringSchema.nullable(),
   /**
+   * Ad-group default bid shared by every ad group of the campaign, or null
+   * when no ad group carries one or the ad groups disagree. Display fallback
+   * only — never substitutes for `maxCpc`, whose null means "not configured".
+   */
+  defaultBid: nonNegativeDecimalStringSchema.nullable(),
+  /**
    * Distinct catalog book ids advertised by this campaign (via enabled
    * book_profile_links). Empty when no ads are mapped. The dashboard joins
    * GET /api/books for cover images.

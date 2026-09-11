@@ -67,6 +67,12 @@ export interface CampaignRowData {
   estimatedRoyalty: string | null;
   /** Owner-configured campaign-wide CPC ceiling; null when not configured. */
   maxCpc: string | null;
+  /**
+   * Ad-group default bid shared by every ad group of the campaign; null when
+   * no ad group carries one or the ad groups disagree. Never substitutes for
+   * `maxCpc` — a null `maxCpc` means "Max CPC not configured".
+   */
+  defaultBid: string | null;
   economicsMissing: boolean;
   dataCurrentThrough: string | null;
   mixedCurrency: boolean;
@@ -100,6 +106,7 @@ export async function listCampaignRows(
       currency: string;
       estimated_royalty: string | null;
       max_cpc: string | null;
+      default_bid: string | null;
       economics_missing: boolean;
       data_current_through: string | null;
       mixed_currency: boolean;
@@ -239,10 +246,13 @@ export async function listCampaignRows(
             cr.impressions, cr.clicks, cr.cost, cr.sales, cr.orders, cr.units,
             coalesce(cr.currency, p.currency_code)::text as currency,
             rr.estimated_royalty,
-            coalesce(
-              policy.max_cpc,
-              (select g.default_bid from ad_groups g where g.campaign_id = c.id and g.default_bid is not null order by g.id limit 1)
-            )::text as max_cpc,
+            policy.max_cpc::text as max_cpc,
+            (select case when count(distinct g.default_bid) = 1
+                         then min(g.default_bid)
+                    end
+             from ad_groups g
+             where g.campaign_id = c.id and g.default_bid is not null)::text
+              as default_bid,
             coalesce(rr.economics_missing, false) as economics_missing,
             cr.data_current_through,
             coalesce(cr.mixed_currency, false)
@@ -288,6 +298,7 @@ export async function listCampaignRows(
     totals: toTotals(row),
     estimatedRoyalty: row.estimated_royalty,
     maxCpc: row.max_cpc,
+    defaultBid: row.default_bid,
     economicsMissing: row.economics_missing,
     dataCurrentThrough: row.data_current_through,
     mixedCurrency: row.mixed_currency,

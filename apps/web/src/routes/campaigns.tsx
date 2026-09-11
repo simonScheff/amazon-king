@@ -62,8 +62,10 @@ function sortValue(row: CampaignListRow, key: SortKey): number | string | null {
       return row.profitability.estimatedAdProfit === null
         ? null
         : Number(row.profitability.estimatedAdProfit);
-    case "maxCpc":
-      return row.maxCpc === null ? null : Number(row.maxCpc);
+    case "maxCpc": {
+      const bid = row.maxCpc ?? row.defaultBid;
+      return bid === null ? null : Number(bid);
+    }
     case "impressions":
       return row.totals.impressions;
     case "clicks":
@@ -369,7 +371,7 @@ export function CampaignsPage() {
                       />
                     </Td>
                     <Td className="text-right whitespace-nowrap">
-                      {formatMoney(c.maxCpc, currency)}
+                      {formatMoney(c.maxCpc ?? c.defaultBid, currency)}
                     </Td>
                     <Td className="text-right">
                       {formatCount(c.totals.impressions)}

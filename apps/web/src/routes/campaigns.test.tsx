@@ -44,6 +44,7 @@ function campaign(
   },
   bookIds: string[] = [],
   maxCpc: string | null = null,
+  defaultBid: string | null = null,
 ): CampaignListRow {
   return {
     profileId: "profile-us",
@@ -55,6 +56,7 @@ function campaign(
     totals,
     bookIds,
     maxCpc,
+    defaultBid,
     profitability: {
       dateRange: { start: "2026-08-07", end: "2026-08-13" },
       currency: "USD",
@@ -94,7 +96,15 @@ describe("CampaignsPage thirty-day profitability", () => {
       isPending: false,
       error: null,
       data: [
-        campaign("campaign-profit", "General", {}, undefined, [], "0.8000"),
+        campaign(
+          "campaign-profit",
+          "General",
+          {},
+          undefined,
+          [],
+          "0.8000",
+          "0.4000",
+        ),
         campaign(
           "campaign-loss",
           "Research",
@@ -106,11 +116,19 @@ describe("CampaignsPage thirty-day profitability", () => {
           [],
           "0.5000",
         ),
-        campaign("campaign-missing", "Discovery", {
-          estimatedRoyalty: null,
-          estimatedAdProfit: null,
-          economicsMissing: true,
-        }),
+        campaign(
+          "campaign-missing",
+          "Discovery",
+          {
+            estimatedRoyalty: null,
+            estimatedAdProfit: null,
+            economicsMissing: true,
+          },
+          undefined,
+          [],
+          null,
+          "0.3000",
+        ),
         campaign(
           "campaign-empty",
           "New campaign",
@@ -140,7 +158,7 @@ describe("CampaignsPage thirty-day profitability", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Bid" })).toHaveAttribute(
       "title",
-      "Campaign bid price (uses the configured Max CPC ceiling or ad group default bid).",
+      "Campaign bid price: the configured Max CPC ceiling when set, otherwise the ad group default bid.",
     );
     expect(
       within(screen.getByRole("columnheader", { name: /Campaign/ })).getByRole(
@@ -154,6 +172,9 @@ describe("CampaignsPage thirty-day profitability", () => {
 
     expect(screen.getByText("$0.80")).toBeInTheDocument();
     expect(screen.getByText("$0.50")).toBeInTheDocument();
+    // The configured ceiling wins over the ad group default bid in the Bid
+    // column; General also carries defaultBid "0.4000", which must not show.
+    expect(screen.queryByText("$0.40")).not.toBeInTheDocument();
 
     const profitable = screen.getByLabelText(
       "General 30-day profit: Profitable",
@@ -216,6 +237,30 @@ describe("CampaignsPage thirty-day profitability", () => {
     expect(
       within(notConfigured).getByRole("tooltip", { hidden: true }),
     ).toHaveTextContent("Max CPC: Not configured");
+  });
+
+  it("falls back to the ad group default bid in the Bid column only", () => {
+    render(<CampaignsPage />);
+
+    // Discovery has no configured ceiling; its Bid cell shows the default bid.
+    expect(screen.getByText("$0.30")).toBeInTheDocument();
+
+    // The profit tooltip still reports the policy-only ceiling truthfully.
+    const discovery = screen.getByLabelText(
+      "Discovery 30-day profit: Profit unavailable",
+    );
+    expect(
+      within(discovery).getByRole("tooltip", { hidden: true }),
+    ).toHaveTextContent("Max CPC: Not configured");
+
+    // New campaign has neither a ceiling nor a default bid: em dash.
+    const idleRow = screen
+      .getAllByRole("row")
+      .find(
+        (row) =>
+          within(row).queryByRole("link", { name: "New campaign" }) !== null,
+      )!;
+    expect(within(idleRow).getAllByRole("cell")[4]).toHaveTextContent("—");
   });
 
   it("filters campaigns by market", () => {
@@ -403,7 +448,8 @@ describe("CampaignsPage thirty-day profitability", () => {
       "New campaign",
     ]);
 
-    // Bid desc: General ($0.80), Research ($0.50), nulls last.
+    // Bid desc: General ($0.80), Research ($0.50), Discovery ($0.30 default
+    // bid), null last.
     fireEvent.click(screen.getByRole("button", { name: /Bid/ }));
     expect(rowNames()).toEqual([
       "General",
@@ -412,12 +458,12 @@ describe("CampaignsPage thirty-day profitability", () => {
       "New campaign",
     ]);
 
-    // Bid asc: Research ($0.50), General ($0.80), nulls last.
+    // Bid asc: Discovery ($0.30), Research ($0.50), General ($0.80), null last.
     fireEvent.click(screen.getByRole("button", { name: /Bid/ }));
     expect(rowNames()).toEqual([
+      "Discovery",
       "Research",
       "General",
-      "Discovery",
       "New campaign",
     ]);
   });

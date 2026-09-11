@@ -1276,6 +1276,7 @@ export function createReadService(deps: ReadServiceDeps): ReadService {
             consoleUrlByProfile.get(row.amazonProfileId) ?? null,
           bookIds: row.bookIds,
           maxCpc: row.maxCpc,
+          defaultBid: row.defaultBid,
           profitability: {
             dateRange: { start, end },
             currency: row.currency as DashboardSummary["currency"],
