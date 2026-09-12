@@ -4,12 +4,11 @@ import { createLogger } from "@amazon-king/observability";
 import { createReadService } from "@amazon-king/read-service";
 import { loadConfig } from "./config.js";
 import { buildMcpServer } from "./server.js";
+import { createMcpWriteService } from "./write-service.js";
 
 /**
- * Composition root for the MCP server (docs/mcp-server-plan.md): stdio for
- * local agent clients (default), Streamable HTTP for remote agents behind a
- * machine token. The server is read-only; applying changes stays in the
- * dashboard.
+ * Composition root for the MCP server: stdio for local agent clients (default),
+ * Streamable HTTP for remote agents behind a machine token.
  */
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -20,19 +19,31 @@ async function main(): Promise<void> {
   const logger = createLogger("mcp", {}, stderrStream);
   const pool = createPool(config.databaseUrl);
 
-  const workspaceId = await identity.getSingleWorkspaceId(pool);
-  if (!workspaceId) {
-    throw new Error(
-      "No workspace found — sign in to the dashboard once before starting the MCP server",
-    );
-  }
+  let cachedWorkspaceId: string | null = null;
+  const getWorkspaceId = async () => {
+    if (cachedWorkspaceId) return cachedWorkspaceId;
+    const wsId = await identity.getSingleWorkspaceId(pool);
+    if (!wsId) {
+      throw new Error(
+        "No workspace found — sign in to the dashboard once before starting the MCP server",
+      );
+    }
+    cachedWorkspaceId = wsId;
+    return wsId;
+  };
 
   const read = createReadService({
     db: pool,
     config: { killSwitch: config.killSwitch },
     logger,
   });
-  const buildServer = () => buildMcpServer({ read, workspaceId });
+  const write = config.killSwitch ? undefined : createMcpWriteService(pool);
+  const buildServer = (opts?: { canDraft?: boolean }) =>
+    buildMcpServer({
+      read,
+      write: (opts?.canDraft ?? true) ? write : undefined,
+      workspaceId: getWorkspaceId,
+    });
 
   const shutdown = async () => {
     await pool.end();
@@ -41,11 +52,12 @@ async function main(): Promise<void> {
   process.on("SIGTERM", () => void shutdown().then(() => process.exit(0)));
 
   if (config.transport === "http") {
+    const workspaceId = await getWorkspaceId();
     const { serveHttp } = await import("./http.js");
     await serveHttp({ config, logger, pool, workspaceId, buildServer });
   } else {
     await buildServer().connect(new StdioServerTransport());
-    logger.info({ workspaceId }, "MCP server connected over stdio");
+    logger.info("MCP server connected over stdio");
   }
 }
 

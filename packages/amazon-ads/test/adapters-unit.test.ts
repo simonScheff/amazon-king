@@ -590,6 +590,43 @@ describe("SP write request bodies", () => {
       ],
     });
     expect(
+      buildCampaignBiddingUpdateBody([
+        {
+          actionId: "c2",
+          kind: "update_campaign_bidding",
+          campaignId: "66",
+          state: "ENABLED",
+          dynamicBidding: {
+            strategy: "LEGACY_FOR_SALES",
+            placements: [
+              {
+                name: "Top of search (first page)",
+                placement: "PLACEMENT_TOP",
+                percentage: 30,
+              } as unknown as { name: string; percentage: number },
+            ],
+            audiences: [],
+          },
+        },
+      ]),
+    ).toEqual({
+      campaigns: [
+        {
+          campaignId: "66",
+          state: "ENABLED",
+          dynamicBidding: {
+            strategy: "LEGACY_FOR_SALES",
+            placementBidding: [
+              {
+                placement: "PLACEMENT_TOP",
+                percentage: 30,
+              },
+            ],
+          },
+        },
+      ],
+    });
+    expect(
       buildCampaignUpdateBody([
         {
           actionId: "c1",

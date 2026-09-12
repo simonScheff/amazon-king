@@ -76,13 +76,13 @@ with a `missing_lwa_credentials` auth error until they are set.
 
 ## MCP server (`apps/mcp`)
 
-Read-only MCP server for external AI agents. Parsed by a zod schema at boot;
+MCP server for external AI agents (reads and Change Center drafting; never applies directly to Amazon). Parsed by a zod schema at boot;
 only `DATABASE_URL` is required.
 
 | Variable        | Default  | Notes |
 | --------------- | -------- | ----- |
 | `DATABASE_URL`  | — (**required**) | PostgreSQL connection URL. |
-| `KILL_SWITCH`   | `true`   | Same semantics as the API; reported in status payloads. The MCP server never writes regardless. |
+| `KILL_SWITCH`   | `true`   | Same semantics as the API; reported in status payloads. When enabled (`true`), disables write/draft tools entirely. Regardless of this setting, the MCP server never applies changes directly to Amazon. |
 | `MCP_TRANSPORT` | `stdio`  | `stdio` for local agent clients; `http` serves remote agents over Streamable HTTP (requires machine tokens — see [MCP server](./mcp-server)). |
 | `MCP_HOST`      | `127.0.0.1` | HTTP bind address. Expose beyond localhost only behind your own TLS-terminating proxy. |
 | `MCP_PORT`      | `3100`   | HTTP port. |

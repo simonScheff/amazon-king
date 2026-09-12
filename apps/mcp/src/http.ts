@@ -35,16 +35,30 @@ export interface ServeHttpDeps {
   logger: ReadServiceLogger;
   pool: Pool;
   workspaceId: string;
-  buildServer: () => McpServer;
+  buildServer: (opts?: { canDraft?: boolean }) => McpServer;
   /** Injectable for tests. */
   now?: () => number;
 }
 
+const MAX_BODY_BYTES = 2 * 1024 * 1024; // 2 MB
+
 async function readBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
-  for await (const chunk of req) chunks.push(chunk as Buffer);
+  let totalLength = 0;
+  for await (const chunk of req) {
+    const buf = chunk as Buffer;
+    totalLength += buf.length;
+    if (totalLength > MAX_BODY_BYTES) {
+      throw new Error("Payload too large");
+    }
+    chunks.push(buf);
+  }
   if (chunks.length === 0) return undefined;
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch {
+    throw new Error("Invalid JSON body");
+  }
 }
 
 function send(
@@ -107,7 +121,8 @@ export async function serveHttp(
       const body = (await readBody(req)) as
         { method?: string; params?: { name?: string } } | undefined;
 
-      const server = buildServer();
+      const canDraft = token.scopes.includes("mcp:draft");
+      const server = buildServer({ canDraft });
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
         // Plain JSON responses: this server answers request/response tool
@@ -134,6 +149,15 @@ export async function serveHttp(
           .catch((error) => logger.warn({ err: error }, "audit write failed"));
       }
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message === "Payload too large") {
+        if (!res.headersSent) send(res, 413, { error: "Payload too large" });
+        return;
+      }
+      if (message === "Invalid JSON body") {
+        if (!res.headersSent) send(res, 400, { error: "Invalid JSON body" });
+        return;
+      }
       logger.error({ err: error }, "MCP HTTP request failed");
       if (!res.headersSent) send(res, 500, { error: "Internal server error" });
       else res.end();
