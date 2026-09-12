@@ -83,7 +83,10 @@ export function buildCampaignBiddingUpdateBody(
           ? {
               placementBidding: action.dynamicBidding.placements.map(
                 (item) => ({
-                  placement: item.name,
+                  placement:
+                    (item as unknown as Record<string, unknown>).placement ??
+                    (item as unknown as Record<string, unknown>).predicate ??
+                    item.name,
                   percentage: item.percentage,
                 }),
               ),
@@ -93,7 +96,9 @@ export function buildCampaignBiddingUpdateBody(
           ? {
               shopperCohortBidding: action.dynamicBidding.audiences.map(
                 (item) => ({
-                  shopperCohortType: item.name,
+                  shopperCohortType:
+                    (item as unknown as Record<string, unknown>)
+                      .shopperCohortType ?? item.name,
                   percentage: item.percentage,
                 }),
               ),

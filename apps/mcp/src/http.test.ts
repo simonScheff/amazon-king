@@ -4,6 +4,7 @@ import type { Pool } from "@amazon-king/database";
 import { hashToken, serveHttp } from "./http.js";
 import { buildMcpServer } from "./server.js";
 import type { ReadService } from "@amazon-king/read-service";
+import type { McpWriteService } from "./write-service.js";
 
 /**
  * HTTP transport tests (docs/mcp-server-plan.md W3): bearer-token auth, scope
@@ -22,10 +23,23 @@ const TOKEN_ROW = {
   revoked_at: null,
 };
 
+const DRAFT_TOKEN = "akmcp_draft-token";
+const DRAFT_TOKEN_ROW = {
+  id: "8",
+  workspace_id: "workspace-1",
+  label: "draft-agent",
+  scopes: ["mcp:read", "mcp:draft"],
+  created_at: "2026-08-23T00:00:00.000Z",
+  last_used_at: null,
+  revoked_at: null,
+};
+
 function fakePool(): { pool: Pool; query: ReturnType<typeof vi.fn> } {
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
     if (sql.includes("from api_tokens")) {
-      const match = params[0] === hashToken(TOKEN) ? [TOKEN_ROW] : [];
+      let match: Array<typeof TOKEN_ROW> = [];
+      if (params[0] === hashToken(TOKEN)) match = [TOKEN_ROW];
+      else if (params[0] === hashToken(DRAFT_TOKEN)) match = [DRAFT_TOKEN_ROW];
       return { rows: match, rowCount: match.length };
     }
     if (sql.includes("update api_tokens")) return { rows: [], rowCount: 1 };
@@ -46,6 +60,19 @@ function fakeRead(): ReadService {
   } as unknown as ReadService;
 }
 
+function fakeWrite(): McpWriteService {
+  return {
+    createRecommendationChangeSet: vi.fn(),
+    createCampaignNegativesChangeSet: vi.fn(),
+    createSearchTermExclusion: vi.fn(),
+    setCampaignMaxCpc: vi.fn(async () => ({ maxCpc: "0.36" })),
+    updateCampaignState: vi.fn(),
+    addKeywordsToCampaign: vi.fn(),
+    setCampaignPlacementMultiplier: vi.fn(),
+    rejectRecommendation: vi.fn(),
+  };
+}
+
 describe("MCP HTTP transport", () => {
   let server: Awaited<ReturnType<typeof serveHttp>>;
   let query: ReturnType<typeof vi.fn>;
@@ -57,7 +84,7 @@ describe("MCP HTTP transport", () => {
     server = await serveHttp({
       config: {
         databaseUrl: "postgres://unused",
-        killSwitch: true,
+        killSwitch: false,
         transport: "http",
         host: "127.0.0.1",
         port: 0,
@@ -65,8 +92,12 @@ describe("MCP HTTP transport", () => {
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
       pool: fake.pool,
       workspaceId: "workspace-1",
-      buildServer: () =>
-        buildMcpServer({ read: fakeRead(), workspaceId: "workspace-1" }),
+      buildServer: (opts) =>
+        buildMcpServer({
+          read: fakeRead(),
+          write: opts?.canDraft ? fakeWrite() : undefined,
+          workspaceId: "workspace-1",
+        }),
     });
     const { port } = server.address() as AddressInfo;
     baseUrl = `http://127.0.0.1:${port}/mcp`;
@@ -135,6 +166,67 @@ describe("MCP HTTP transport", () => {
       null,
       JSON.stringify({ actor: "mcp:ci-agent" }),
     ]);
+  });
+
+  it("restricts write tools to tokens with mcp:draft scope", async () => {
+    // Calling a write tool with read-only token fails with tool not found
+    const readOnlyRes = await fetch(baseUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${TOKEN}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: {
+          name: "set_campaign_max_cpc",
+          arguments: { campaignId: "c1", maxCpc: "0.36" },
+        },
+      }),
+    });
+    const readOnlyBody = await readOnlyRes.json();
+    expect(readOnlyBody).toMatchObject({
+      result: {
+        isError: true,
+        content: [
+          expect.objectContaining({
+            text: expect.stringContaining(
+              "Tool set_campaign_max_cpc not found",
+            ),
+          }),
+        ],
+      },
+    });
+
+    // Calling a write tool with draft token succeeds
+    const draftRes = await fetch(baseUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${DRAFT_TOKEN}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/call",
+        params: {
+          name: "set_campaign_max_cpc",
+          arguments: { campaignId: "c1", maxCpc: "0.36" },
+        },
+      }),
+    });
+    expect(draftRes.status).toBe(200);
+    const draftBody = (await draftRes.json()) as {
+      result: { content: Array<{ text: string }> };
+    };
+    expect(JSON.parse(draftBody.result.content[0]!.text)).toMatchObject({
+      success: true,
+      result: { maxCpc: "0.36" },
+    });
   });
 
   it("rate-limits a token after 120 requests per minute", async () => {

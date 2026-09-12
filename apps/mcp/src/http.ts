@@ -35,7 +35,7 @@ export interface ServeHttpDeps {
   logger: ReadServiceLogger;
   pool: Pool;
   workspaceId: string;
-  buildServer: () => McpServer;
+  buildServer: (opts?: { canDraft?: boolean }) => McpServer;
   /** Injectable for tests. */
   now?: () => number;
 }
@@ -107,7 +107,8 @@ export async function serveHttp(
       const body = (await readBody(req)) as
         { method?: string; params?: { name?: string } } | undefined;
 
-      const server = buildServer();
+      const canDraft = token.scopes.includes("mcp:draft");
+      const server = buildServer({ canDraft });
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
         // Plain JSON responses: this server answers request/response tool

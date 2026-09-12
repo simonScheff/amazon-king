@@ -5,18 +5,18 @@ import {
   recommendationTypeSchema,
 } from "@amazon-king/contracts";
 import type { ReadService } from "@amazon-king/read-service";
+import type { McpWriteService } from "./write-service.js";
 import { z } from "zod";
 
 /**
- * MCP tool surface over the shared read service (docs/mcp-server-plan.md).
- * Read-only by design: every tool takes only the workspace id, so no tool can
- * reach the guarded-write path, Amazon credentials, or another workspace.
+ * MCP tool surface over the read service and guarded write/draft service.
  */
 
 export interface McpServerDeps {
   read: ReadService;
-  workspaceId: string;
+  workspaceId: string | (() => Promise<string>);
   version?: string;
+  write?: McpWriteService;
 }
 
 const SEMANTICS =
@@ -62,7 +62,11 @@ function notFound(message: string) {
 }
 
 export function buildMcpServer(deps: McpServerDeps): McpServer {
-  const { read, workspaceId } = deps;
+  const { read } = deps;
+  const getWorkspaceId =
+    typeof deps.workspaceId === "function"
+      ? deps.workspaceId
+      : async () => deps.workspaceId as string;
   const server = new McpServer({
     name: "amazon-king",
     version: deps.version ?? "0.0.0",
@@ -77,7 +81,7 @@ export function buildMcpServer(deps: McpServerDeps): McpServer {
         SEMANTICS,
       inputSchema: z.object({}),
     },
-    async () => json(await read.listProfiles(workspaceId)),
+    async () => json(await read.listProfiles(await getWorkspaceId())),
   );
 
   server.registerTool(
@@ -103,7 +107,7 @@ export function buildMcpServer(deps: McpServerDeps): McpServer {
     async ({ days, country, books, currency }) =>
       json(
         await read.dashboardSummary(
-          workspaceId,
+          await getWorkspaceId(),
           days,
           country.toLowerCase() === "all" ? "all" : country.toUpperCase(),
           books,
@@ -127,7 +131,12 @@ export function buildMcpServer(deps: McpServerDeps): McpServer {
     },
     async ({ days, books, currency }) =>
       json(
-        await read.dashboardCountrySpend(workspaceId, days, books, currency),
+        await read.dashboardCountrySpend(
+          await getWorkspaceId(),
+          days,
+          books,
+          currency,
+        ),
       ),
   );
 
@@ -141,7 +150,7 @@ export function buildMcpServer(deps: McpServerDeps): McpServer {
       inputSchema: z.object({ days: daysSchema, books: booksSchema }),
     },
     async ({ days, books }) =>
-      json(await read.listCampaigns(workspaceId, days, books)),
+      json(await read.listCampaigns(await getWorkspaceId(), days, books)),
   );
 
   server.registerTool(
@@ -160,7 +169,7 @@ export function buildMcpServer(deps: McpServerDeps): McpServer {
     },
     async ({ campaignId, days, books }) => {
       const detail = await read.getCampaignDetail(
-        workspaceId,
+        await getWorkspaceId(),
         campaignId,
         days,
         books,
@@ -183,7 +192,14 @@ export function buildMcpServer(deps: McpServerDeps): McpServer {
       }),
     },
     async ({ days, books, country }) =>
-      json(await read.listSearchTerms(workspaceId, days, books, country)),
+      json(
+        await read.listSearchTerms(
+          await getWorkspaceId(),
+          days,
+          books,
+          country,
+        ),
+      ),
   );
 
   server.registerTool(
@@ -202,7 +218,7 @@ export function buildMcpServer(deps: McpServerDeps): McpServer {
     },
     async ({ term, days, books, country }) => {
       const detail = await read.getSearchTermDetail(
-        workspaceId,
+        await getWorkspaceId(),
         term,
         days,
         books,
@@ -231,7 +247,15 @@ export function buildMcpServer(deps: McpServerDeps): McpServer {
       }),
     },
     async ({ days, books, country, kind }) =>
-      json(await read.listNegatives(workspaceId, days, books, country, kind)),
+      json(
+        await read.listNegatives(
+          await getWorkspaceId(),
+          days,
+          books,
+          country,
+          kind,
+        ),
+      ),
   );
 
   server.registerTool(
@@ -251,7 +275,7 @@ export function buildMcpServer(deps: McpServerDeps): McpServer {
     },
     async ({ kind, value, days, books, country }) => {
       const detail = await read.getNegativeDetail(
-        workspaceId,
+        await getWorkspaceId(),
         kind,
         value,
         days,
@@ -272,7 +296,7 @@ export function buildMcpServer(deps: McpServerDeps): McpServer {
         "per copy, target ACoS) and advertised-product mappings. Economics " +
         "are required before any profit-based reasoning is valid.",
     },
-    async () => json(await read.listBooks(workspaceId)),
+    async () => json(await read.listBooks(await getWorkspaceId())),
   );
 
   server.registerTool(
@@ -292,7 +316,7 @@ export function buildMcpServer(deps: McpServerDeps): McpServer {
     },
     async ({ type, state, books }) =>
       json(
-        await read.listRecommendations(workspaceId, {
+        await read.listRecommendations(await getWorkspaceId(), {
           type,
           state,
           bookIds: books,
@@ -310,6 +334,7 @@ export function buildMcpServer(deps: McpServerDeps): McpServer {
       inputSchema: z.object({ recommendationId: z.string().min(1) }),
     },
     async ({ recommendationId }) => {
+      const workspaceId = await getWorkspaceId();
       const recommendation = await read.getRecommendation(
         workspaceId,
         recommendationId,
@@ -342,7 +367,7 @@ export function buildMcpServer(deps: McpServerDeps): McpServer {
         "rolling back a change set always requires the owner in the " +
         "dashboard.",
     },
-    async () => json(await read.listChangeSets(workspaceId)),
+    async () => json(await read.listChangeSets(await getWorkspaceId())),
   );
 
   server.registerTool(
@@ -354,12 +379,336 @@ export function buildMcpServer(deps: McpServerDeps): McpServer {
         "drawing conclusions so you can state how current the numbers are.",
       inputSchema: z.object({}),
     },
-    async () =>
-      json({
+    async () => {
+      const workspaceId = await getWorkspaceId();
+      return json({
         syncs: await read.listSyncRuns(workspaceId),
         freshness: await read.dataFreshness(workspaceId),
-      }),
+      });
+    },
   );
+
+  if (deps.write) {
+    const { write } = deps;
+
+    server.registerTool(
+      "create_recommendation_change_set",
+      {
+        description:
+          "Draft a staged change set from pending recommendation IDs for the owner to review and approve in the dashboard.",
+        inputSchema: z.object({
+          recommendationIds: z
+            .array(z.string().min(1))
+            .min(1)
+            .describe(
+              "List of pending recommendation IDs to draft into a change set",
+            ),
+        }),
+      },
+      async ({ recommendationIds }) => {
+        try {
+          const result = await write.createRecommendationChangeSet(
+            await getWorkspaceId(),
+            recommendationIds,
+          );
+          return json({ success: true, result });
+        } catch (error) {
+          return notFound(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      },
+    );
+
+    server.registerTool(
+      "add_campaign_negatives",
+      {
+        description:
+          "Draft a negative exact keyword or ASIN target change set for a specific campaign.",
+        inputSchema: z.object({
+          campaignId: z
+            .string()
+            .min(1)
+            .describe("Internal campaign ID or Amazon campaign ID"),
+          searchTerms: z
+            .array(z.string().min(1))
+            .min(1)
+            .describe("Search terms or ASINs to block as negative exact"),
+        }),
+      },
+      async ({ campaignId, searchTerms }) => {
+        try {
+          const result = await write.createCampaignNegativesChangeSet(
+            await getWorkspaceId(),
+            campaignId,
+            searchTerms,
+          );
+          return json({ success: true, result });
+        } catch (error) {
+          return notFound(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      },
+    );
+
+    server.registerTool(
+      "create_search_term_exclusion",
+      {
+        description:
+          "Add a search term to the workspace persistent exclusion list and draft negative exact sets across all serving campaigns.",
+        inputSchema: z.object({
+          searchTerm: z
+            .string()
+            .trim()
+            .min(1, "Search term cannot be empty")
+            .describe("Search term to exclude workspace-wide"),
+        }),
+      },
+      async ({ searchTerm }) => {
+        try {
+          const result = await write.createSearchTermExclusion(
+            await getWorkspaceId(),
+            searchTerm,
+          );
+          return json({ success: true, result });
+        } catch (error) {
+          return notFound(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      },
+    );
+
+    server.registerTool(
+      "set_campaign_max_cpc",
+      {
+        description: "Set the campaign max CPC bid policy.",
+        inputSchema: z.object({
+          campaignId: z
+            .string()
+            .min(1)
+            .describe("Internal campaign ID or Amazon campaign ID"),
+          maxCpc: z
+            .string()
+            .trim()
+            .regex(
+              /^\d+(\.\d{1,4})?$/,
+              "Max CPC must be a positive decimal string with up to 4 decimal places",
+            )
+            .refine((val) => Number(val) > 0, "Max CPC must be greater than 0")
+            .describe("Target max CPC in decimal string (e.g. '0.36')"),
+        }),
+      },
+      async ({ campaignId, maxCpc }) => {
+        try {
+          const result = await write.setCampaignMaxCpc(
+            await getWorkspaceId(),
+            campaignId,
+            maxCpc,
+          );
+          return json({ success: true, result });
+        } catch (error) {
+          return notFound(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      },
+    );
+
+    server.registerTool(
+      "update_campaign_state",
+      {
+        description:
+          "Draft a campaign state update (enable or pause a campaign).",
+        inputSchema: z.object({
+          campaignId: z
+            .string()
+            .min(1)
+            .describe("Internal campaign ID or Amazon campaign ID"),
+          state: z
+            .enum(["enabled", "paused"])
+            .describe("Target state ('enabled' or 'paused')"),
+        }),
+      },
+      async ({ campaignId, state }) => {
+        try {
+          const result = await write.updateCampaignState(
+            await getWorkspaceId(),
+            campaignId,
+            state,
+          );
+          return json({ success: true, result });
+        } catch (error) {
+          return notFound(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      },
+    );
+
+    server.registerTool(
+      "add_keywords_to_campaign",
+      {
+        description:
+          "Draft a change set to add positive keywords (Exact, Phrase, or Broad) to an existing campaign ad group.",
+        inputSchema: z.object({
+          campaignId: z
+            .string()
+            .min(1)
+            .describe("Internal campaign ID or Amazon campaign ID"),
+          adGroupId: z
+            .string()
+            .optional()
+            .describe(
+              "Optional target ad group ID. Defaults to first ad group.",
+            ),
+          keywords: z
+            .array(
+              z.object({
+                keywordText: z
+                  .string()
+                  .trim()
+                  .min(1, "Keyword text cannot be empty")
+                  .describe("Keyword text to add"),
+                matchType: z
+                  .enum(["EXACT", "PHRASE", "BROAD"])
+                  .default("PHRASE")
+                  .describe("Match type"),
+                bid: z
+                  .string()
+                  .trim()
+                  .regex(
+                    /^\d+(\.\d{1,4})?$/,
+                    "Bid must be a positive decimal string with up to 4 decimal places",
+                  )
+                  .refine(
+                    (val) => Number(val) > 0,
+                    "Bid must be greater than 0",
+                  )
+                  .optional()
+                  .describe("Keyword bid in decimal string (e.g. '0.38')"),
+              }),
+            )
+            .min(1)
+            .describe("Keywords to add to the campaign"),
+        }),
+      },
+      async ({ campaignId, adGroupId, keywords }) => {
+        try {
+          const result = await write.addKeywordsToCampaign(
+            await getWorkspaceId(),
+            campaignId,
+            keywords,
+            adGroupId,
+          );
+          return json({ success: true, result });
+        } catch (error) {
+          return notFound(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      },
+    );
+
+    server.registerTool(
+      "set_campaign_placement_multiplier",
+      {
+        description:
+          "Draft a change set to set placement bid multipliers (Top of Search %, Product Pages %, Rest of Search %) for a campaign.",
+        inputSchema: z
+          .object({
+            campaignId: z
+              .string()
+              .min(1)
+              .describe("Internal campaign ID or Amazon campaign ID"),
+            topOfSearchPercentage: z
+              .number()
+              .int("Percentage must be an integer")
+              .min(0, "Percentage must be non-negative")
+              .max(900, "Percentage must not exceed 900")
+              .optional()
+              .describe(
+                "Top of search (first page) placement multiplier percentage (e.g. 30 for +30%)",
+              ),
+            productPagePercentage: z
+              .number()
+              .int("Percentage must be an integer")
+              .min(0, "Percentage must be non-negative")
+              .max(900, "Percentage must not exceed 900")
+              .optional()
+              .describe(
+                "Product pages placement multiplier percentage (e.g. 10 for +10%)",
+              ),
+            restOfSearchPercentage: z
+              .number()
+              .int("Percentage must be an integer")
+              .min(0, "Percentage must be non-negative")
+              .max(900, "Percentage must not exceed 900")
+              .optional()
+              .describe("Rest of search placement multiplier percentage"),
+          })
+          .refine(
+            (data) =>
+              data.topOfSearchPercentage !== undefined ||
+              data.productPagePercentage !== undefined ||
+              data.restOfSearchPercentage !== undefined,
+            "At least one placement multiplier percentage must be specified",
+          ),
+      },
+      async ({
+        campaignId,
+        topOfSearchPercentage,
+        productPagePercentage,
+        restOfSearchPercentage,
+      }) => {
+        try {
+          const result = await write.setCampaignPlacementMultiplier(
+            await getWorkspaceId(),
+            campaignId,
+            {
+              topOfSearchPercentage,
+              productPagePercentage,
+              restOfSearchPercentage,
+            },
+          );
+          return json({ success: true, result });
+        } catch (error) {
+          return notFound(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      },
+    );
+
+    server.registerTool(
+      "reject_recommendation",
+      {
+        description: "Dismiss or reject an advisory recommendation.",
+        inputSchema: z.object({
+          recommendationId: z
+            .string()
+            .min(1)
+            .describe("Recommendation ID to dismiss/reject"),
+          reason: z.string().optional().describe("Optional rejection reason"),
+        }),
+      },
+      async ({ recommendationId, reason }) => {
+        try {
+          const result = await write.rejectRecommendation(
+            await getWorkspaceId(),
+            recommendationId,
+            reason,
+          );
+          return json({ success: true, result });
+        } catch (error) {
+          return notFound(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      },
+    );
+  }
 
   return server;
 }

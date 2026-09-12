@@ -178,6 +178,8 @@ describe("migration files", () => {
   });
 
   it("MIGRATIONS_DIR points at the package migrations directory", async () => {
-    expect(MIGRATIONS_DIR).toMatch(/packages\/database\/migrations\/?$/);
+    expect(MIGRATIONS_DIR.replace(/\\/g, "/")).toMatch(
+      /packages\/database\/migrations\/?$/,
+    );
   });
 });
