@@ -1,3 +1,9 @@
+ifeq ($(OS),Windows_NT)
+  SHELL := C:/Program Files/Git/bin/bash.exe
+  .SHELLFLAGS := -c
+  export PATH := C:\Program Files\Git\usr\bin;C:\Program Files\Git\bin;$(PATH)
+endif
+
 .DEFAULT_GOAL := help
 
 # Load local environment (DATABASE_URL, PORT, ...) into every recipe.
@@ -23,14 +29,19 @@ preflight: ## Validate required local configuration before starting services
 	@test -n "$(LWA_CLIENT_ID)" || (echo "LWA_CLIENT_ID is required in .env" >&2; exit 1)
 	@test -n "$(LWA_CLIENT_SECRET)" || (echo "LWA_CLIENT_SECRET is required in .env" >&2; exit 1)
 
-db-up: ## Start local PostgreSQL (docker compose)
-	docker compose up -d db
-	@echo "Waiting for PostgreSQL..."
-	@for i in $$(seq 1 30); do \
-		if docker exec amazon-king-db pg_isready -U postgres -d amazon_king -q; then echo "PostgreSQL is ready"; exit 0; fi; \
-		sleep 1; \
-	done; \
-	echo "PostgreSQL did not become ready in time" >&2; exit 1
+db-up: ## Start local PostgreSQL (docker compose or existing local server)
+	@if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then \
+		docker compose up -d db; \
+		echo "Waiting for PostgreSQL..."; \
+		for i in $$(seq 1 30); do \
+			if docker exec amazon-king-db pg_isready -U postgres -d amazon_king -q 2>/dev/null; then echo "PostgreSQL is ready"; exit 0; fi; \
+			sleep 1; \
+		done; \
+		echo "PostgreSQL did not become ready in time" >&2; exit 1; \
+	else \
+		echo "Docker not found or daemon not running; checking native PostgreSQL connection..."; \
+		pnpm exec tsx -e "import { createPool } from '@amazon-king/database'; (async () => { const pool = createPool(process.env.DATABASE_URL!); await pool.query('SELECT 1'); await pool.end(); console.log('PostgreSQL is ready'); })().catch(err => { console.error('Could not connect to PostgreSQL:', err.message); process.exit(1); })"; \
+	fi
 
 migrate: ## Apply database migrations
 	@set -a; [ ! -f .env ] || . ./.env; set +a; \
@@ -91,11 +102,18 @@ stop: ## Stop local PostgreSQL
 	docker compose down
 
 backup: ## Dump the local database to backups/ (keeps the last 14; db must be running)
-	@docker exec amazon-king-db pg_isready -U postgres -d amazon_king -q || (echo "PostgreSQL is not running (make db-up first)" >&2; exit 1)
 	@mkdir -p backups
-	@docker exec amazon-king-db pg_dump -U postgres -Fc amazon_king > backups/amazon_king-$$(date +%Y%m%d-%H%M%S).dump
-	@ls -t backups/amazon_king-*.dump | tail -n +15 | xargs rm -f 2>/dev/null || true
-	@echo "Backup written: $$(ls -t backups/amazon_king-*.dump | head -1)"
+	@if command -v docker >/dev/null 2>&1 && docker ps -q -f name=amazon-king-db | grep -q .; then \
+		docker exec amazon-king-db pg_dump -U postgres -Fc amazon_king > backups/amazon_king-$$(date +%Y%m%d-%H%M%S).dump; \
+	elif command -v pg_dump >/dev/null 2>&1; then \
+		pg_dump -d "$$DATABASE_URL" -Fc > backups/amazon_king-$$(date +%Y%m%d-%H%M%S).dump; \
+	elif [ -f "/c/Program Files/PostgreSQL/16/bin/pg_dump.exe" ]; then \
+		"/c/Program Files/PostgreSQL/16/bin/pg_dump.exe" -d "$$DATABASE_URL" -Fc > backups/amazon_king-$$(date +%Y%m%d-%H%M%S).dump; \
+	else \
+		echo "pg_dump / docker not available; skipping backup" >&2; exit 1; \
+	fi
+	@ls -t backups/amazon_king-*.dump 2>/dev/null | tail -n +15 | xargs rm -f 2>/dev/null || true
+	@echo "Backup written: $$(ls -t backups/amazon_king-*.dump 2>/dev/null | head -1)"
 
 restore: ## Restore a dump over the local database: make restore DUMP=backups/<file>.dump
 	@test -n "$(DUMP)" || (echo "Usage: make restore DUMP=backups/amazon_king-YYYYMMDD-HHMMSS.dump" >&2; exit 1)
