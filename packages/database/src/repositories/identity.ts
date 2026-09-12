@@ -93,12 +93,20 @@ export async function findOrProvisionOwner(
 
 /**
  * The single workspace of this single-owner deployment, for machine readers
- * (the MCP server) that have no session to derive it from. Null when the
- * owner has not signed in yet.
+ * (such as the MCP server) that have no browser session cookie to derive it from.
+ *
+ * If multiple workspace records exist (e.g. from local testing or dev logins),
+ * prioritizes the workspace with an active Amazon connection (Login B) that
+ * holds synced campaign data, falling back to the most recently created workspace.
+ * Returns null when the owner has not signed in yet.
  */
 export async function getSingleWorkspaceId(db: Db): Promise<string | null> {
   const result = await db.query<{ id: string }>(
-    `select id from workspaces order by created_at asc limit 1`,
+    `select w.id
+     from workspaces w
+     left join amazon_connections c on c.workspace_id = w.id and c.status <> 'disconnected'
+     order by (c.id is not null) desc, w.created_at desc
+     limit 1`,
   );
   return result.rows[0]?.id ?? null;
 }

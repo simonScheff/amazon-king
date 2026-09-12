@@ -3,6 +3,7 @@ import type { FastifyBaseLogger as Logger } from "fastify";
 import type {
   ActionResult,
   AmazonAdsGateway,
+  CampaignDynamicBidding,
   StructureSnapshot,
 } from "@amazon-king/amazon-ads";
 import type { ApiConfig } from "../config.js";
@@ -68,23 +69,24 @@ function expectApiError(error: unknown, code: string): void {
 }
 
 function snapshotWith(campaign: {
-  campaignId: string;
+  campaignId?: string;
   name: string;
   state: string;
+  dynamicBidding?: CampaignDynamicBidding | null;
 }): StructureSnapshot {
   return {
     profileId: "amz-profile-1",
     retrievedAt: "2026-08-17T10:00:00.000Z",
     campaigns: [
       {
-        campaignId: campaign.campaignId,
+        campaignId: campaign.campaignId ?? "camp-1",
         name: campaign.name,
         state: campaign.state,
         dailyBudget: 5,
         startDate: "2026-09-01",
         endDate: null,
         targetingType: "MANUAL",
-        dynamicBidding: null,
+        dynamicBidding: campaign.dynamicBidding ?? null,
         raw: {},
       },
     ],
@@ -426,5 +428,219 @@ describe("campaign rename", () => {
       .updateCampaign(authFixture(), "camp-1", { name: "New name" }, META)
       .catch((error) => expectApiError(error, "STALE_BEFORE_STATE"));
     expect(gateway.applyActions).not.toHaveBeenCalled();
+  });
+
+  it("applies a standalone create_keyword action for an existing campaign", async () => {
+    const { service, gateway, db } = setup();
+    const campaign = db.tables.campaigns[0]!;
+    const adGroup = db.seedAdGroup({
+      campaign_id: campaign.id,
+      amazon_ad_group_id: "ag-1",
+      name: "Default Ad Group",
+    });
+
+    gateway.syncCampaignStructure
+      .mockResolvedValueOnce({
+        profileId: "amz-profile-1",
+        retrievedAt: "2026-08-17T10:00:00.000Z",
+        campaigns: [
+          {
+            campaignId: String(campaign.amazon_campaign_id),
+            name: String(campaign.name),
+            state: "ENABLED",
+            dailyBudget: 5,
+            startDate: "2026-09-01",
+            endDate: null,
+            targetingType: "MANUAL",
+            dynamicBidding: null,
+            raw: {},
+          },
+        ],
+        adGroups: [
+          {
+            adGroupId: String(adGroup.amazon_ad_group_id),
+            campaignId: String(campaign.amazon_campaign_id),
+            name: String(adGroup.name),
+            state: "ENABLED",
+            defaultBid: 0.35,
+            raw: {},
+          },
+        ],
+        ads: [],
+        keywords: [],
+        targets: [],
+        negativeKeywords: [],
+      })
+      .mockResolvedValueOnce({
+        profileId: "amz-profile-1",
+        retrievedAt: "2026-08-17T10:00:05.000Z",
+        campaigns: [
+          {
+            campaignId: String(campaign.amazon_campaign_id),
+            name: String(campaign.name),
+            state: "ENABLED",
+            dailyBudget: 5,
+            startDate: "2026-09-01",
+            endDate: null,
+            targetingType: "MANUAL",
+            dynamicBidding: null,
+            raw: {},
+          },
+        ],
+        adGroups: [
+          {
+            adGroupId: String(adGroup.amazon_ad_group_id),
+            campaignId: String(campaign.amazon_campaign_id),
+            name: String(adGroup.name),
+            state: "ENABLED",
+            defaultBid: 0.35,
+            raw: {},
+          },
+        ],
+        ads: [],
+        keywords: [
+          {
+            keywordId: "kw-new-1",
+            adGroupId: String(adGroup.amazon_ad_group_id),
+            campaignId: String(campaign.amazon_campaign_id),
+            keywordText: "cavalier gifts kids",
+            matchType: "PHRASE",
+            state: "ENABLED",
+            bid: 0.38,
+            raw: {},
+          },
+        ],
+        targets: [],
+        negativeKeywords: [],
+      });
+
+    // Insert change set
+    const set = db.seedChangeSet({
+      profile_id: campaign.profile_id,
+      creator_user_id: "1",
+      status: "draft",
+      kind: "campaign_update",
+    });
+    const action = db.seedChangeAction({
+      change_set_id: set.id,
+      action_type: "create_keyword",
+      campaign_id: campaign.id,
+      ad_group_id: adGroup.id,
+      search_term: "cavalier gifts kids",
+      after_value: "0.38",
+      status: "pending",
+      entity_name: String(campaign.name),
+      after_state: {
+        keywordText: "cavalier gifts kids",
+        matchType: "PHRASE",
+        bid: "0.38",
+        state: "enabled",
+      },
+    });
+
+    gateway.applyActions.mockResolvedValueOnce([
+      {
+        actionId: String(action.id),
+        status: "applied",
+        code: "SUCCESS",
+        amazonEntityId: "kw-new-1",
+      },
+    ]);
+
+    const result = await service.applyChangeSet(
+      authFixture(),
+      String(set.id),
+      META,
+    );
+    expect(result.changeSet.status).toBe("applied");
+    expect(gateway.applyActions).toHaveBeenCalled();
+  });
+
+  it("applies and verifies update_campaign_bidding with placement/predicate afterState", async () => {
+    const { db, gateway, service, campaign } = setup();
+
+    const storedAfterState = {
+      strategy: "LEGACY_FOR_SALES",
+      placements: [
+        {
+          name: "PLACEMENT_TOP",
+          predicate: "PLACEMENT_TOP",
+          placement: "PLACEMENT_TOP",
+          percentage: 30,
+        },
+      ],
+      audiences: [],
+    };
+
+    const amazonLiveBidding: CampaignDynamicBidding = {
+      strategy: "LEGACY_FOR_SALES",
+      placements: [
+        {
+          name: "PLACEMENT_TOP",
+          percentage: 30,
+        },
+      ],
+      audiences: [],
+    };
+
+    gateway.syncCampaignStructure
+      .mockResolvedValueOnce(
+        snapshotWith({
+          campaignId: "camp-1",
+          name: String(campaign.name),
+          state: "ENABLED",
+          dynamicBidding: {
+            strategy: "LEGACY_FOR_SALES",
+            placements: [],
+            audiences: [],
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        snapshotWith({
+          campaignId: "camp-1",
+          name: String(campaign.name),
+          state: "ENABLED",
+          dynamicBidding: amazonLiveBidding,
+        }),
+      );
+
+    const set = db.seedChangeSet({
+      profile_id: campaign.profile_id,
+      creator_user_id: "1",
+      status: "draft",
+      kind: "campaign_update",
+    });
+    const action = db.seedChangeAction({
+      change_set_id: set.id,
+      action_type: "update_campaign_bidding",
+      campaign_id: campaign.id,
+      amazon_entity_id: String(campaign.amazon_campaign_id),
+      status: "pending",
+      entity_name: String(campaign.name),
+      before_state: {
+        strategy: "LEGACY_FOR_SALES",
+        placements: [],
+        audiences: [],
+      },
+      after_state: storedAfterState,
+    });
+
+    gateway.applyActions.mockResolvedValueOnce([
+      {
+        actionId: String(action.id),
+        status: "applied",
+        code: "SUCCESS",
+        amazonEntityId: String(campaign.amazon_campaign_id),
+      },
+    ]);
+
+    const result = await service.applyChangeSet(
+      authFixture(),
+      String(set.id),
+      META,
+    );
+    expect(result.changeSet.status).toBe("applied");
+    expect(gateway.applyActions).toHaveBeenCalled();
   });
 });

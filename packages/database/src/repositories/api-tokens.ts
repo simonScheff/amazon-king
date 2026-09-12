@@ -44,12 +44,18 @@ function toApiToken(row: ApiTokenRow): ApiToken {
 
 export async function createApiToken(
   db: Db,
-  input: { workspaceId: string; label: string; tokenHash: string },
+  input: {
+    workspaceId: string;
+    label: string;
+    tokenHash: string;
+    scopes?: string[];
+  },
 ): Promise<ApiToken> {
+  const scopes = input.scopes ?? ["mcp:read"];
   const result = await db.query<ApiTokenRow>(
-    `insert into api_tokens (workspace_id, label, token_hash)
-     values ($1, $2, $3) returning *`,
-    [input.workspaceId, input.label, input.tokenHash],
+    `insert into api_tokens (workspace_id, label, token_hash, scopes)
+     values ($1, $2, $3, $4) returning *`,
+    [input.workspaceId, input.label, input.tokenHash, scopes],
   );
   return toApiToken(result.rows[0]!);
 }

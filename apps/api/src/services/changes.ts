@@ -190,6 +190,91 @@ function sameState(left: unknown, right: unknown): boolean {
   return stableStringify(left) === stableStringify(right);
 }
 
+/**
+ * Normalize a single placement item to { name, percentage }, accepting any of
+ * the field names used by Amazon's API (`placement`, `predicate`) or our
+ * internal model (`name`).
+ */
+function normalizePlacementItem(
+  item: unknown,
+): { name: string; percentage: number } | null {
+  if (!item || typeof item !== "object") return null;
+  const obj = item as Record<string, unknown>;
+  const name = String(obj.name ?? obj.placement ?? obj.predicate ?? "").trim();
+  const percentage = Number(obj.percentage ?? 0);
+  return name ? { name, percentage } : null;
+}
+
+function normalizeAudienceItem(
+  item: unknown,
+): { id: string; percentage: number } | null {
+  if (!item || typeof item !== "object") return null;
+  const obj = item as Record<string, unknown>;
+  const id = String(
+    obj.id ??
+      obj.shopperCohortId ??
+      obj.shopperCohortType ??
+      obj.name ??
+      (Array.isArray(obj.audienceSegments)
+        ? obj.audienceSegments.join(", ")
+        : "") ??
+      "",
+  ).trim();
+  const percentage = Number(obj.percentage ?? 0);
+  return id ? { id, percentage } : null;
+}
+
+/**
+ * Normalize a dynamic bidding state to a canonical shape for comparison.
+ *
+ * Amazon returns placements as `{ name, percentage }` while our change sets
+ * store `{ name, predicate, placement, percentage }`. This strips extra fields
+ * and sorts placements and audiences so that structurally identical states compare equal.
+ */
+function normalizeDynamicBidding(value: unknown): {
+  strategy: string;
+  placements: { name: string; percentage: number }[];
+  audiences: { id: string; percentage: number }[];
+} | null {
+  if (!value || typeof value !== "object") return null;
+  const obj = value as Record<string, unknown>;
+  const strategy = String(obj.strategy ?? "").trim();
+  const rawPlacements = Array.isArray(obj.placements)
+    ? obj.placements
+    : Array.isArray(obj.placementBidding)
+      ? obj.placementBidding
+      : [];
+  const placements = (rawPlacements as unknown[])
+    .map(normalizePlacementItem)
+    .filter((p): p is { name: string; percentage: number } => p !== null)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const rawAudiences = Array.isArray(obj.audiences)
+    ? obj.audiences
+    : Array.isArray(obj.shopperCohortBidding)
+      ? obj.shopperCohortBidding
+      : [];
+  const audiences = (rawAudiences as unknown[])
+    .map(normalizeAudienceItem)
+    .filter((a): a is { id: string; percentage: number } => a !== null)
+    .sort((a, b) => a.id.localeCompare(b.id));
+  return { strategy, placements, audiences };
+}
+
+/**
+ * Compare two dynamic bidding states, tolerating shape differences between
+ * Amazon's API format and our internal representation.
+ *
+ * Falls back to strict JSON comparison first (fast path), then normalizes
+ * both sides if the shapes differ.
+ */
+function sameBiddingState(left: unknown, right: unknown): boolean {
+  if (sameState(left, right)) return true;
+  const nLeft = normalizeDynamicBidding(left);
+  const nRight = normalizeDynamicBidding(right);
+  if (!nLeft || !nRight) return false;
+  return sameState(nLeft, nRight);
+}
+
 function amazonErrorMessage(value: unknown): string | null {
   if (typeof value === "string" && value.trim().length > 0) {
     return value;
@@ -1007,24 +1092,38 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
           preSatisfied,
         });
       } else if (action.actionType === "update_campaign_bidding") {
-        if (!action.amazonEntityId || !bidControls) {
+        if (!action.amazonEntityId || (!bidControls && !snapshot)) {
           throw new ApiError(
             500,
             "INTERNAL",
             "Malformed update_campaign_bidding action",
           );
         }
-        const preSatisfied = sameState(
-          bidControls.campaign.dynamicBidding,
+        const matchingCampaign = bidControls
+          ? bidControls.campaign
+          : snapshot?.campaigns.find(
+              (c) => c.campaignId === action.amazonEntityId,
+            );
+        if (!matchingCampaign) {
+          throw conflict(
+            "STALE_BEFORE_STATE",
+            `Campaign ${action.amazonEntityId} no longer exists on Amazon; re-sync and re-create the change set`,
+          );
+        }
+        const liveDynamicBidding = matchingCampaign.dynamicBidding;
+        const liveState = matchingCampaign.state;
+        const preSatisfied = sameBiddingState(
+          liveDynamicBidding,
           action.afterState,
         );
         if (
           !preSatisfied &&
-          !sameState(bidControls.campaign.dynamicBidding, action.beforeState)
+          action.beforeState &&
+          !sameBiddingState(liveDynamicBidding, action.beforeState)
         ) {
           throw conflict(
             "STALE_BEFORE_STATE",
-            "Amazon campaign bidding settings changed; re-create the Max CPC change set",
+            "Amazon campaign bidding settings changed; re-create the change set",
           );
         }
         translated.push({
@@ -1034,7 +1133,7 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
             kind: "update_campaign_bidding",
             campaignId: action.amazonEntityId,
             dynamicBidding: action.afterState as CampaignDynamicBidding,
-            state: bidControls.campaign.state,
+            state: liveState,
           },
           amazonTargetId: null,
           amazonCampaignId: action.amazonEntityId,
@@ -1336,6 +1435,95 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
             preSatisfied,
           });
         }
+      } else if (action.actionType === "create_keyword") {
+        if (!snapshot || !action.campaignId) {
+          throw new ApiError(
+            500,
+            "INTERNAL",
+            "Malformed create_keyword action",
+          );
+        }
+        const campaign = await structure.getCampaign(db, action.campaignId);
+        if (!campaign) {
+          throw conflict(
+            "STALE_BEFORE_STATE",
+            "Campaign no longer exists locally; re-sync before applying",
+          );
+        }
+        const liveCampaign = snapshot.campaigns.find(
+          (item) => item.campaignId === campaign.amazonCampaignId,
+        );
+        if (!liveCampaign) {
+          throw conflict(
+            "STALE_BEFORE_STATE",
+            "Campaign no longer exists on Amazon; re-sync before applying",
+          );
+        }
+        let amazonAdGroupId: string | null = null;
+        if (action.adGroupId) {
+          const adGroup = await structure.getAdGroup(db, action.adGroupId);
+          if (adGroup) amazonAdGroupId = adGroup.amazonAdGroupId;
+        }
+        if (!amazonAdGroupId) {
+          const liveAdGroups = snapshot.adGroups.filter(
+            (ag) => ag.campaignId === liveCampaign.campaignId,
+          );
+          if (liveAdGroups.length === 0) {
+            throw conflict(
+              "STALE_BEFORE_STATE",
+              "Campaign has no ad groups on Amazon; re-sync before applying",
+            );
+          }
+          amazonAdGroupId = liveAdGroups[0].adGroupId;
+        }
+        const after = stateRecord(action.afterState);
+        const keywordText = String(
+          after.keywordText ?? action.searchTerm ?? "",
+        ).trim();
+        const matchType = String(after.matchType ?? "EXACT").toUpperCase() as
+          "EXACT" | "PHRASE" | "BROAD";
+        const bid = String(after.bid ?? action.afterValue ?? "0.35");
+        const state = String(after.state ?? "enabled").toLowerCase() as
+          "enabled" | "paused";
+
+        const existingKeyword = (snapshot.keywords ?? []).find(
+          (k) =>
+            k.adGroupId === amazonAdGroupId &&
+            k.keywordText.trim().toLowerCase() === keywordText.toLowerCase() &&
+            k.matchType === matchType,
+        );
+        const bidMatches =
+          existingKeyword?.bid !== undefined &&
+          (existingKeyword.bid === null
+            ? !after.bid
+            : bidMicros(existingKeyword.bid) === microsFromDecimalString(bid));
+        const stateMatches = existingKeyword?.state?.toLowerCase() === state;
+        const preSatisfied =
+          existingKeyword !== undefined && bidMatches && stateMatches;
+        if (existingKeyword && !preSatisfied) {
+          throw conflict(
+            "KEYWORD_ALREADY_EXISTS",
+            `Keyword '${keywordText}' (${matchType}) already exists on Amazon with different bid or state`,
+          );
+        }
+        translated.push({
+          action,
+          gatewayAction: {
+            actionId: action.id,
+            kind: "create_keyword",
+            adGroupActionId: action.id,
+            resolvedCampaignId: liveCampaign.campaignId,
+            resolvedAdGroupId: amazonAdGroupId,
+            keywordText,
+            matchType,
+            bid,
+            state,
+          },
+          amazonTargetId: existingKeyword?.keywordId ?? null,
+          amazonCampaignId: liveCampaign.campaignId,
+          amazonAdGroupId,
+          preSatisfied,
+        });
       } else {
         throw new ApiError(
           500,
@@ -1830,12 +2018,16 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
               microsFromDecimalString(t.action.afterValue ?? "0");
         } else if (
           t.action.actionType === "update_campaign_bidding" &&
-          bidVerification
+          (bidVerification || verification)
         ) {
-          verified = sameState(
-            bidVerification.campaign.dynamicBidding,
-            t.action.afterState,
-          );
+          const liveBidding = bidVerification
+            ? bidVerification.campaign.dynamicBidding
+            : verification?.campaigns.find(
+                (c) => c.campaignId === t.amazonCampaignId,
+              )?.dynamicBidding;
+          verified =
+            liveBidding !== undefined &&
+            sameBiddingState(liveBidding, t.action.afterState);
         } else if (
           t.action.actionType === "update_optimization_rule" &&
           t.amazonTargetId &&

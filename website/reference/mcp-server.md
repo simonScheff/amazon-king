@@ -45,6 +45,8 @@ only requirement.
 
    ```sh
    pnpm exec tsx scripts/mcp-token.ts issue my-agent
+   # or with change-drafting permissions:
+   pnpm exec tsx scripts/mcp-token.ts issue my-agent --draft
    ```
 
 3. Point the client at `http://127.0.0.1:3100/mcp` with an
@@ -55,11 +57,15 @@ Manage tokens with `scripts/mcp-token.ts list` and
 (`api_tokens` table), every token is limited to 120 requests per minute, and
 every tool call is written to the [audit log](../guide/operations). Tokens
 are issued with the `mcp:read` scope by default; the write tools additionally
-require a token issued with the `mcp:draft` scope. To expose
+require a token issued with the `mcp:draft` scope (`--draft` flag). All drafted
+changes are committed to the Change Center as staged drafts for the owner to
+review and approve in the dashboard. To expose
 the endpoint beyond localhost, put it behind your own HTTPS-terminating
 reverse proxy.
 
 ## Tools
+
+### Read & Research Tools
 
 | Tool | What it returns |
 | ---- | --------------- |
@@ -77,6 +83,21 @@ reverse proxy.
 | `get_recommendation` | One finding in full, including cannibalization or conversion context. |
 | `list_change_sets` | Guarded change sets and their status (read-only view of the write pipeline). |
 | `get_sync_status` | Recent sync runs and per-dataset data freshness. |
+
+### Change Drafting Tools (Guarded Writes)
+
+These tools draft immutable change sets in the database for review in the dashboard. They never apply directly to Amazon.
+
+| Tool | What it does |
+| ---- | ------------ |
+| `create_recommendation_change_set` | Drafts a change set from pending advisory recommendations. |
+| `add_campaign_negatives` | Drafts negative exact keywords or ASIN exclusions for a specific campaign. |
+| `create_search_term_exclusion` | Drafts a workspace-wide negative exclusion across all serving campaigns. |
+| `set_campaign_max_cpc` | Drafts a Max CPC ceiling and adjusts target/ad group bids to the safe threshold. |
+| `update_campaign_state` | Drafts a campaign state transition (`enabled` or `paused`). |
+| `add_keywords_to_campaign` | Drafts positive keywords (Exact, Phrase, or Broad) with custom bids for an ad group. |
+| `set_campaign_placement_multiplier` | Drafts placement bid multipliers (Top of Search %, Product Pages %, Rest of Search %). |
+| `reject_recommendation` | Dismisses or rejects an advisory recommendation with an optional reason. |
 
 All monetary values are decimal strings in the marketplace's native currency,
 and ACoS is ad spend over ad-attributed retail revenue — not author profit.

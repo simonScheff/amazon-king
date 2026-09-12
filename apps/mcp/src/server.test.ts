@@ -212,4 +212,199 @@ describe("MCP tool surface", () => {
     expect(result.isError).toBe(true);
     expect(read.listRecommendations).not.toHaveBeenCalled();
   });
+
+  it("exposes and executes write tools when write service is configured", async () => {
+    const fakeWrite = {
+      createRecommendationChangeSet: vi.fn(async () => ({
+        changeSetId: "cs-1",
+      })),
+      createCampaignNegativesChangeSet: vi.fn(async () => ({
+        changeSetId: "cs-2",
+      })),
+      createSearchTermExclusion: vi.fn(async () => ({ exclusionAdded: true })),
+      setCampaignMaxCpc: vi.fn(async () => ({ maxCpc: "0.36" })),
+      updateCampaignState: vi.fn(async () => ({ state: "PAUSED" })),
+      addKeywordsToCampaign: vi.fn(async () => ({ changeSetId: "cs-kw" })),
+      setCampaignPlacementMultiplier: vi.fn(async () => ({
+        changeSetId: "cs-pm",
+      })),
+      rejectRecommendation: vi.fn(async () => ({ rejected: true })),
+    };
+
+    const server = buildMcpServer({
+      read,
+      write: fakeWrite,
+      workspaceId: WORKSPACE,
+    });
+    const [clientTransport, serverTransport] =
+      InMemoryTransport.createLinkedPair();
+    const writeClient = new Client({
+      name: "write-test-client",
+      version: "0.0.0",
+    });
+    await Promise.all([
+      server.connect(serverTransport),
+      writeClient.connect(clientTransport),
+    ]);
+
+    const { tools } = await writeClient.listTools();
+    expect(tools.map((t) => t.name)).toContain(
+      "create_recommendation_change_set",
+    );
+    expect(tools.map((t) => t.name)).toContain("add_campaign_negatives");
+    expect(tools.map((t) => t.name)).toContain("create_search_term_exclusion");
+    expect(tools.map((t) => t.name)).toContain("set_campaign_max_cpc");
+    expect(tools.map((t) => t.name)).toContain("update_campaign_state");
+    expect(tools.map((t) => t.name)).toContain("add_keywords_to_campaign");
+    expect(tools.map((t) => t.name)).toContain(
+      "set_campaign_placement_multiplier",
+    );
+    expect(tools.map((t) => t.name)).toContain("reject_recommendation");
+
+    await writeClient.callTool({
+      name: "add_keywords_to_campaign",
+      arguments: {
+        campaignId: "camp-1",
+        keywords: [
+          {
+            keywordText: "dog coloring book",
+            matchType: "PHRASE",
+            bid: "0.38",
+          },
+        ],
+      },
+    });
+    expect(fakeWrite.addKeywordsToCampaign).toHaveBeenCalledWith(
+      WORKSPACE,
+      "camp-1",
+      [{ keywordText: "dog coloring book", matchType: "PHRASE", bid: "0.38" }],
+      undefined,
+    );
+
+    await writeClient.callTool({
+      name: "add_campaign_negatives",
+      arguments: { campaignId: "camp-1", searchTerms: ["dog coloring book"] },
+    });
+    expect(fakeWrite.createCampaignNegativesChangeSet).toHaveBeenCalledWith(
+      WORKSPACE,
+      "camp-1",
+      ["dog coloring book"],
+    );
+
+    await writeClient.callTool({
+      name: "set_campaign_max_cpc",
+      arguments: { campaignId: "camp-1", maxCpc: "0.36" },
+    });
+    expect(fakeWrite.setCampaignMaxCpc).toHaveBeenCalledWith(
+      WORKSPACE,
+      "camp-1",
+      "0.36",
+    );
+
+    await writeClient.callTool({
+      name: "set_campaign_placement_multiplier",
+      arguments: {
+        campaignId: "camp-1",
+        topOfSearchPercentage: 30,
+        productPagePercentage: 10,
+      },
+    });
+    expect(fakeWrite.setCampaignPlacementMultiplier).toHaveBeenCalledWith(
+      WORKSPACE,
+      "camp-1",
+      {
+        topOfSearchPercentage: 30,
+        productPagePercentage: 10,
+        restOfSearchPercentage: undefined,
+      },
+    );
+  });
+
+  it("rejects invalid write tool arguments before touching the service", async () => {
+    const fakeWrite = {
+      createRecommendationChangeSet: vi.fn(),
+      createCampaignNegativesChangeSet: vi.fn(),
+      createSearchTermExclusion: vi.fn(),
+      setCampaignMaxCpc: vi.fn(),
+      updateCampaignState: vi.fn(),
+      addKeywordsToCampaign: vi.fn(),
+      setCampaignPlacementMultiplier: vi.fn(),
+      rejectRecommendation: vi.fn(),
+    };
+
+    const server = buildMcpServer({
+      read,
+      write: fakeWrite,
+      workspaceId: WORKSPACE,
+    });
+    const [clientTransport, serverTransport] =
+      InMemoryTransport.createLinkedPair();
+    const writeClient = new Client({
+      name: "validation-client",
+      version: "0.0.0",
+    });
+    await Promise.all([
+      server.connect(serverTransport),
+      writeClient.connect(clientTransport),
+    ]);
+
+    // Invalid max CPC decimal
+    const badCpc = await writeClient.callTool({
+      name: "set_campaign_max_cpc",
+      arguments: { campaignId: "camp-1", maxCpc: "-0.50" },
+    });
+    expect(badCpc.isError).toBe(true);
+
+    // Empty search term exclusion
+    const emptyTerm = await writeClient.callTool({
+      name: "create_search_term_exclusion",
+      arguments: { searchTerm: "   " },
+    });
+    expect(emptyTerm.isError).toBe(true);
+
+    // No percentage in placement multiplier
+    const noMultiplier = await writeClient.callTool({
+      name: "set_campaign_placement_multiplier",
+      arguments: { campaignId: "camp-1" },
+    });
+    expect(noMultiplier.isError).toBe(true);
+
+    // Percentage > 900
+    const excessiveMultiplier = await writeClient.callTool({
+      name: "set_campaign_placement_multiplier",
+      arguments: { campaignId: "camp-1", topOfSearchPercentage: 1000 },
+    });
+    expect(excessiveMultiplier.isError).toBe(true);
+  });
+
+  it("supports dynamic async workspaceId getter function", async () => {
+    let currentWorkspace = "workspace-dynamic-1";
+    const server = buildMcpServer({
+      read,
+      workspaceId: async () => currentWorkspace,
+    });
+    const [clientTransport, serverTransport] =
+      InMemoryTransport.createLinkedPair();
+    const dynamicClient = new Client({
+      name: "dynamic-test-client",
+      version: "0.0.0",
+    });
+    await Promise.all([
+      server.connect(serverTransport),
+      dynamicClient.connect(clientTransport),
+    ]);
+
+    await dynamicClient.callTool({
+      name: "list_profiles",
+      arguments: {},
+    });
+    expect(read.listProfiles).toHaveBeenCalledWith("workspace-dynamic-1");
+
+    currentWorkspace = "workspace-dynamic-2";
+    await dynamicClient.callTool({
+      name: "list_profiles",
+      arguments: {},
+    });
+    expect(read.listProfiles).toHaveBeenCalledWith("workspace-dynamic-2");
+  });
 });

@@ -16,7 +16,10 @@ function hashToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
 }
 
-const [, , command, arg] = process.argv;
+const args = process.argv.slice(2);
+const command = args[0];
+const labelOrId = args.find((a) => !a.startsWith("--") && a !== command);
+const isDraft = args.includes("--draft");
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
@@ -34,18 +37,20 @@ try {
 
   switch (command) {
     case "issue": {
-      if (!arg) {
-        console.error("Usage: mcp-token.ts issue <label>");
+      if (!labelOrId) {
+        console.error("Usage: mcp-token.ts issue <label> [--draft]");
         process.exit(1);
       }
+      const scopes = isDraft ? ["mcp:read", "mcp:draft"] : ["mcp:read"];
       const token = `akmcp_${randomBytes(32).toString("base64url")}`;
       const row = await apiTokens.createApiToken(pool, {
         workspaceId,
-        label: arg,
+        label: labelOrId,
         tokenHash: hashToken(token),
+        scopes,
       });
       console.log(
-        `Issued token ${row.id} (${row.label}). Store it now — it is shown only once:`,
+        `Issued token ${row.id} (${row.label}) [${row.scopes.join(", ")}]. Store it now — it is shown only once:`,
       );
       console.log(token);
       break;
@@ -55,7 +60,7 @@ try {
       for (const row of rows) {
         const state = row.revokedAt ? `revoked ${row.revokedAt}` : "active";
         console.log(
-          `${row.id}\t${row.label}\t${state}\tlast used ${row.lastUsedAt ?? "never"}`,
+          `${row.id}\t${row.label}\t${row.scopes.join(",")}\t${state}\tlast used ${row.lastUsedAt ?? "never"}`,
         );
       }
       break;
