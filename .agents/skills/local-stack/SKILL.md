@@ -14,7 +14,10 @@ That installs dependencies, creates `.env` from `.env.example` if missing,
 validates required config, starts PostgreSQL via `docker compose`, applies
 migrations, snapshots the database (`make backup`), then runs api (:3000),
 worker, and web (:5173) together. Ctrl-C
-stops all three. `make help` lists every target; the useful ones day to day are
+stops all three. The API port comes from `PORT` in `.env` (default 3000);
+`make run PORT=3001` overrides it for one run, `make run` fails fast with a
+clear message when the port is already taken, and the web dev server's `/api`
+proxy follows the same port automatically. `make help` lists every target; the useful ones day to day are
 `setup`, `db-up`, `migrate`, `backup`, `restore`, `test`, `typecheck`, `lint`,
 `check`, `stop`, and
 `clean` (which destroys the local data volume, but asks for `yes` first).

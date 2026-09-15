@@ -213,6 +213,9 @@ importers:
       '@types/node':
         specifier: ^26.4.1
         version: 26.5.0
+      tsx:
+        specifier: ^4.23.13
+        version: 4.23.13
       vitest:
         specifier: ^5.0.0
         version: 5.0.0(@types/node@26.5.0)(jsdom@30.0.1)(vite@8.2.2(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13))

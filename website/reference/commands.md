@@ -19,7 +19,7 @@ are available to each target.
 | `make preflight`  | Fail fast unless `DATABASE_URL`, `SESSION_SECRET`, `LWA_CLIENT_ID`, and `LWA_CLIENT_SECRET` are set in `.env`. |
 | `make db-up`      | `docker compose up -d db`, then wait up to 30 s for `pg_isready` on the `amazon-king-db` container. |
 | `make migrate`    | Apply database migrations: sources `.env`, then `pnpm exec tsx scripts/migrate.ts`. |
-| `make run`        | `setup` → `preflight` → `db-up` → `migrate`, then start api (`http://localhost:3000`), worker, and web (`http://localhost:5173`) together. Ctrl-C stops all three. |
+| `make run`        | `setup` → `preflight` → `db-up` → `migrate`, then start api (`http://localhost:3000`), worker, and web (`http://localhost:5173`) together. Ctrl-C stops all three. The API port comes from `PORT` in `.env` (default 3000); `make run PORT=3001` overrides it for one run, the run fails fast when the port is taken, and the web `/api` proxy follows the same port. |
 | `make dev`        | Alias for `run`. |
 | `make test`       | `pnpm -r test` — every package's tests. |
 | `make typecheck`  | `pnpm -r typecheck`. |

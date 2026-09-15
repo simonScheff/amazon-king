@@ -6,6 +6,9 @@ include .env
 export
 endif
 
+# API port for `make run`; .env (PORT=…) or `make run PORT=3001` overrides this.
+PORT ?= 3000
+
 .PHONY: help install setup preflight db-up db-wait migrate mcp mcp-token run dev test typecheck lint build check prod-config prod-preflight prod-up prod-logs prod-stop stop clean backup restore
 
 help: ## Show available targets
@@ -44,10 +47,14 @@ mcp-token: ## Manage MCP machine tokens: make mcp-token ARGS="issue <label>"
 	@set -a; [ ! -f .env ] || . ./.env; set +a; \
 	pnpm exec tsx scripts/mcp-token.ts $(ARGS)
 
-run: setup preflight db-up migrate ## Run the entire application (db + api + worker + web)
+run: setup preflight db-up migrate ## Run the entire application (db + api + worker + web); override the API port with `make run PORT=3001`
 	@$(MAKE) --no-print-directory backup || echo "Warning: database backup failed; starting anyway"
-	@echo "Starting api (http://localhost:3000), worker, and web (http://localhost:5173) — Ctrl-C stops all"
+	@if lsof -nP -iTCP:$(PORT) -sTCP:LISTEN >/dev/null 2>&1; then \
+		echo "Port $(PORT) is already in use — free it or pick another: make run PORT=<free-port>" >&2; exit 1; \
+	fi
+	@echo "Starting api (http://localhost:$(PORT)), worker, and web (http://localhost:5173) — Ctrl-C stops all"
 	@set -a; [ ! -f .env ] || . ./.env; set +a; \
+	export PORT="$(PORT)" VITE_API_PROXY_TARGET="http://localhost:$(PORT)"; \
 	trap 'kill $$(jobs -p) 2>/dev/null || true' INT TERM EXIT; \
 	pnpm --filter @amazon-king/api dev & \
 	pnpm --filter @amazon-king/worker dev & \

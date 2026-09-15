@@ -123,7 +123,10 @@ The **Makefile** runs the whole app locally — `make run` handles deps, `.env`,
 PostgreSQL, migrations, takes a database snapshot (`make backup` into
 `backups/`, restored with `make restore DUMP=…`), then starts api (:3000),
 worker, and web (:5173)
-together. `make help` lists every target, including the `prod-*` self-hosting
+together. The API port comes from `PORT` (`.env`, default 3000); `make run
+PORT=3001` overrides it for one run, fails fast when the port is taken, and
+points the web `/api` proxy at the same port.
+`make help` lists every target, including the `prod-*` self-hosting
 stack. For local setup and troubleshooting, use the `local-stack` skill.
 
 ## Key architectural rules
