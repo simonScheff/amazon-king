@@ -565,4 +565,18 @@ describe("loginRequestSchema", () => {
       loginRequestSchema.parse({ email: " not-an-email " }),
     ).toThrow();
   });
+
+  it("accepts the bare root as a post-verify path", () => {
+    expect(
+      loginRequestSchema.parse({ email: "owner@example.com", next: "/" }),
+    ).toEqual({ email: "owner@example.com", next: "/" });
+  });
+
+  it("rejects post-verify paths that could leave the origin", () => {
+    for (const next of ["//evil.example.com", "/\\evil", "https://x.test"]) {
+      expect(() =>
+        loginRequestSchema.parse({ email: "owner@example.com", next }),
+      ).toThrow();
+    }
+  });
 });

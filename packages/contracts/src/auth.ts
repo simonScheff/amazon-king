@@ -6,13 +6,14 @@ export const loginRequestSchema = z.object({
   email: z.string().trim().email(),
   /**
    * Optional same-origin path to land on after verify (e.g. the page that
-   * triggered a re-auth). Relative paths only — the regex blocks
-   * protocol-relative (`//host`) and backslash variants, so the post-verify
-   * redirect can never leave the allowlisted web origin.
+   * triggered a re-auth). Relative paths only — the regex allows the bare
+   * root (`/`) but blocks protocol-relative (`//host`) and backslash
+   * variants, so the post-verify redirect can never leave the allowlisted
+   * web origin.
    */
   next: z
     .string()
-    .regex(/^\/[^/\\]/)
+    .regex(/^\/($|[^/\\])/)
     .max(500)
     .optional(),
 });

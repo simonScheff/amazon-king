@@ -156,4 +156,28 @@ describe("LoginPage", () => {
       next: "/campaigns/123?tab=maxCpc",
     });
   });
+
+  it("drops an unsafe return path instead of failing the login request", async () => {
+    mocks.search = { next: "//evil.example.com" };
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    renderLogin();
+
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: "owner@example.com" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Email me a sign-in link" }),
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    const body = JSON.parse(
+      String(fetchMock.mock.calls[0]?.[1]?.body),
+    ) as Record<string, unknown>;
+    expect(body).toEqual({ email: "owner@example.com" });
+  });
 });

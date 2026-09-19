@@ -122,7 +122,7 @@ emails, so the endpoint never reveals whether an address is allowed.
 | Field  | Type   | Constraints                                             |
 | ------ | ------ | ------------------------------------------------------- |
 | email  | string | Valid email address                                     |
-| next   | string | Optional. Same-origin path `/^\/[^/\\]/`, max 500 chars; the post-verify redirect lands here |
+| next   | string | Optional. Same-origin path `/^\/($|[^/\\])/`, max 500 chars; the post-verify redirect lands here |
 
 Response `200`:
 

@@ -59,13 +59,14 @@ export function isAllowedWebOrigin(
 }
 
 /**
- * Post-verify redirect path allowlist: same-origin relative paths only.
- * Rejects protocol-relative (`//host`) and backslash tricks so the redirect
- * can never leave the allowlisted web origin. Checked on intake (the contract
- * schema already enforces it) and again on the stored value at verify time.
+ * Post-verify redirect path allowlist: same-origin relative paths only,
+ * including the bare root (`/`). Rejects protocol-relative (`//host`) and
+ * backslash tricks so the redirect can never leave the allowlisted web
+ * origin. Checked on intake (the contract schema already enforces it) and
+ * again on the stored value at verify time.
  */
 export function isAllowedNextPath(path: string): boolean {
-  return /^\/[^/\\]/.test(path) && path.length <= 500;
+  return /^\/($|[^/\\])/.test(path) && path.length <= 500;
 }
 
 export interface SessionServiceDeps {

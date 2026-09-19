@@ -508,6 +508,24 @@ describe("POST /api/session/login", () => {
     );
   });
 
+  it("accepts the bare root as the post-verify path", async () => {
+    const { session } = await start();
+
+    const response = await app!.inject({
+      method: "POST",
+      url: "/api/session/login",
+      payload: { email: "owner@example.com", next: "/" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(session.startLogin).toHaveBeenCalledWith(
+      "owner@example.com",
+      expect.anything(),
+      undefined,
+      "/",
+    );
+  });
+
   it("rejects a post-verify path that could leave the origin", async () => {
     const { session } = await start();
 

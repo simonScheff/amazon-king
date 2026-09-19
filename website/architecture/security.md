@@ -62,8 +62,8 @@ Implemented in `apps/api/src/services/session.ts`.
   an exact allowlist: the configured `WEB_ORIGIN` always; in development
   only, localhost/127.0.0.1 on any port and `https://*.trycloudflare.com`
   quick tunnels. An optional `next` path returns the user to the page that
-  required re-auth; only same-origin relative paths matching `^/[^/\\]` (max
-  500 chars) are accepted, and the stored value is re-validated at verify
+  required re-auth; only same-origin relative paths matching `^/($|[^/\\])`
+  (max 500 chars) are accepted, and the stored value is re-validated at verify
   time.
 - `GET /api/session/verify` **consumes** the token atomically (single-use),
   provisions the owner user/workspace on first login, and creates a session.

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useSearch } from "@tanstack/react-router";
+import { loginRequestSchema } from "@amazon-king/contracts";
 import { useLogin } from "../api/endpoints";
 import { ApiError } from "../api/client";
 import { isStandalone } from "../lib/install";
@@ -20,9 +21,12 @@ export function LoginPage() {
       "invalid_token",
   );
   // Where the session gate sent the user from; the magic link lands them
-  // back there after verify. Validated on the route and again by the API.
+  // back there after verify. Validated on the route and again by the API —
+  // but an invalid value (e.g. a tampered `?next=`) must not block sign-in,
+  // so it is dropped here rather than forwarded into a 400.
   const search = useSearch({ strict: false }) as { next?: string };
-  const next = search.next;
+  const parsedNext = loginRequestSchema.shape.next.safeParse(search.next);
+  const next = parsedNext.success ? parsedNext.data : undefined;
   const login = useLogin();
 
   function onSubmit(e: FormEvent) {

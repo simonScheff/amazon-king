@@ -61,7 +61,7 @@ const loginRoute = createRoute({
   validateSearch: (search: Record<string, unknown>): { next?: string } => {
     const next =
       typeof search.next === "string" &&
-      /^\/[^/\\]/.test(search.next) &&
+      /^\/($|[^/\\])/.test(search.next) &&
       search.next.length <= 500
         ? search.next
         : undefined;
