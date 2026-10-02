@@ -366,6 +366,100 @@ describe("campaign pause/enable", () => {
       }),
     );
   });
+
+  it("pause→enable→pause creates distinct change sets (no fingerprint collision)", async () => {
+    const { db, service, gateway, campaign } = setup();
+
+    // -- First pause: enabled → paused --
+    gateway.syncCampaignStructure
+      .mockResolvedValueOnce(
+        snapshotWith({
+          campaignId: "camp-1",
+          name: "Tractor Launch",
+          state: "ENABLED",
+        }),
+      )
+      .mockResolvedValueOnce(
+        snapshotWith({
+          campaignId: "camp-1",
+          name: "Tractor Launch",
+          state: "PAUSED",
+        }),
+      );
+    const firstPause = await service.updateCampaign(
+      authFixture(),
+      "camp-1",
+      { state: "paused" },
+      META,
+    );
+    expect(firstPause.changeSet.status).toBe("applied");
+
+    // The local mirror should now show PAUSED.
+    campaign.state = "PAUSED";
+
+    // -- Enable: paused → enabled --
+    gateway.syncCampaignStructure
+      .mockResolvedValueOnce(
+        snapshotWith({
+          campaignId: "camp-1",
+          name: "Tractor Launch",
+          state: "PAUSED",
+        }),
+      )
+      .mockResolvedValueOnce(
+        snapshotWith({
+          campaignId: "camp-1",
+          name: "Tractor Launch",
+          state: "ENABLED",
+        }),
+      );
+    const enabled = await service.updateCampaign(
+      authFixture(),
+      "camp-1",
+      { state: "enabled" },
+      META,
+    );
+    expect(enabled.changeSet.status).toBe("applied");
+    campaign.state = "ENABLED";
+
+    // -- Second pause: enabled → paused (identical intent to the first pause) --
+    gateway.syncCampaignStructure
+      .mockResolvedValueOnce(
+        snapshotWith({
+          campaignId: "camp-1",
+          name: "Tractor Launch",
+          state: "ENABLED",
+        }),
+      )
+      .mockResolvedValueOnce(
+        snapshotWith({
+          campaignId: "camp-1",
+          name: "Tractor Launch",
+          state: "PAUSED",
+        }),
+      );
+    const secondPause = await service.updateCampaign(
+      authFixture(),
+      "camp-1",
+      { state: "paused" },
+      META,
+    );
+
+    // The second pause must get its own change set, not replay the first.
+    expect(secondPause.changeSet.status).toBe("applied");
+    expect(secondPause.changeSet.id).not.toBe(firstPause.changeSet.id);
+
+    // Amazon must have been called three times (once per toggle).
+    expect(gateway.applyActions).toHaveBeenCalledTimes(3);
+
+    // Three distinct change sets in the database.
+    expect(db.tables.changeSets).toHaveLength(3);
+
+    // The local mirror reflects the final pause.
+    expect(
+      db.tables.campaigns.find((r) => r.id === campaign.id)!.state,
+    ).toBe("PAUSED");
+  });
 });
 
 describe("campaign rename", () => {
