@@ -681,10 +681,11 @@ The individual stored sale rows, newest order date first.
 
 Daily profitability over a calendar month or an explicit day range — the
 organic tab's "Daily profit" chart and the overview card (which passes the
-page's shared timeframe window, market, and product filter). Per royalty
-posting day (how the KDP
-dashboard itself displays the
-data): the ad spend and estimated ad-attributed royalty next
+page's shared timeframe window, market, and product filter). Per ORDER day
+(so a sale's royalty lands on the same day as the ad spend that produced it;
+KDP posts royalties 1–3 days after the order, and the KDP dashboard's own
+per-day view uses those posting dates): the ad spend and estimated
+ad-attributed royalty next
 to the real summed KDP royalty (organic included). The all-market view
 (absent `country`) converts every market per
 day into the workspace display currency (same USD-pivot convention as the
@@ -706,9 +707,12 @@ that market in its native currency, with no conversion.
   adRoyalty)` — ad-driven sales are in the KDP total too, so the clamp avoids
   double counting; `profit = totalRoyalty − adSpend` is real money and works
   without book economics (only the split needs them; missing economics nulls
-  `adRoyalty`/`organicRoyalty` and sets `economicsMissing`). A range with no
-  KDP import returns null `totalRoyalty`/`organicRoyalty`/`profit` with
-  `kdpImported: false`; an empty `fx_rates` table returns
+  `adRoyalty`/`organicRoyalty` and sets `economicsMissing`). A day is only
+  given KDP figures when an import period covers it: a range with no
+  overlapping import returns null `totalRoyalty`/`organicRoyalty`/`profit`
+  with `kdpImported: false`, and days past a mid-month report's coverage end
+  are likewise null (unknown, not zero) while the ad side still shows. An
+  empty `fx_rates` table returns
   `ratesAvailable: false` with an empty series on the all-market view.
   Errors: `409 FX_RATES_INCOMPLETE` when stored rates don't cover a day
   (all-market view only).

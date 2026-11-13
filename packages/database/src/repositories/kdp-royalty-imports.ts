@@ -134,6 +134,44 @@ export async function listKdpRoyaltyImports(
   return result.rows.map(toImport);
 }
 
+export interface KdpImportPeriod {
+  /** First covered day (ISO). */
+  start: string;
+  /** Last covered day (ISO) — a report downloaded mid-month ends there. */
+  end: string;
+}
+
+/**
+ * The day ranges the workspace's imports cover, overlapping the given range.
+ * A Royalties Estimator report downloaded mid-month contains data only
+ * through its generation date, so days past a period's end are unknown, not
+ * real zeros — the daily-profit read uses this to keep them null instead of
+ * reporting a loss of the day's ad spend.
+ */
+export async function listKdpImportPeriods(
+  db: Db,
+  workspaceId: string,
+  range: { start: string; end: string },
+): Promise<KdpImportPeriod[]> {
+  const result = await db.query<{
+    period_start: string;
+    period_end: string;
+  }>(
+    `select distinct period_start::text as period_start,
+            period_end::text as period_end
+     from kdp_royalty_imports
+     where workspace_id = $1
+       and period_start <= $3
+       and period_end >= $2
+     order by period_start`,
+    [workspaceId, range.start, range.end],
+  );
+  return result.rows.map((row) => ({
+    start: row.period_start,
+    end: row.period_end,
+  }));
+}
+
 export interface KdpRoyaltyImportPayload {
   id: string;
   fileName: string;

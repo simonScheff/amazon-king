@@ -486,6 +486,25 @@ export class FakeDb {
       ...overrides,
     };
     this.tables.kdpSaleTransactions.push(row);
+    // A real transaction always comes with an import row (FK), so keep the
+    // invariant: seed one covering the royalty date's calendar month when no
+    // import covers it yet. Tests needing partial coverage seed their own
+    // import first — this then stays out of the way.
+    const royaltyDate = dateOnly(row.royalty_date);
+    const coveredByImport = this.tables.kdpRoyaltyImports.some(
+      (imp) =>
+        imp.workspace_id === row.workspace_id &&
+        String(imp.period_start) <= royaltyDate &&
+        royaltyDate <= String(imp.period_end),
+    );
+    if (!coveredByImport) {
+      const [year, month] = royaltyDate.split("-").map(Number);
+      this.seedKdpRoyaltyImport({
+        workspace_id: row.workspace_id,
+        period_start: `${royaltyDate.slice(0, 7)}-01`,
+        period_end: dateOnly(new Date(Date.UTC(year!, month!, 0))),
+      });
+    }
     return row;
   }
 
@@ -2022,6 +2041,24 @@ export class FakeDb {
           this.ok(t.kdpRoyaltyImports.filter((r) => r.workspace_id === p[0])),
       },
       {
+        // Import coverage windows overlapping a range (listKdpImportPeriods).
+        match: "order by period_start",
+        handle: (p) =>
+          this.ok(
+            t.kdpRoyaltyImports
+              .filter(
+                (r) =>
+                  r.workspace_id === p[0] &&
+                  String(r.period_start) <= String(p[2]) &&
+                  String(r.period_end) >= String(p[1]),
+              )
+              .map((r) => ({
+                period_start: r.period_start,
+                period_end: r.period_end,
+              })),
+          ),
+      },
+      {
         match: "from kdp_royalty_imports",
         handle: (p) =>
           this.ok(
@@ -2202,9 +2239,9 @@ export class FakeDb {
           ),
       },
       {
-        // Daily KDP royalty by royalty posting date, converted per day
+        // Daily KDP royalty by order date, converted per day
         // (listKdpDailyRoyalty).
-        match: "select royalty_date as metric_date, royalty, currency",
+        match: "select order_date as metric_date, royalty, currency",
         handle: (p, db) => {
           const start = String(p[1]);
           const end = String(p[2]);
@@ -2216,7 +2253,7 @@ export class FakeDb {
             { royalty: number; missing: boolean }
           >();
           for (const row of t.kdpSaleTransactions) {
-            const date = dateOnly(row.royalty_date);
+            const date = dateOnly(row.order_date);
             if (
               row.workspace_id !== p[0] ||
               date < start ||
@@ -2253,7 +2290,7 @@ export class FakeDb {
       {
         // Single-market variant: daily KDP royalty grouped by currency with
         // no conversion (listKdpDailyRoyaltyNative).
-        match: "select royalty_date::text as metric_date,",
+        match: "select order_date::text as metric_date,",
         handle: (p) => {
           const start = String(p[1]);
           const end = String(p[2]);
@@ -2261,7 +2298,7 @@ export class FakeDb {
           const marketplaces = p[4] as string[] | null;
           const byDateCurrency = new Map<string, number>();
           for (const row of t.kdpSaleTransactions) {
-            const date = dateOnly(row.royalty_date);
+            const date = dateOnly(row.order_date);
             if (
               row.workspace_id !== p[0] ||
               date < start ||

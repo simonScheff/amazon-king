@@ -430,7 +430,10 @@ function TransactionsCard({ series }: { series: readonly KdpHistorySeries[] }) {
  * Daily profitability of one month (ads + organic). The month selector lives
  * in the URL (?month=<first-of-month>) next to the book selector; options are
  * the imported months plus the current one (which shows the ad side only
- * until its KDP report lands).
+ * until its KDP report lands). Unlike the rest of the page (KDP report
+ * months by royalty posting date), this card buckets royalty by ORDER date —
+ * the month filters the order month, so a sale's money lands next to the ad
+ * spend that produced it.
  */
 function DailyProfitCard({
   month,
@@ -453,7 +456,7 @@ function DailyProfitCard({
     <Card>
       <CardHeader
         title="Daily profit — ads + organic"
-        description="Real KDP royalty per royalty posting day (how the KDP dashboard shows it) against the day's ad spend, all markets converted into the workspace display currency. The ad/organic split is estimated; the profit is real money."
+        description="Real KDP royalty per order day against the day's ad spend, all markets converted into the workspace display currency. The ad/organic split is estimated; the profit is real money."
         action={
           <Select
             aria-label="Daily profit month"

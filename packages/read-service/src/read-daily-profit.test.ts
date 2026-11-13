@@ -5,8 +5,9 @@ import { FakeDb } from "@amazon-king/database/testing";
 
 /**
  * KDP daily profit (GET /api/kdp/daily-profit): per-day profitability over a
- * month or an explicit day range — real KDP royalty per royalty posting date
- * next to the estimated
+ * month or an explicit day range — real KDP royalty per ORDER date (so a
+ * sale's money lands next to the ad spend and estimated ad royalty that
+ * produced it; posting lags 1–3 days behind the order) next to the estimated
  * ad-attributed royalty and the ad spend, all markets converted per day into
  * the display currency. Runs the real read service against the
  * SQL-matching FakeDb.
@@ -91,20 +92,8 @@ describe("kdp daily profit", () => {
     const { db, service } = setup();
     seedUsBook(db);
     seedEurRate(db);
-    // 2026-08-14 (US): 10 USD spend; 2 copies x 3.40 = 6.80 estimated ad
-    // royalty; 8.00 real KDP royalty → organic 1.20, profit −2.00.
-    db.seedCampaignMetric({
-      profile_id: "profile-us",
-      metric_date: "2026-08-14",
-      cost: "10.0000",
-    });
-    db.seedAdvertisedProductMetric({
-      profile_id: "profile-us",
-      ad_id: "ad-1",
-      metric_date: "2026-08-14",
-      units_sold_clicks14d: 2,
-      purchases14d: 1,
-    });
+    // 2026-08-13 (US orders, royalty posted 08-14): 5.00 + 3.00 = 8.00 real
+    // royalty on the ORDER day, no ad facts → organic the full 8.00.
     db.seedKdpSaleTransaction({
       book_id: "7",
       profile_id: "profile-us",
@@ -119,14 +108,20 @@ describe("kdp daily profit", () => {
       royalty_date: "2026-08-14",
       royalty: "3.00",
     });
-    // 2026-08-15 (DE): 10 EUR spend → 12.50 USD at Friday's fixing; an
-    // unlinked-ASIN 8 EUR sale (real money, no book filter) → 10.00 USD;
-    // no ad facts → ad royalty is a real zero, organic the full 10.00.
+    // 2026-08-14 (US): 10 USD spend; 2 copies x 3.40 = 6.80 estimated ad
+    // royalty; the DE order (8 EUR → 10.00 USD at Friday's fixing, royalty
+    // posted 08-15) lands here → organic 3.20, profit 0.00.
     db.seedCampaignMetric({
-      profile_id: "profile-de",
-      metric_date: "2026-08-15",
+      profile_id: "profile-us",
+      metric_date: "2026-08-14",
       cost: "10.0000",
-      currency: "EUR",
+    });
+    db.seedAdvertisedProductMetric({
+      profile_id: "profile-us",
+      ad_id: "ad-1",
+      metric_date: "2026-08-14",
+      units_sold_clicks14d: 2,
+      purchases14d: 1,
     });
     db.seedKdpSaleTransaction({
       book_id: null,
@@ -135,6 +130,14 @@ describe("kdp daily profit", () => {
       order_date: "2026-08-14",
       royalty_date: "2026-08-15",
       royalty: "8.00",
+      currency: "EUR",
+    });
+    // 2026-08-15 (DE): 10 EUR spend → 12.50 USD at Friday's fixing; no
+    // orders → profit −12.50.
+    db.seedCampaignMetric({
+      profile_id: "profile-de",
+      metric_date: "2026-08-15",
+      cost: "10.0000",
       currency: "EUR",
     });
 
@@ -151,21 +154,29 @@ describe("kdp daily profit", () => {
     expect(result.kdpImported).toBe(true);
     // Current month is capped at today (the 15th), zero-filled from the 1st.
     expect(result.daily).toHaveLength(15);
+    expect(dayOf(result, "2026-08-13")).toEqual({
+      date: "2026-08-13",
+      adSpend: "0.0000",
+      adRoyalty: "0.0000",
+      organicRoyalty: "8.0000",
+      totalRoyalty: "8.0000",
+      profit: "8.0000",
+    });
     expect(dayOf(result, "2026-08-14")).toEqual({
       date: "2026-08-14",
       adSpend: "10.0000",
       adRoyalty: "6.8000",
-      organicRoyalty: "1.2000",
-      totalRoyalty: "8.0000",
-      profit: "-2.0000",
+      organicRoyalty: "3.2000",
+      totalRoyalty: "10.0000",
+      profit: "0.0000",
     });
     expect(dayOf(result, "2026-08-15")).toEqual({
       date: "2026-08-15",
       adSpend: "12.5000",
       adRoyalty: "0.0000",
-      organicRoyalty: "10.0000",
-      totalRoyalty: "10.0000",
-      profit: "-2.5000",
+      organicRoyalty: "0.0000",
+      totalRoyalty: "0.0000",
+      profit: "-12.5000",
     });
     expect(dayOf(result, "2026-08-01")).toEqual({
       date: "2026-08-01",
@@ -190,8 +201,8 @@ describe("kdp daily profit", () => {
     });
     db.seedKdpSaleTransaction({
       book_id: "7",
-      order_date: "2026-08-13",
-      royalty_date: "2026-08-14",
+      order_date: "2026-08-14",
+      royalty_date: "2026-08-15",
       royalty: "8.00",
     });
 
@@ -202,20 +213,27 @@ describe("kdp daily profit", () => {
 
     // Ad estimate 3 × 3.40 = 10.20 > 8.00 real — attribution windows never
     // align perfectly, so organic clamps to zero like the sales-mix chart.
+    // The royalty counts on the order day (the 14th), not the 15th posting.
     expect(dayOf(result, "2026-08-14")).toMatchObject({
       adRoyalty: "10.2000",
       organicRoyalty: "0.0000",
       totalRoyalty: "8.0000",
       profit: "8.0000",
     });
+    expect(dayOf(result, "2026-08-15").totalRoyalty).toBe("0.0000");
   });
 
-  it("buckets royalty by posting date, not order date — like the KDP dashboard", async () => {
+  it("buckets royalty by order date, not the later posting date", async () => {
     const { db, service } = setup();
     seedUsBook(db);
     seedEurRate(db);
-    // Ordered in July, royalty posted in August: KDP's own reports and the
-    // import period label this an August sale, so the chart must too.
+    // Ordered in July, royalty posted in August: the chart counts the money
+    // on the ORDER day (July 31st), next to the spend that produced it —
+    // unlike the KDP dashboard's own posting-date view.
+    db.seedKdpRoyaltyImport({
+      period_start: "2026-07-01",
+      period_end: "2026-07-31",
+    });
     db.seedKdpSaleTransaction({
       book_id: "7",
       profile_id: "profile-us",
@@ -224,24 +242,26 @@ describe("kdp daily profit", () => {
       royalty: "3.43",
     });
 
-    const august = await service.kdpDailyProfit("1", {
+    // July: covered by the July import; the order day carries the royalty.
+    const july = await service.kdpDailyProfit("1", {
       books: undefined,
-      month: "2026-08-01",
+      month: "2026-07-01",
     });
-    expect(august.kdpImported).toBe(true);
-    expect(dayOf(august, "2026-08-02")).toMatchObject({
+    expect(july.kdpImported).toBe(true);
+    expect(dayOf(july, "2026-07-31")).toMatchObject({
       totalRoyalty: "3.4300",
       organicRoyalty: "3.4300",
       profit: "3.4300",
     });
 
-    // July has no posted royalties, so it reads as never imported.
-    const july = await service.kdpDailyProfit("1", {
+    // August: the posting month has no orders, so the 2nd is a real zero
+    // (the FakeDb auto-seeds an August import with the transaction).
+    const august = await service.kdpDailyProfit("1", {
       books: undefined,
-      month: "2026-07-01",
+      month: "2026-08-01",
     });
-    expect(july.kdpImported).toBe(false);
-    expect(dayOf(july, "2026-07-31").totalRoyalty).toBeNull();
+    expect(august.kdpImported).toBe(true);
+    expect(dayOf(august, "2026-08-02").totalRoyalty).toBe("0.0000");
   });
 
   it("reports an unimported month with null KDP figures", async () => {
@@ -304,7 +324,7 @@ describe("kdp daily profit", () => {
     });
     db.seedKdpSaleTransaction({
       book_id: "7",
-      order_date: "2026-08-13",
+      order_date: "2026-08-14",
       royalty_date: "2026-08-14",
       royalty: "6.00",
     });
@@ -332,21 +352,21 @@ describe("kdp daily profit", () => {
     db.seedBook({ id: "8", workspace_id: "1", title: "Other" });
     db.seedKdpSaleTransaction({
       book_id: "7",
-      order_date: "2026-08-13",
-      royalty_date: "2026-08-14",
+      order_date: "2026-08-14",
+      royalty_date: "2026-08-15",
       royalty: "5.00",
     });
     db.seedKdpSaleTransaction({
       book_id: "8",
-      order_date: "2026-08-13",
-      royalty_date: "2026-08-14",
+      order_date: "2026-08-14",
+      royalty_date: "2026-08-15",
       royalty: "3.00",
     });
     db.seedKdpSaleTransaction({
       book_id: null,
       profile_id: null,
-      order_date: "2026-08-13",
-      royalty_date: "2026-08-14",
+      order_date: "2026-08-14",
+      royalty_date: "2026-08-15",
       royalty: "2.00",
     });
 
@@ -398,16 +418,16 @@ describe("kdp daily profit", () => {
     db.seedKdpSaleTransaction({
       book_id: "7",
       profile_id: "profile-us",
-      order_date: "2026-08-13",
-      royalty_date: "2026-08-14",
+      order_date: "2026-08-14",
+      royalty_date: "2026-08-15",
       royalty: "8.00",
     });
     // Unlinked-ASIN sale in the same market still counts (no book filter).
     db.seedKdpSaleTransaction({
       book_id: null,
       profile_id: null,
-      order_date: "2026-08-13",
-      royalty_date: "2026-08-14",
+      order_date: "2026-08-14",
+      royalty_date: "2026-08-15",
       royalty: "2.00",
     });
     // Another market's royalty and spend stay out.
@@ -468,7 +488,7 @@ describe("kdp daily profit", () => {
     expect(result.daily[0]!.date).toBe("2026-07-28");
     expect(result.daily[13]!.date).toBe("2026-08-10");
     expect(dayOf(result, "2026-07-30").adSpend).toBe("4.0000");
-    expect(dayOf(result, "2026-08-02")).toMatchObject({
+    expect(dayOf(result, "2026-08-01")).toMatchObject({
       totalRoyalty: "3.4300",
       profit: "3.4300",
     });
@@ -507,6 +527,67 @@ describe("kdp daily profit", () => {
 
     expect(result.ratesAvailable).toBe(false);
     expect(result.daily).toEqual([]);
+  });
+
+  it("leaves days past the import's coverage unknown instead of reporting losses", async () => {
+    const { db, service } = setup();
+    seedUsBook(db);
+    seedEurRate(db);
+    // A report downloaded on the 10th covers the month through the 10th
+    // only; seeding it before the transactions keeps the FakeDb's
+    // month-wide auto-import out of the way.
+    db.seedKdpRoyaltyImport({
+      period_start: "2026-08-01",
+      period_end: "2026-08-10",
+    });
+    db.seedKdpSaleTransaction({
+      book_id: "7",
+      profile_id: "profile-us",
+      order_date: "2026-08-04",
+      royalty_date: "2026-08-05",
+      royalty: "20.00",
+    });
+    // 2026-08-12: real ad spend and an estimated ad royalty (6 × 3.40),
+    // but the KDP side has not been imported yet.
+    db.seedCampaignMetric({
+      profile_id: "profile-us",
+      metric_date: "2026-08-12",
+      cost: "14.5700",
+    });
+    db.seedAdvertisedProductMetric({
+      profile_id: "profile-us",
+      ad_id: "ad-1",
+      metric_date: "2026-08-12",
+      units_sold_clicks14d: 6,
+      purchases14d: 6,
+    });
+
+    const result = await service.kdpDailyProfit("1", {
+      books: undefined,
+      month: "2026-08-01",
+    });
+
+    expect(result.kdpImported).toBe(true);
+    // The royalty counts on the order day (the 4th), not the 5th posting.
+    expect(dayOf(result, "2026-08-04")).toMatchObject({
+      totalRoyalty: "20.0000",
+      profit: "20.0000",
+    });
+    // Within coverage a sale-free day is a real zero.
+    expect(dayOf(result, "2026-08-05")).toMatchObject({
+      totalRoyalty: "0.0000",
+      profit: "0.0000",
+    });
+    // Past coverage the ad side still shows, but profit is unknown — not
+    // the −14.57 loss a zero royalty would report.
+    expect(dayOf(result, "2026-08-12")).toEqual({
+      date: "2026-08-12",
+      adSpend: "14.5700",
+      adRoyalty: "20.4000",
+      organicRoyalty: null,
+      totalRoyalty: null,
+      profit: null,
+    });
   });
 
   it("throws FX_RATES_INCOMPLETE when a fact day lacks a covering fixing", async () => {

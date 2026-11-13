@@ -260,15 +260,18 @@ export type KdpTransactionsPage = z.infer<typeof kdpTransactionsPageSchema>;
 /**
  * GET /api/kdp/daily-profit — daily profitability over a day range for the
  * /kdp-history organic tab (one calendar month) and the overview card (the
- * page's shared timeframe window): real KDP royalty per royalty posting date
- * (organic included — the day KDP posted the royalty, matching the KDP
- * dashboard's own display and the royalty-month import periods) next to the
- * estimated ad-attributed royalty and the ad spend, all
+ * page's shared timeframe window): real KDP royalty per ORDER date (organic
+ * included) next to the estimated ad-attributed royalty and the ad spend, all
  * markets converted per day into the workspace display currency through the
  * USD-pivot fx_rates table (same convention as country=all on the dashboard
- * summary). The ad/organic split avoids double counting by valuing
- * organic = max(0, totalRoyalty − adRoyalty) — ad attribution and KDP royalty
- * posting dates never align perfectly, the same clamp the sales-mix chart
+ * summary). Order date keeps a sale's royalty on the same day as the spend
+ * that produced it — royalty posting lags 1–3 days, so posting-date
+ * bucketing split each sale across two days; the trade-off is that days no
+ * longer match the KDP dashboard's own posting-date view, and an order whose
+ * royalty has not posted yet appears only after the next import. The
+ * ad/organic split avoids double counting by valuing
+ * organic = max(0, totalRoyalty − adRoyalty) — ad attribution and KDP order
+ * dates never align perfectly, the same clamp the sales-mix chart
  * uses.
  * `profit = totalRoyalty − adSpend` is real money and needs no book
  * economics; only the ad/organic split does. The `books` product filter
@@ -350,15 +353,16 @@ export const kdpDailyProfitDaySchema = z.object({
   adRoyalty: nonNegativeDecimalStringSchema.nullable(),
   /**
    * max(0, totalRoyalty − adRoyalty); null when the split is unavailable
-   * (economics missing) or the range was never imported.
+   * (economics missing) or no import period covers the day.
    */
   organicRoyalty: nonNegativeDecimalStringSchema.nullable(),
   /**
-   * Real summed KDP royalty for the royalty posting date (signed — refunds
-   * go negative); null when the range was never imported.
+   * Real summed KDP royalty for the order date (signed — refunds
+   * go negative); null when no import period covers the day (never imported,
+   * or past a mid-month report's generation date — unknown, not zero).
    */
   totalRoyalty: decimalStringSchema.nullable(),
-  /** totalRoyalty − adSpend; null when the range was never imported. */
+  /** totalRoyalty − adSpend; null on days no import period covers. */
   profit: decimalStringSchema.nullable(),
 });
 export type KdpDailyProfitDay = z.infer<typeof kdpDailyProfitDaySchema>;
@@ -373,7 +377,7 @@ export const kdpDailyProfitSchema = z.object({
   ratesAvailable: z.boolean(),
   /** True when any day lacked the economics needed for the ad/organic split. */
   economicsMissing: z.boolean(),
-  /** False when the range has no KDP transactions (never imported). */
+  /** False when no KDP import period overlaps the range. */
   kdpImported: z.boolean(),
   /** Every day of the range, ascending (capped at today). */
   daily: z.array(kdpDailyProfitDaySchema),

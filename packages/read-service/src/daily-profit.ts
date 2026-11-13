@@ -12,6 +12,7 @@ import {
   dashboard,
   fx,
   identity,
+  kdpRoyaltyImports,
   kdpSales,
   profiles,
   type Db,
@@ -31,14 +32,22 @@ import { kdpMarketplacesForCountry } from "./kdp-royalty.js";
  * fixing (the country=all convention): the ad spend and estimated
  * ad-attributed royalty come from the same converting dashboard queries the
  * overview uses; the real KDP royalty (organic included) is summed from the
- * imported sale transactions by royalty date — the day KDP posted the
- * royalty, matching the KDP dashboard's own display and the royalty-month
- * import periods. The split avoids double counting with
- * organic = max(0, total − ad) — ad click-attribution dates and KDP royalty
- * posting dates never align perfectly, the same clamp the sales-mix chart
+ * imported sale transactions by ORDER date, so a sale's royalty lands on the
+ * same day as the ad spend and estimate that produced it — royalty posting
+ * lags the order by 1–3 days, and posting-date bucketing booked the spend on
+ * one day and the money on another (phantom losses at an import's tail,
+ * phantom organic windfalls just after). The trade-off: days no longer match
+ * the KDP dashboard's own posting-date view (monthly aggregates elsewhere
+ * keep it), and an order whose royalty has not posted yet is absent until
+ * the next import. The split avoids double counting with
+ * organic = max(0, total − ad) — ad click-attribution dates and KDP order
+ * dates never align perfectly, the same clamp the sales-mix chart
  * uses.
  * profit = total − spend is real money and needs no book economics; only the
- * ad/organic split does.
+ * ad/organic split does. A day only gets KDP figures when an import period
+ * covers it (`listKdpImportPeriods`): a report downloaded mid-month ends at
+ * its generation date, so later days are unknown (null), not zero-royalty
+ * losses; within a covered period, a sale-free day is a real zero.
  */
 
 const DAY_MS = 86_400_000;
@@ -138,8 +147,12 @@ export async function getKdpDailyProfit(
   let spendByDate: Map<string, number>;
   let adRoyaltyByDate: Map<string, number | null>;
   let kdpByDate: Map<string, number>;
-  let kdpImported: boolean;
   let economicsMissing: boolean;
+  const importPeriodsPromise = kdpRoyaltyImports.listKdpImportPeriods(
+    db,
+    workspaceId,
+    { start, end },
+  );
 
   if (country === "all") {
     const [dailyRows, royaltyRows, kdpRows] = await Promise.all([
@@ -191,7 +204,6 @@ export async function getKdpDailyProfit(
     kdpByDate = new Map(
       kdpRows.map((row) => [row.date, microsFromDecimalString(row.royalty)]),
     );
-    kdpImported = kdpRows.length > 0;
     economicsMissing = royaltyRows.some((row) => row.economicsMissing);
   } else {
     // Single market: native currency, no conversion — the same posture as
@@ -243,19 +255,25 @@ export async function getKdpDailyProfit(
         (kdpByDate.get(row.date) ?? 0) + microsFromDecimalString(row.royalty),
       );
     }
-    kdpImported = kdpRows.length > 0;
     economicsMissing = royaltyRows.some((row) => row.economicsMissing);
   }
 
-  // The presence of any transaction dates the range as imported; days
-  // without sales are real zeros, not gaps.
+  const importPeriods = await importPeriodsPromise;
+  // Coverage comes from the import periods, not from transaction presence:
+  // a report downloaded mid-month ends at its generation date, so days past
+  // the latest covered period are unknown — null, not a real zero that would
+  // report the day's ad spend as a loss. Within coverage, a day without
+  // sales is a real zero.
+  const covered = (date: string): boolean =>
+    importPeriods.some((period) => period.start <= date && date <= period.end);
+  const kdpImported = importPeriods.length > 0;
   const daily: KdpDailyProfitDay[] = dayList(start, end).map((date) => {
     const adSpend = spendByDate.get(date) ?? 0;
     // A day without advertised-product facts had no ad sales — a real zero,
     // not missing data. Only a fact day with missing economics is null.
     const adRoyaltyValue = adRoyaltyByDate.get(date);
     const adRoyalty = adRoyaltyValue === undefined ? 0 : adRoyaltyValue;
-    const totalRoyalty = kdpImported ? (kdpByDate.get(date) ?? 0) : null;
+    const totalRoyalty = covered(date) ? (kdpByDate.get(date) ?? 0) : null;
     const organicRoyalty =
       totalRoyalty === null || adRoyalty === null
         ? null

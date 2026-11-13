@@ -146,9 +146,10 @@ in when linked) returning `{ transactions, total }` — one page plus the
 filtered total across all pages, which drives the table's pagination.
 `GET /api/kdp/daily-profit` (`month` first-of-month ISO XOR a ≤ 93-day
 `start`/`end` range, optional `books` list and `country`)
-serves the organic tab's daily profit chart and the overview card: per
-royalty posting day of the
-month (how the KDP dashboard itself displays the data),
+serves the organic tab's daily profit chart and the overview card: per ORDER
+day (so a sale's royalty lands next to the spend that produced it — royalty
+posting lags 1–3 days behind the order; the KDP dashboard's own per-day view
+uses posting dates, so days differ from it),
 the ad spend and estimated ad-attributed royalty (the converting dashboard
 queries) next to the real summed KDP royalty (`listKdpDailyRoyalty` over the
 verbatim transactions, unlinked-ASIN rows included unless a book filter is
@@ -164,8 +165,11 @@ posture.
 organic = max(0, total − ad) avoids double counting
 ad-driven sales; profit = total − spend needs no book economics — only the
 split does (`economicsMissing` flags days without it). Days are zero-filled
-over the month, the current month capped at today; an unimported month
-returns null KDP figures with `kdpImported: false`.
+over the month, the current month capped at today, but a day gets KDP figures
+only when an import period covers it (`listKdpImportPeriods` — a report
+downloaded mid-month ends at its generation date, so later days are unknown
+nulls, not zero-royalty losses); a range no import overlaps returns null KDP
+figures with `kdpImported: false`.
 
 ## Campaign creation
 

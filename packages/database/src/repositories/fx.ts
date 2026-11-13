@@ -172,9 +172,9 @@ export async function getEarliestFactDate(
        where c.workspace_id = $1
        union all
        -- KDP sale rows are conversion-relevant facts too (the /kdp-history
-       -- daily profit chart converts royalty at each royalty posting date);
+       -- daily profit chart converts royalty at each ORDER date);
        -- they sit outside the profile join chain, keyed by workspace directly.
-       select min(t.royalty_date)
+       select min(t.order_date)
        from kdp_sale_transactions t
        where t.workspace_id = $1
      ) facts`,

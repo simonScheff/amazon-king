@@ -16,14 +16,19 @@ import { formatDate, formatMoney } from "../lib/format";
 
 /**
  * Daily profit chart for the /kdp-history organic tab: one calendar month of
- * per-day profitability. Days are KDP royalty posting dates — how the KDP
- * dashboard itself scopes and displays the data, and how the import periods
- * are labeled. Stacked bars show the royalty split — estimated
+ * per-day profitability. Days are ORDER dates, so a sale's royalty lands on
+ * the same day as the ad spend and estimated ad royalty that produced it
+ * (royalty posting lags the order by 1–3 days; the KDP dashboard's own
+ * per-day view uses posting dates, so days differ from it). Stacked bars
+ * show the royalty split — estimated
  * ad-attributed (#a078ff) and real organic (#34d399), the same colors as the
  * sales-mix card — against the day's ad spend (red line); the purple line is
  * the running profit total, so its slope shows whether the month is
  * improving. profit = real KDP royalty − ad spend, so it stays honest even
- * when book economics are missing (only the split is).
+ * when book economics are missing (only the split is). Days past the latest
+ * import's coverage have no KDP figures at all (null, not zero): a report
+ * downloaded mid-month ends at its generation date, so the chart never
+ * reports an uncovered day's spend as a loss.
  */
 
 const AD_ROYALTY_COLOR = "#a078ff";
@@ -117,7 +122,7 @@ function DailyProfitTooltip({
           Daily profit: {money(point.profit, currency)}
         </p>
       ) : (
-        <p style={{ margin: 0, color: "#958ea0" }}>No KDP import</p>
+        <p style={{ margin: 0, color: "#958ea0" }}>No KDP data yet</p>
       )}
       <p style={{ margin: 0, color: CUMULATIVE_COLOR }}>
         Cumulative: {money(point.cumulative, currency)}

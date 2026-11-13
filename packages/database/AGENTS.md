@@ -135,18 +135,25 @@ To add a migration, use the `add-migration` skill.
   for the median lag per profile × month of order_date, standard-rate rows
   only. The royalty trend reads `books.listBookEconomicsHistoryByWorkspace`
   (every effective-dated row, `effective_from::text`) — never duplicated
-  storage. `listKdpDailyRoyalty` sums real royalty per royalty posting date
-  (organic included, unlinked-ASIN rows too unless a book filter is given)
+  storage. `listKdpDailyRoyalty` sums real royalty per ORDER date (so a
+  sale's royalty lands next to the spend that produced it — posting lags
+  1–3 days; monthly aggregates keep the royalty-month convention) with
+  organic included, unlinked-ASIN rows too unless a book filter is given,
   converted per day into one display currency — the organic side of the
   `/kdp-history` daily profit chart; it wraps the transactions in a
-  subselect aliasing `royalty_date as metric_date` so the shared
+  subselect aliasing `order_date as metric_date` so the shared
   `fxRateJoins` applies verbatim. Both filters are lists: `bookPks`
   (`book_id = any`) and `marketplaces` (KDP report marketplace strings,
   which scopes unlinked rows to a market too). `listKdpDailyRoyaltyNative`
   is the single-market variant: same filters and bucketing, grouped by
   currency with no conversion — the daily-profit endpoint uses it (with
   `dailySeries`/`overviewRoyaltySeries`) when a `country` is given, refusing
-  to merge differing currencies.
+  to merge differing currencies. Which days have KDP figures at all comes
+  from `listKdpImportPeriods` (in `kdp-royalty-imports.ts`): the
+  `[period_start, period_end]` windows of the workspace's imports overlapping
+  the requested range. A report downloaded mid-month ends at its generation
+  date, so the daily-profit read leaves days past coverage null (unknown)
+  instead of booking the day's ad spend as a loss.
 - The converting dashboard queries (`convertedDailyTotals`,
   `convertedDailySeries`, `convertedRoyaltySeries`, `convertedCountrySpend` in
   `repositories/dashboard.ts`) serve the `country=all` view: each fact is

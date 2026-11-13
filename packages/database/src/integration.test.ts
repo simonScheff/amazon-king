@@ -33,6 +33,7 @@ import { enqueue, claim, reapExpiredLeases, complete, fail } from "./queue.js";
 import {
   getKdpRoyaltyImport,
   insertKdpRoyaltyImport,
+  listKdpImportPeriods,
   listKdpRoyaltyImportPayloads,
   listKdpRoyaltyImports,
   markKdpRoyaltyImportApplied,
@@ -416,9 +417,9 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     expect(await getEarliestFactDate(pool, workspaceId)).toBe("2026-03-02");
 
     // KDP sale transactions count as conversion-relevant facts too (the
-    // /kdp-history daily profit chart converts royalty per royalty posting
-    // date, so the backfill reaches back to the oldest royalty_date — here
-    // 2026-02-24, not the earlier 2026-02-20 order date).
+    // /kdp-history daily profit chart converts royalty per ORDER date, so
+    // the backfill reaches back to the oldest order_date — here 2026-02-20,
+    // not the later 2026-02-24 royalty posting date).
     const kdpBatch = await insertKdpRoyaltyImport(pool, {
       workspaceId,
       fileName: "kdp-fx.xlsx",
@@ -448,7 +449,7 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         currency: "USD",
       },
     ]);
-    expect(await getEarliestFactDate(pool, workspaceId)).toBe("2026-02-24");
+    expect(await getEarliestFactDate(pool, workspaceId)).toBe("2026-02-20");
   });
 
   /** Seed one workspace with a US (USD) and a DE (EUR) profile. */
@@ -3162,6 +3163,28 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
     expect(listed).toHaveLength(1);
     expect(listed[0]!.suggestions).toEqual(input.suggestions);
 
+    // Coverage windows drive the daily-profit read: the batch's period
+    // answers inside the range, an earlier month answers nothing, and a
+    // foreign workspace is invisible.
+    expect(
+      await listKdpImportPeriods(pool, kdpWorkspaceId, {
+        start: "2026-08-10",
+        end: "2026-08-31",
+      }),
+    ).toEqual([{ start: "2026-08-01", end: "2026-08-25" }]);
+    expect(
+      await listKdpImportPeriods(pool, kdpWorkspaceId, {
+        start: "2026-07-01",
+        end: "2026-07-31",
+      }),
+    ).toEqual([]);
+    expect(
+      await listKdpImportPeriods(pool, "999999", {
+        start: "2026-08-01",
+        end: "2026-08-31",
+      }),
+    ).toEqual([]);
+
     // The stored report rows are what scripts/rebuild-kdp-history.ts replays.
     const payloads = await listKdpRoyaltyImportPayloads(pool, kdpWorkspaceId);
     expect(payloads).toHaveLength(1);
@@ -3338,9 +3361,11 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
       },
     ]);
 
-    // The daily royalty series buckets by royalty posting date too, matching
-    // the KDP dashboard: the July-31 order lands on 2026-08-02, the unlinked
-    // row counts (no book filter), and USD→USD needs no fx rows.
+    // The daily royalty series buckets by ORDER date, so a sale's royalty
+    // lands next to the spend that produced it (posting lags 1–3 days): the
+    // July-31 order counts on 2026-07-31 even though its royalty posted
+    // 2026-08-02, the unlinked row counts (no book filter), and USD→USD
+    // needs no fx rows.
     expect(
       await listKdpDailyRoyalty(pool, workspaceId, {
         start: "2026-07-01",
@@ -3350,11 +3375,11 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         displayCurrency: "USD",
       }),
     ).toEqual([
-      { date: "2026-07-22", royalty: "7.0000", ratesMissing: false },
-      { date: "2026-07-25", royalty: "2.2000", ratesMissing: false },
-      { date: "2026-07-26", royalty: "3.5000", ratesMissing: false },
-      { date: "2026-08-02", royalty: "3.5000", ratesMissing: false },
-      { date: "2026-08-13", royalty: "3.5000", ratesMissing: false },
+      { date: "2026-07-20", royalty: "7.0000", ratesMissing: false },
+      { date: "2026-07-21", royalty: "2.2000", ratesMissing: false },
+      { date: "2026-07-22", royalty: "3.5000", ratesMissing: false },
+      { date: "2026-07-31", royalty: "3.5000", ratesMissing: false },
+      { date: "2026-08-10", royalty: "3.5000", ratesMissing: false },
     ]);
 
     // The book and marketplace filters are lists: a book filter drops the
@@ -3369,10 +3394,10 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         displayCurrency: "USD",
       }),
     ).toEqual([
-      { date: "2026-07-22", royalty: "7.0000", ratesMissing: false },
-      { date: "2026-07-25", royalty: "2.2000", ratesMissing: false },
-      { date: "2026-08-02", royalty: "3.5000", ratesMissing: false },
-      { date: "2026-08-13", royalty: "3.5000", ratesMissing: false },
+      { date: "2026-07-20", royalty: "7.0000", ratesMissing: false },
+      { date: "2026-07-21", royalty: "2.2000", ratesMissing: false },
+      { date: "2026-07-31", royalty: "3.5000", ratesMissing: false },
+      { date: "2026-08-10", royalty: "3.5000", ratesMissing: false },
     ]);
     expect(
       await listKdpDailyRoyalty(pool, workspaceId, {
@@ -3393,11 +3418,11 @@ describeIf("integration (TEST_DATABASE_URL)", () => {
         marketplaces: ["Amazon.com"],
       }),
     ).toEqual([
-      { date: "2026-07-22", royalty: "7.0000", currency: "USD" },
-      { date: "2026-07-25", royalty: "2.2000", currency: "USD" },
-      { date: "2026-07-26", royalty: "3.5000", currency: "USD" },
-      { date: "2026-08-02", royalty: "3.5000", currency: "USD" },
-      { date: "2026-08-13", royalty: "3.5000", currency: "USD" },
+      { date: "2026-07-20", royalty: "7.0000", currency: "USD" },
+      { date: "2026-07-21", royalty: "2.2000", currency: "USD" },
+      { date: "2026-07-22", royalty: "3.5000", currency: "USD" },
+      { date: "2026-07-31", royalty: "3.5000", currency: "USD" },
+      { date: "2026-08-10", royalty: "3.5000", currency: "USD" },
     ]);
 
     // The transactions month filter is the KDP report month (royalty_date).

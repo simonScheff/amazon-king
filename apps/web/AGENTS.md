@@ -206,7 +206,11 @@ its native currency with no conversion, mirroring the single-country
 summary. profit = real KDP royalty −
 spend needs no book economics; only the ad/organic split does (missing
 economics drop the split with a footnote, profit stays), so the overview
-card renders even when `economicsMissing` hides the estimated card. A month
+card renders even when `economicsMissing` hides the estimated card. Days no
+import period covers (a range never imported, or past a mid-month report's
+generation date) return null KDP figures: the tooltip reads "No KDP data
+yet" and the cumulative line carries forward, rather than booking the day's
+spend as a loss. A month
 without a KDP import shows the estimated ad side only, footnoted. On the
 overview the card follows the country selector and the sidebar product
 filter, and the header notes "‹market› · in ‹currency›" from the response's
@@ -282,10 +286,12 @@ validated in `src/router.tsx`, same tab-bar idiom as Settings; bare
 
 Months on this page are **KDP report months** — the month of `royalty_date`,
 matching the KDP dashboard's own display (an order placed July 31 whose
-royalty posted August 2 counts as August). The Daily profit card follows the
-same convention, summing royalty per royalty posting date; the only
-exception is the Fulfillment card, which groups the order→ship lag by order
-month.
+royalty posted August 2 counts as August). Two cards break from that
+convention: the Fulfillment card groups the order→ship lag by order month,
+and the Daily profit card sums royalty per ORDER date (its `?month=`
+filters the order month) so a sale's royalty lands on the same day as the
+ad spend that produced it — royalty posting lags 1–3 days, which otherwise
+booked spend on one day and the money on another.
 
 The empty state (no KDP imports at all) replaces the tabs and links to
 Settings.

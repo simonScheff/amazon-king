@@ -290,7 +290,7 @@ export async function listKdpSaleTransactions(
 }
 
 export interface KdpDailyRoyaltyPoint {
-  /** Royalty posting date (ISO day). */
+  /** Order date (ISO day). */
   date: string;
   /** Summed royalty converted into the display currency at each day's fixing. */
   royalty: string;
@@ -299,12 +299,17 @@ export interface KdpDailyRoyaltyPoint {
 }
 
 /**
- * Real KDP royalty summed per royalty date, converted into one display
+ * Real KDP royalty summed per ORDER date, converted into one display
  * currency at each date's own fixing — the organic side of the /kdp-history
- * daily profit chart. Royalty date (the day KDP posted the royalty) matches
- * how the KDP dashboard itself scopes and displays the data, the monthly
- * aggregates above, and the royalty-date-based import periods. The subselect
- * aliases royalty_date/currency to the shape the shared fxRateJoins expects;
+ * daily profit chart. Order date (not royalty posting date) keeps each
+ * sale's royalty on the same day as the ad spend and estimated ad royalty
+ * that produced it: posting lags 1–3 days behind the order, which otherwise
+ * books the spend on one day and the money on another (phantom losses at an
+ * import's tail, phantom organic windfalls just after). The trade-off: days
+ * no longer match the KDP dashboard's own per-day (posting-date) view, and
+ * an order whose royalty has not posted yet is absent until the next import.
+ * Monthly aggregates elsewhere keep the royalty-month convention. The subselect
+ * aliases order_date/currency to the shape the shared fxRateJoins expects;
  * the conversion convention (USD pivot, last fixing at or before the date,
  * never a silent 1:1) matches the converting dashboard queries.
  * Unlinked-ASIN rows (null book_id) are real money and included unless a
@@ -336,10 +341,10 @@ export async function listKdpDailyRoyalty(
               (dr.rate is null or nr.rate is null) and m.royalty <> 0
             ), false) as rates_missing
      from (
-       select royalty_date as metric_date, royalty, currency
+       select order_date as metric_date, royalty, currency
        from kdp_sale_transactions
        where workspace_id = $1
-         and royalty_date between $2 and $3
+         and order_date between $2 and $3
          and ($4::bigint[] is null or book_id = any($4))
          and ($5::text[] is null or marketplace = any($5))
      ) m
@@ -363,7 +368,7 @@ export async function listKdpDailyRoyalty(
 }
 
 export interface KdpDailyRoyaltyNativePoint {
-  /** Royalty posting date (ISO day). */
+  /** Order date (ISO day). */
   date: string;
   /** Summed royalty in the row's own currency — no conversion. */
   royalty: string;
@@ -371,7 +376,7 @@ export interface KdpDailyRoyaltyNativePoint {
 }
 
 /**
- * Single-market variant of `listKdpDailyRoyalty`: the same royalty-date
+ * Single-market variant of `listKdpDailyRoyalty`: the same order-date
  * bucketing and the same book/marketplace filters, but grouped by currency
  * with no FX conversion — a specific market's figures stay native, like the
  * single-country dashboard summary. The caller refuses to merge differing
@@ -394,16 +399,16 @@ export async function listKdpDailyRoyaltyNative(
     royalty: string;
     currency: string;
   }>(
-    `select royalty_date::text as metric_date,
+    `select order_date::text as metric_date,
             round(sum(royalty), 4)::text as royalty,
             currency
      from kdp_sale_transactions
      where workspace_id = $1
-       and royalty_date between $2 and $3
+       and order_date between $2 and $3
        and ($4::bigint[] is null or book_id = any($4))
        and ($5::text[] is null or marketplace = any($5))
-     group by royalty_date, currency
-     order by royalty_date`,
+     group by order_date, currency
+     order by order_date`,
     [
       workspaceId,
       filter.start,
