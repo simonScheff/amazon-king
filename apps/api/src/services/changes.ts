@@ -2269,6 +2269,12 @@ export function createChangeService(deps: ChangeServiceDeps): ChangeService {
             kind: "campaign_update",
             campaignId: amazonCampaignId,
             ...afterState,
+            // One-click updates are not retryable drafts — each click is a
+            // distinct intent. Without a nonce, toggling a campaign (e.g.
+            // pause → enable → pause) produces the same fingerprint as the
+            // first pause and the dedup short-circuits to the old
+            // already-applied set, which applyLoadedSet replays as a no-op.
+            nonce: crypto.randomUUID(),
           },
           spec,
         ],
